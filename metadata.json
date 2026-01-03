@@ -1,0 +1,7 @@
+{
+  "name": "Sistema Orner Energia Solar",
+  "description": "Um painel de controle moderno para gerenciar orçamentos, finanças e relatórios com uma interface visualmente atraente e intuitiva.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

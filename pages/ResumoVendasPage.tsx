@@ -1,0 +1,386 @@
+
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { ChartPieIcon, TableIcon, DollarIcon, TrendUpIcon, PrinterIcon, CalendarIcon, FilterIcon, TrashIcon, UsersIcon, SearchIcon, ChevronDownIcon, CheckCircleIcon } from '../assets/icons';
+import DashboardCard from '../components/DashboardCard';
+import type { SalesSummaryItem, User } from '../types';
+import { dataService } from '../services/dataService';
+
+const formatCurrency = (value: number) => {
+    if (isNaN(value) || value === 0) return 'R$ -';
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 }).format(value);
+};
+
+const formatPercent = (value: number) => {
+    if (isNaN(value)) return '0,00%';
+    return `${value.toFixed(2).replace('.', ',')}%`;
+};
+
+const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
+    
+    const [salesData, setSalesData] = useState<SalesSummaryItem[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [selectedSuppliers, setSelectedSuppliers] = useState<string[]>([]);
+    const [isSupplierDropdownOpen, setIsSupplierDropdownOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const loadData = async () => {
+            setIsLoading(true);
+            const isAdmin = currentUser.profileId === '00000000-0000-0000-0000-000000000001';
+            const data = await dataService.getAll<SalesSummaryItem>('sales_summary', currentUser.id, isAdmin);
+            
+            const approvedOnly = data.filter(item => !item.status || item.status === 'Aprovado');
+            setSalesData(approvedOnly);
+            setIsLoading(false);
+        };
+        loadData();
+
+        const date = new Date();
+        const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
+        const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+        
+        const formatDate = (d: Date) => {
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        setStartDate(formatDate(firstDay));
+        setEndDate(formatDate(lastDay));
+
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsSupplierDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [currentUser]);
+
+    const suppliersList = useMemo(() => {
+        const unique = new Set<string>();
+        salesData.forEach(item => {
+            if (item.supplier) unique.add(item.supplier.trim());
+        });
+        return Array.from(unique).sort();
+    }, [salesData]);
+
+    const handleUpdateValue = async (id: number, field: string, value: string) => {
+        const numValue = parseFloat(value.replace(',', '.'));
+        const safeValue = isNaN(numValue) ? 0 : numValue;
+
+        const updatedData = salesData.map(item => {
+            if (item.id === id) {
+                const newItem = { ...item, [field]: safeValue };
+                const extraCosts = 
+                    (newItem.visitaTecnica || 0) +
+                    (newItem.homologation || 0) +
+                    (newItem.installation || 0) +
+                    (newItem.travelCost || 0) +
+                    (newItem.adequationCost || 0) +
+                    (newItem.materialCost || 0) +
+                    (newItem.invoicedTax || 0) +
+                    (newItem.commission || 0) +
+                    (newItem.bankFees || 0);
+
+                const netProfit = (newItem.closedValue || 0) - (newItem.systemCost || 0) - extraCosts;
+                const finalMargin = newItem.closedValue > 0 ? (netProfit / newItem.closedValue) * 100 : 0;
+                
+                return { ...newItem, totalCost: extraCosts, netProfit, finalMargin };
+            }
+            return item;
+        });
+
+        setSalesData(updatedData);
+        const itemToSave = updatedData.find(i => i.id === id);
+        if (itemToSave) await dataService.save('sales_summary', itemToSave);
+    };
+
+    const toggleSupplierSelection = (supplier: string) => {
+        setSelectedSuppliers(prev => 
+            prev.includes(supplier) 
+                ? prev.filter(s => s !== supplier) 
+                : [...prev, supplier]
+        );
+    };
+
+    const filteredSalesData = useMemo(() => {
+        return [...salesData].sort((a, b) => a.date.localeCompare(b.date)).filter(item => {
+            if (startDate && item.date < startDate) return false;
+            if (endDate && item.date > endDate) return false;
+            if (selectedSuppliers.length > 0) {
+                const itemSup = item.supplier?.trim() || 'N/A';
+                if (!selectedSuppliers.includes(itemSup)) return false;
+            }
+            return true;
+        });
+    }, [salesData, startDate, endDate, selectedSuppliers]);
+
+    const totals = useMemo(() => {
+        return filteredSalesData.reduce((acc, item) => {
+            return {
+                closedValue: acc.closedValue + (item.closedValue || 0),
+                systemCost: acc.systemCost + (item.systemCost || 0),
+                visitaTecnica: acc.visitaTecnica + (item.visitaTecnica || 0),
+                homologation: acc.homologation + (item.homologation || 0),
+                installation: acc.installation + (item.installation || 0),
+                travelCost: acc.travelCost + (item.travelCost || 0),
+                adequationCost: acc.adequationCost + (item.adequationCost || 0),
+                materialCost: acc.materialCost + (item.materialCost || 0),
+                invoicedTax: acc.invoicedTax + (item.invoicedTax || 0),
+                commission: acc.commission + (item.commission || 0),
+                bankFees: acc.bankFees + (item.bankFees || 0),
+                totalCost: acc.totalCost + (item.totalCost || 0),
+                netProfit: acc.netProfit + (item.netProfit || 0),
+            };
+        }, {
+            closedValue: 0, systemCost: 0, visitaTecnica: 0, homologation: 0, installation: 0,
+            travelCost: 0, adequationCost: 0, materialCost: 0, invoicedTax: 0, commission: 0, 
+            bankFees: 0, totalCost: 0, netProfit: 0
+        });
+    }, [filteredSalesData]);
+
+    const totalValorMO = totals.closedValue - totals.systemCost;
+    const avgMargin = totals.closedValue > 0 ? (totals.netProfit / totals.closedValue) * 100 : 0;
+    const avgServiceMargin = totalValorMO > 0 ? (totals.netProfit / totalValorMO) * 100 : 0;
+
+    const handlePrint = () => window.print();
+
+    const handleExportExcel = () => {
+        const fmt = (n: number) => n ? n.toFixed(2).replace('.', ',') : '0,00';
+        const headers = [
+            'Nº', 'Nome cliente', 'Data fechamento', 'Valor fechado', 'Custo sistema', 
+            'Fornecedor', 'Visita Técnica', 'Homologação', 'Instalação', 'Viagem', 
+            'Adequação', 'Materiais', 'Imposto', 'Comissão', 'Taxas banco', 'Custo total', 
+            'Lucro líquido', 'Margem final %'
+        ];
+        let csvContent = "\uFEFF" + headers.join(';') + '\n';
+        filteredSalesData.forEach((item, index) => {
+            const row = [
+                index + 1,
+                item.clientName,
+                new Date(item.date).toLocaleDateString('pt-BR', {timeZone: 'UTC'}),
+                fmt(item.closedValue),
+                fmt(item.systemCost),
+                item.supplier || 'N/A',
+                fmt(item.visitaTecnica),
+                fmt(item.homologation),
+                fmt(item.installation),
+                fmt(item.travelCost),
+                fmt(item.adequationCost),
+                fmt(item.materialCost),
+                fmt(item.invoicedTax),
+                fmt(item.commission),
+                fmt(item.bankFees),
+                fmt(item.totalCost),
+                fmt(item.netProfit),
+                fmt(item.finalMargin)
+            ];
+            csvContent += row.join(';') + '\n';
+        });
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `resumo_vendas_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const handleClearFilters = () => { setStartDate(''); setEndDate(''); setSelectedSuppliers([]); };
+
+    if (isLoading) return <div className="flex justify-center p-10"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div></div>;
+
+    const thClass = "px-2 py-3 border-b border-gray-200 dark:border-gray-600 text-[9px] font-bold text-gray-600 dark:text-gray-300 text-center whitespace-nowrap";
+    const tdClass = "px-2 py-2 border-b border-gray-100 dark:border-gray-700 text-[10px] text-gray-700 dark:text-gray-300 text-right whitespace-nowrap";
+
+    return (
+        <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 print:hidden">
+                <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+                    <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-700/30 p-1.5 rounded-lg border border-gray-200 dark:border-gray-600 w-full sm:w-auto">
+                        <div className="pl-2 text-gray-500"><CalendarIcon className="w-5 h-5" /></div>
+                        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-transparent border-none text-sm text-gray-700 dark:text-gray-200 focus:ring-0 p-1 cursor-pointer w-full sm:w-auto" />
+                        <span className="text-gray-400">-</span>
+                        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-transparent border-none text-sm text-gray-700 dark:text-gray-200 focus:ring-0 p-1 cursor-pointer w-full sm:w-auto" />
+                    </div>
+
+                    <div className="relative w-full sm:w-64" ref={dropdownRef}>
+                        <button 
+                            onClick={() => setIsSupplierDropdownOpen(!isSupplierDropdownOpen)}
+                            className="flex items-center justify-between w-full bg-gray-50 dark:bg-gray-700/30 p-2.5 rounded-lg border border-gray-200 dark:border-gray-600 text-sm font-semibold text-gray-700 dark:text-gray-200 transition-all hover:bg-gray-100 dark:hover:bg-gray-700/50"
+                        >
+                            <div className="flex items-center gap-2 truncate">
+                                <FilterIcon className="w-4 h-4 text-gray-400" />
+                                <span>
+                                    {selectedSuppliers.length === 0 
+                                        ? 'Todos os fornecedores' 
+                                        : `${selectedSuppliers.length} selecionado(s)`}
+                                </span>
+                            </div>
+                            <ChevronDownIcon className={`w-4 h-4 transition-transform ${isSupplierDropdownOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {isSupplierDropdownOpen && (
+                            <div className="absolute top-full left-0 mt-2 w-full bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 z-50 animate-fade-in py-2 max-h-64 overflow-y-auto custom-scrollbar">
+                                {suppliersList.length > 0 ? (
+                                    suppliersList.map(sup => (
+                                        <label key={sup} className="flex items-center px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer group">
+                                            <input 
+                                                type="checkbox" 
+                                                className="hidden"
+                                                checked={selectedSuppliers.includes(sup)}
+                                                onChange={() => toggleSupplierSelection(sup)}
+                                            />
+                                            <div className={`w-4 h-4 rounded border mr-3 flex items-center justify-center transition-all ${
+                                                selectedSuppliers.includes(sup) 
+                                                ? 'bg-indigo-600 border-indigo-600' 
+                                                : 'border-gray-300'
+                                            }`}>
+                                                {selectedSuppliers.includes(sup) && <CheckCircleIcon className="w-3 h-3 text-white" />}
+                                            </div>
+                                            <span className="text-xs font-bold text-gray-700 dark:text-gray-300">{sup}</span>
+                                        </label>
+                                    ))
+                                ) : (
+                                    <div className="px-4 py-3 text-xs text-gray-400 italic text-center">Nenhum fornecedor registrado.</div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+                {(startDate || endDate || selectedSuppliers.length > 0) && (
+                    <button onClick={handleClearFilters} className="px-3 py-2 text-sm text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors flex items-center gap-1 whitespace-nowrap">
+                        <TrashIcon className="w-4 h-4" /> Limpar filtros
+                    </button>
+                )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 print:hidden">
+                <DashboardCard title="Total venda cons. final" value={formatCurrency(totals.closedValue)} icon={DollarIcon} color="bg-blue-600" />
+                <DashboardCard title="Total mão de obra" value={formatCurrency(totalValorMO)} icon={UsersIcon} color="bg-purple-600" />
+                <DashboardCard title="Lucro líquido" value={formatCurrency(totals.netProfit)} icon={TrendUpIcon} color="bg-green-600" />
+                <DashboardCard title="Margem média venda" value={formatPercent(avgMargin)} icon={ChartPieIcon} color="bg-indigo-600" />
+                <DashboardCard title="Margem média serviço" value={formatPercent(avgServiceMargin)} icon={ChartPieIcon} color="bg-orange-600" />
+            </div>
+
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 overflow-hidden">
+                <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-700/30 print:pb-2">
+                    <div>
+                        <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2"><TableIcon className="w-6 h-6 text-indigo-600" /> Resumo de vendas detalhado</h2>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{filteredSalesData.length} projeto(s) aprovado(s) no período.</p>
+                    </div>
+                    <div className="flex gap-2 print:hidden">
+                        <button onClick={handleExportExcel} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors shadow-sm font-bold text-xs">
+                            <TableIcon className="w-5 h-5" /> Exportar para Excel
+                        </button>
+                        <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-md hover:bg-gray-50 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 transition-colors shadow-sm font-bold text-xs">
+                            <PrinterIcon className="w-5 h-5" /> Imprimir relatório
+                        </button>
+                    </div>
+                </div>
+                
+                <div className="overflow-x-auto">
+                    <table className="min-w-full border-collapse">
+                        <thead>
+                            <tr className="bg-gray-100 dark:bg-gray-700">
+                                <th className={`${thClass} w-10`}>Nº</th>
+                                <th className={`${thClass} text-left`}>Cliente</th>
+                                <th className={`${thClass}`}>Data</th>
+                                <th className={`${thClass}`}>V. Fechado</th>
+                                <th className={`${thClass}`}>Custo Sist.</th>
+                                <th className={`${thClass}`}>Fornec.</th>
+                                <th className={`${thClass}`}>V. Técnica</th>
+                                <th className={`${thClass}`}>Homolog.</th>
+                                <th className={`${thClass}`}>Instal.</th>
+                                <th className={`${thClass}`}>Viagem</th>
+                                <th className={`${thClass}`}>Adequação</th>
+                                <th className={`${thClass}`}>Materiais</th>
+                                <th className={`${thClass}`}>Imposto</th>
+                                <th className={`${thClass}`}>Comissão</th>
+                                <th className={`${thClass}`}>Taxas banco</th>
+                                <th className={`${thClass} bg-gray-200 dark:bg-gray-600`}>Custo total</th>
+                                <th className={`${thClass} bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400`}>Lucro líq.</th>
+                                <th className={`${thClass}`}>Margem final</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                            {filteredSalesData.length > 0 ? filteredSalesData.map((item, index) => (
+                                <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors group">
+                                    <td className={`${tdClass} text-center font-bold text-gray-400`}>{index + 1}</td>
+                                    <td className={`${tdClass} text-left font-bold text-gray-900 dark:text-white uppercase truncate max-w-[120px]`}>{item.clientName}</td>
+                                    <td className={`${tdClass} text-center`}>{new Date(item.date).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
+                                    <td className={`${tdClass} font-bold text-blue-700 dark:text-blue-400`}>{formatCurrency(item.closedValue)}</td>
+                                    <td className={tdClass}>{formatCurrency(item.systemCost)}</td>
+                                    <td className={`${tdClass} text-center font-medium text-gray-500`}>{item.supplier || 'N/A'}</td>
+                                    <td className={tdClass}>{formatCurrency(item.visitaTecnica)}</td>
+                                    <td className={tdClass}>{formatCurrency(item.homologation)}</td>
+                                    <td className={tdClass}>{formatCurrency(item.installation)}</td>
+                                    <td className={tdClass}>{formatCurrency(item.travelCost)}</td>
+                                    <td className={tdClass}>{formatCurrency(item.adequationCost)}</td>
+                                    <td className={tdClass}>{formatCurrency(item.materialCost)}</td>
+                                    <td className={tdClass}>
+                                        <input 
+                                            type="text" 
+                                            className="w-16 bg-indigo-50/50 dark:bg-indigo-900/20 border-none p-1 text-right text-[10px] focus:ring-1 focus:ring-indigo-300 rounded font-bold text-indigo-700 dark:text-indigo-300"
+                                            value={item.invoicedTax || ''} 
+                                            placeholder="0,00"
+                                            onChange={(e) => handleUpdateValue(item.id, 'invoicedTax', e.target.value)}
+                                        />
+                                    </td>
+                                    <td className={tdClass}>{formatCurrency(item.commission)}</td>
+                                    <td className={tdClass}>
+                                        <input 
+                                            type="text" 
+                                            className="w-16 bg-indigo-50/50 dark:bg-indigo-900/20 border-none p-1 text-right text-[10px] focus:ring-1 focus:ring-indigo-300 rounded font-bold text-indigo-700 dark:text-indigo-300"
+                                            value={item.bankFees || ''} 
+                                            placeholder="0,00"
+                                            onChange={(e) => handleUpdateValue(item.id, 'bankFees', e.target.value)}
+                                        />
+                                    </td>
+                                    <td className={`${tdClass} font-bold bg-gray-50/50 dark:bg-gray-700/20`}>{formatCurrency(item.totalCost)}</td>
+                                    <td className={`${tdClass} font-black text-green-700 dark:text-green-400 bg-green-50/30 dark:bg-green-900/10`}>{formatCurrency(item.netProfit)}</td>
+                                    <td className={`${tdClass} text-center`}>
+                                        <span className={`px-2 py-0.5 rounded text-[9px] font-black ${item.finalMargin > 25 ? 'bg-green-100 text-green-800' : item.finalMargin > 15 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
+                                            {formatPercent(item.finalMargin)}
+                                        </span>
+                                    </td>
+                                </tr>
+                            )) : (
+                                <tr><td colSpan={18} className="px-6 py-12 text-center text-gray-400 italic">Nenhum registro encontrado para os filtros selecionados. Apenas orçamentos aprovados são listados aqui.</td></tr>
+                            )}
+                        </tbody>
+                        <tfoot className="bg-gray-900 text-white font-bold">
+                            <tr>
+                                <td colSpan={3} className="px-4 py-3 text-right text-[10px] tracking-wider">Total do período</td>
+                                <td className="px-2 py-3 text-right text-[10px]">{formatCurrency(totals.closedValue)}</td>
+                                <td className="px-2 py-3 text-right text-[10px]">{formatCurrency(totals.systemCost)}</td>
+                                <td className="px-2 py-3 text-right text-[10px]">-</td>
+                                <td className="px-2 py-3 text-right text-[10px]">{formatCurrency(totals.visitaTecnica)}</td>
+                                <td className="px-2 py-3 text-right text-[10px]">{formatCurrency(totals.homologation)}</td>
+                                <td className="px-2 py-3 text-right text-[10px]">{formatCurrency(totals.installation)}</td>
+                                <td className="px-2 py-3 text-right text-[10px]">{formatCurrency(totals.travelCost)}</td>
+                                <td className="px-2 py-3 text-right text-[10px]">{formatCurrency(totals.adequationCost)}</td>
+                                <td className="px-2 py-3 text-right text-[10px]">{formatCurrency(totals.materialCost)}</td>
+                                <td className="px-2 py-3 text-right text-[10px]">{formatCurrency(totals.invoicedTax)}</td>
+                                <td className="px-2 py-3 text-right text-[10px]">{formatCurrency(totals.commission)}</td>
+                                <td className="px-2 py-3 text-right text-[10px]">{formatCurrency(totals.bankFees)}</td>
+                                <td className="px-2 py-3 text-right text-[10px] bg-gray-800">{formatCurrency(totals.totalCost)}</td>
+                                <td className="px-2 py-3 text-right text-[10px] bg-green-900/50">{formatCurrency(totals.netProfit)}</td>
+                                <td className="px-2 py-3 text-center text-[10px]">{formatPercent(avgMargin)}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+            <p className="text-[10px] text-gray-400 font-bold text-center italic">* Nota: Apenas orçamentos aprovados são listados aqui. Os custos de Viagem, Adequação e Visita Técnica são carregados do formulário de orçamento aprovado.</p>
+        </div>
+    );
+};
+
+export default ResumoVendasPage;

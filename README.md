@@ -1,11 +1,56 @@
-<div align="center">
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+# Sistema Orner - Instruções de Banco de Dados
 
-  <h1>Built with AI Studio</h2>
+Para que a integração com o Supabase funcione totalmente, você precisa executar o seguinte SQL no **SQL Editor** do seu painel Supabase:
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+```sql
+-- Criar tabela de usuários
+create table system_users (
+  id text primary key,
+  name text not null,
+  email text unique not null,
+  password text,
+  "profileId" text,
+  active boolean default true,
+  avatar text,
+  created_at timestamp with time zone default timezone('utc'::text, now())
+);
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+-- Criar tabela de orçamentos
+create table orcamentos (
+  id bigint primary key,
+  owner_id text references system_users(id),
+  status text,
+  "savedAt" timestamp with time zone,
+  variants jsonb,
+  "formState" jsonb,
+  calculated jsonb
+);
 
-</div>
+-- Criar categorias financeiras
+create table financial_categories (
+  id text primary key,
+  name text not null,
+  type text check (type in ('receita', 'despesa'))
+);
+
+-- Criar transações financeiras
+create table financial_transactions (
+  id text primary key,
+  owner_id text,
+  description text,
+  amount decimal,
+  type text,
+  "dueDate" date,
+  "paymentDate" date,
+  "categoryId" text references financial_categories(id),
+  status text,
+  "launchDate" date
+);
+
+-- Habilitar Realtime (opcional)
+alter publication supabase_realtime add table system_users;
+alter publication supabase_realtime add table orcamentos;
+```
+
+O sistema agora possui um mecanismo de **Fallback**, então ele funcionará com dados de demonstração até que essas tabelas sejam detectadas.
