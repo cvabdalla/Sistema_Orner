@@ -589,7 +589,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                             <tr key={`stock-${itemId}`} className="hover:bg-indigo-50 dark:hover:bg-indigo-900/10 transition-colors">
                                                 <td className={`px-6 py-2 font-bold ${isManualStock ? 'text-indigo-600' : 'text-gray-700 dark:text-gray-200'}`}>
                                                     <div className="flex items-center gap-2">
-                                                        {isManualStock && <span className="text-[9px] bg-indigo-100 px-1.5 py-0.5 rounded uppercase font-black">Manual</span>}
+                                                        {isManualStock && <span className="text-[9px] bg-indigo-100 px-1.5 py-0.5 rounded font-black">Manual</span>}
                                                         {item.name}
                                                     </div>
                                                 </td>
@@ -647,7 +647,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                             <tr key={item.id} className="bg-amber-50/50 dark:bg-amber-900/10 hover:bg-amber-100/50 transition-colors border-l-4 border-l-amber-400">
                                                 <td className="px-6 py-2 font-bold text-amber-800 dark:text-amber-200">
                                                     <div className="flex items-center gap-2">
-                                                        <span className="text-[9px] bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded uppercase font-black">Externo</span>
+                                                        <span className="text-[9px] bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded font-black">Externo</span>
                                                         {item.name}
                                                     </div>
                                                 </td>
@@ -757,7 +757,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
 
                         {addItemTab === 'estoque' ? (
                             <div className="animate-fade-in">
-                                <p className="text-[11px] text-gray-500 mb-4 font-medium uppercase tracking-wider">Produtos cadastrados no catálogo Orner</p>
+                                <p className="text-xs text-gray-500 mb-4 font-medium">Produtos cadastrados no catálogo Orner</p>
                                 <div className="max-h-[300px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
                                     {availableStockToAdd.length > 0 ? availableStockToAdd.map(item => (
                                         <button
@@ -767,7 +767,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                         >
                                             <div className="text-left">
                                                 <p className="text-xs font-bold text-gray-800 dark:text-gray-100 group-hover:text-indigo-700">{item.name}</p>
-                                                <p className="text-[10px] text-gray-500 font-bold">Custo médio: {formatCurrency(item.averagePrice || 0)}</p>
+                                                <p className="text-[10px] text-gray-500 font-semibold">Custo médio: {formatCurrency(item.averagePrice || 0)}</p>
                                             </div>
                                             <PlusIcon className="w-4 h-4 text-gray-400 group-hover:text-indigo-600" />
                                         </button>
@@ -782,30 +782,30 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                         ) : (
                             <form onSubmit={handleAddOffStockItem} className="space-y-5 animate-fade-in">
                                 <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-2xl border border-dashed border-amber-200 dark:border-amber-800">
-                                    <p className="text-[11px] text-amber-700 dark:text-amber-300 font-black uppercase tracking-widest mb-4">Novo item externo</p>
+                                    <p className="text-xs text-amber-700 dark:text-amber-300 font-bold mb-4">Novo item externo</p>
                                     
                                     <div className="space-y-4">
                                         <div>
-                                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Descrição do item</label>
+                                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 ml-1">Descrição do item</label>
                                             <input 
                                                 required 
                                                 autoFocus
                                                 type="text" 
                                                 value={manualItemForm.name}
                                                 onChange={e => setManualItemForm({...manualItemForm, name: e.target.value})}
-                                                className="w-full rounded-xl border-transparent bg-white dark:bg-gray-800 p-3 text-sm font-bold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500/20 shadow-sm"
+                                                className="w-full rounded-xl border-transparent bg-white dark:bg-gray-800 p-3 text-sm font-semibold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-amber-500/20 shadow-sm"
                                                 placeholder="Ex: Curva de ferro galvanizado"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Custo unitário base (R$)</label>
+                                            <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 ml-1">Custo unitário base (R$)</label>
                                             <input 
                                                 required 
                                                 type="number" 
                                                 step="0.01"
                                                 value={manualItemForm.cost || ''}
                                                 onChange={e => setManualItemForm({...manualItemForm, cost: parseFloat(e.target.value) || 0})}
-                                                className="w-full rounded-xl border-transparent bg-white dark:bg-gray-800 p-3 text-sm font-black text-amber-600 dark:text-amber-400 outline-none focus:ring-2 focus:ring-amber-500/20 shadow-sm"
+                                                className="w-full rounded-xl border-transparent bg-white dark:bg-gray-800 p-3 text-sm font-semibold text-amber-600 dark:text-amber-400 outline-none focus:ring-2 focus:ring-amber-500/20 shadow-sm"
                                                 placeholder="0,00"
                                             />
                                         </div>
@@ -822,7 +822,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                     </button>
                                     <button 
                                         type="submit"
-                                        className="flex-1 py-3 bg-amber-600 text-white rounded-xl font-bold text-xs shadow-lg shadow-amber-600/20 hover:bg-amber-700"
+                                        className="flex-1 py-3 bg-amber-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-amber-600/20 hover:bg-amber-700"
                                     >
                                         Incluir componente
                                     </button>
