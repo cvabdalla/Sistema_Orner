@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import Modal from '../Modal';
 import { PlusIcon, CreditCardIcon, SaveIcon, CogIcon, XCircleIcon, CalendarIcon, CheckCircleIcon, ExclamationTriangleIcon, EditIcon } from '../../assets/icons';
@@ -11,6 +10,8 @@ interface CreditCardItem {
     description: string;
     categoryId: string;
     amount: number;
+    billingType: 'unico' | 'parcelado' | 'fixo';
+    installments: number;
 }
 
 interface CreditCardModalProps {
@@ -26,17 +27,15 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
     const [cards, setCards] = useState<CreditCard[]>([]);
     const [selectedCardId, setSelectedCardId] = useState('');
     const [items, setItems] = useState<CreditCardItem[]>([
-        { id: '1', date: new Date().toISOString().split('T')[0], description: '', categoryId: '', amount: 0 }
+        { id: '1', date: new Date().toISOString().split('T')[0], description: '', categoryId: '', amount: 0, billingType: 'unico', installments: 1 }
     ]);
     
-    // Estados do Formulário de Cartão
     const [editingCardId, setEditingCardId] = useState<string | null>(null);
     const [newCardName, setNewCardName] = useState('');
     const [newCardNumber, setNewCardNumber] = useState('');
     const [newCardDueDay, setNewCardDueDay] = useState<number>(10);
     const [newCardClosingDay, setNewCardClosingDay] = useState<number>(1);
     
-    // Estados de Controle
     const [isLoading, setIsLoading] = useState(false);
     const [isConfirming, setIsConfirming] = useState(false);
 
@@ -62,28 +61,21 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
     };
 
     const selectedCard = useMemo(() => cards.find(c => c.id === selectedCardId), [cards, selectedCardId]);
-    
-    // Apenas cartões ativos aparecem para lançamento
     const activeCards = useMemo(() => cards.filter(c => c.active), [cards]);
 
-    const calculateDueDate = (spentDateStr: string, card: CreditCard) => {
+    const calculateDueDate = (spentDateStr: string, card: CreditCard, monthsOffset: number = 0) => {
         const spentDate = new Date(spentDateStr);
-        const day = spentDate.getUTCDate();
-        const month = spentDate.getUTCMonth();
-        const year = spentDate.getUTCFullYear();
-
-        let targetMonth = month;
-        let targetYear = year;
+        let day = spentDate.getUTCDate();
+        let month = spentDate.getUTCMonth();
+        let year = spentDate.getUTCFullYear();
 
         if (day > card.closing_day) {
-            targetMonth++;
-            if (targetMonth > 11) {
-                targetMonth = 0;
-                targetYear++;
-            }
+            month++;
         }
 
-        const due = new Date(Date.UTC(targetYear, targetMonth, card.due_day));
+        month += monthsOffset;
+
+        const due = new Date(Date.UTC(year, month, card.due_day));
         return due.toISOString().split('T')[0];
     };
 
@@ -121,7 +113,6 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
             };
             
             await dataService.save('credit_cards', card);
-            
             resetForm();
             alert(editingCardId ? 'Cartão atualizado com sucesso!' : 'Cartão cadastrado com sucesso!');
             await loadCards();
@@ -146,7 +137,6 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
         setNewCardNumber(card.card_number || '');
         setNewCardDueDay(card.due_day);
         setNewCardClosingDay(card.closing_day);
-        // Rola para o topo do formulário
         const container = document.querySelector('.overflow-y-auto');
         if (container) container.scrollTo({ top: 0, behavior: 'smooth' });
     };
@@ -155,7 +145,6 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
         try {
             const updatedCard = { ...card, active: isActive };
             await dataService.save('credit_cards', updatedCard);
-            // Se o cartão foi bloqueado e estava selecionado no lançamento, limpa a seleção
             if (!isActive && selectedCardId === card.id) {
                 setSelectedCardId('');
             }
@@ -171,7 +160,9 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
             date: new Date().toISOString().split('T')[0], 
             description: '', 
             categoryId: '', 
-            amount: 0 
+            amount: 0,
+            billingType: 'unico',
+            installments: 1
         }]);
     };
 
@@ -182,7 +173,18 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
     };
 
     const handleUpdateItem = (id: string, field: keyof CreditCardItem, value: any) => {
-        setItems(items.map(item => item.id === id ? { ...item, [field]: value } : item));
+        setItems(items.map(item => {
+            if (item.id === id) {
+                const updated = { ...item, [field]: value };
+                if (field === 'billingType') {
+                    if (value === 'parcelado') updated.installments = Math.max(item.installments, 2);
+                    else if (value === 'fixo') updated.installments = Math.max(item.installments, 1);
+                    else updated.installments = 1;
+                }
+                return updated;
+            }
+            return item;
+        }));
     };
 
     const handleSubmitTransactions = async (e: React.FormEvent) => {
@@ -197,23 +199,40 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
             const batchId = `batch-cc-${Date.now()}`;
             const cardDisplay = selectedCard.last_digits ? `${selectedCard.name} (**** ${selectedCard.last_digits})` : selectedCard.name;
             
-            const newTransactions: FinancialTransaction[] = items.map(item => ({
-                id: `cc-${batchId}-${item.id}`,
-                owner_id: ownerId,
-                description: `[Cartão: ${cardDisplay}] ${item.description}`,
-                amount: item.amount,
-                type: 'despesa',
-                dueDate: calculateDueDate(item.date, selectedCard),
-                launchDate: item.date,
-                categoryId: item.categoryId,
-                status: 'pendente',
-                batchId: batchId
-            }));
+            const allTransactions: FinancialTransaction[] = [];
 
-            await onSave(newTransactions);
-            setItems([{ id: '1', date: new Date().toISOString().split('T')[0], description: '', categoryId: '', amount: 0 }]);
+            items.forEach(item => {
+                const numLctos = (item.billingType === 'parcelado' || item.billingType === 'fixo') ? item.installments : 1;
+                const valorUnitario = item.billingType === 'parcelado' ? (item.amount / item.installments) : item.amount;
+
+                for (let i = 0; i < numLctos; i++) {
+                    let suffix = '';
+                    if (item.billingType === 'parcelado') suffix = ` (${i + 1}/${item.installments})`;
+                    if (item.billingType === 'fixo') suffix = ` (Recorrente ${i + 1}/${item.installments})`;
+
+                    allTransactions.push({
+                        id: `cc-${batchId}-${item.id}-${i}`,
+                        owner_id: ownerId,
+                        description: `[Cartão: ${cardDisplay}] ${item.description}${suffix}`,
+                        amount: Math.ceil(valorUnitario * 100) / 100,
+                        type: 'despesa',
+                        dueDate: calculateDueDate(item.date, selectedCard, i),
+                        launchDate: item.date,
+                        categoryId: item.categoryId,
+                        status: 'pendente',
+                        batchId: batchId,
+                        billingType: item.billingType,
+                        installmentNumber: i + 1,
+                        totalInstallments: numLctos
+                    });
+                }
+            });
+
+            await onSave(allTransactions);
+            setItems([{ id: '1', date: new Date().toISOString().split('T')[0], description: '', categoryId: '', amount: 0, billingType: 'unico', installments: 1 }]);
             onClose();
         } catch (error) {
+            console.error("Erro ao gerar lista de transações:", error);
             alert("Erro ao lançar faturas.");
         } finally {
             setIsLoading(false);
@@ -223,7 +242,7 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
     const expenseCategories = categories.filter(c => c.type === 'despesa');
 
     return (
-        <Modal title="Gestão de cartão de crédito" onClose={onClose} maxWidth="max-w-5xl">
+        <Modal title="Gestão de cartão de crédito" onClose={onClose} maxWidth="max-w-7xl">
             {isConfirming && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
                     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-sm border-2 border-indigo-500 animate-fade-in">
@@ -265,9 +284,6 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
                                     </option>
                                 ))}
                             </select>
-                            {activeCards.length === 0 && (
-                                <p className="mt-2 text-[10px] text-red-500 font-bold">Nenhum cartão ativo cadastrado. Vá em "Meus cartões" para ativar ou cadastrar.</p>
-                            )}
                         </div>
 
                         <div className="space-y-3">
@@ -276,12 +292,12 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
                                 <button type="button" onClick={handleAddItem} className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-2 py-1 rounded-lg transition-colors"><PlusIcon className="w-4 h-4" /> Adicionar linha</button>
                             </div>
 
-                            <div className="max-h-[350px] overflow-y-auto pr-1 space-y-2 custom-scrollbar">
+                            <div className="max-h-[450px] overflow-y-auto pr-1 space-y-2 custom-scrollbar">
                                 {items.map((item) => {
                                     const itemDueDate = selectedCard ? calculateDueDate(item.date, selectedCard) : null;
                                     return (
-                                        <div key={item.id} className="flex gap-2 items-end group animate-fade-in border-b border-gray-100 dark:border-gray-800 pb-2">
-                                            <div className="w-36">
+                                        <div key={item.id} className="flex gap-2 items-end group animate-fade-in border-b border-gray-100 dark:border-gray-800 pb-4">
+                                            <div className="w-32 flex-shrink-0">
                                                 <label className="block text-[10px] font-bold text-gray-400 mb-1 ml-1">Data gasto</label>
                                                 <input required type="date" value={item.date} onChange={(e) => handleUpdateItem(item.id, 'date', e.target.value)} className="w-full rounded-lg border-transparent bg-gray-50 dark:bg-gray-700/50 p-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-indigo-500/20" />
                                             </div>
@@ -289,24 +305,50 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
                                                 <label className="block text-[10px] font-bold text-gray-400 mb-1 ml-1">Descrição</label>
                                                 <input required type="text" value={item.description} onChange={(e) => handleUpdateItem(item.id, 'description', e.target.value)} placeholder="Ex: Almoço cliente" className="w-full rounded-lg border-transparent bg-gray-50 dark:bg-gray-700/50 p-2 text-xs font-semibold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20" />
                                             </div>
-                                            <div className="w-40">
+                                            <div className="w-36 flex-shrink-0">
                                                 <label className="block text-[10px] font-bold text-gray-400 mb-1 ml-1">Categoria</label>
                                                 <select required value={item.categoryId} onChange={(e) => handleUpdateItem(item.id, 'categoryId', e.target.value)} className="w-full rounded-lg border-transparent bg-gray-50 dark:bg-gray-700/50 p-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-indigo-500/20">
                                                     <option value="">Selecione...</option>
                                                     {expenseCategories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
                                                 </select>
                                             </div>
-                                            <div className="w-28">
-                                                <label className="block text-[10px] font-bold text-gray-400 mb-1 ml-1">Valor (R$)</label>
+                                            <div className="w-32 flex-shrink-0">
+                                                <label className="block text-[10px] font-bold text-gray-400 mb-1 ml-1">Tipo cobrança</label>
+                                                <select value={item.billingType} onChange={(e) => handleUpdateItem(item.id, 'billingType', e.target.value)} className="w-full rounded-lg border-transparent bg-gray-50 dark:bg-gray-700/50 p-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-indigo-500/20">
+                                                    <option value="unico">À vista (Único)</option>
+                                                    <option value="parcelado">Parcelado</option>
+                                                    <option value="fixo">Recorrente (Fixo)</option>
+                                                </select>
+                                            </div>
+                                            {(item.billingType === 'parcelado' || item.billingType === 'fixo') && (
+                                                <div className="w-20 flex-shrink-0 animate-fade-in">
+                                                    <label className="block text-[10px] font-bold text-gray-400 mb-1 ml-1">
+                                                        {item.billingType === 'parcelado' ? 'Parcelas' : 'Meses'}
+                                                    </label>
+                                                    <input 
+                                                        required 
+                                                        type="number" 
+                                                        min={item.billingType === 'parcelado' ? 2 : 1} 
+                                                        max="60" 
+                                                        value={item.installments} 
+                                                        onChange={(e) => handleUpdateItem(item.id, 'installments', parseInt(e.target.value) || 1)} 
+                                                        className="w-full rounded-lg border-transparent bg-indigo-50 dark:bg-indigo-900/30 p-2 text-xs font-bold text-center text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500/20" 
+                                                    />
+                                                </div>
+                                            )}
+                                            <div className="w-28 flex-shrink-0">
+                                                <label className="block text-[10px] font-bold text-gray-400 mb-1 ml-1">
+                                                    {item.billingType === 'parcelado' ? 'Valor Total' : 'Valor (R$)'}
+                                                </label>
                                                 <input required type="number" step="0.01" value={item.amount || ''} onChange={(e) => handleUpdateItem(item.id, 'amount', parseFloat(e.target.value) || 0)} className="w-full rounded-lg border-transparent bg-gray-50 dark:bg-gray-700/50 p-2 text-xs font-bold text-right outline-none focus:ring-2 focus:ring-indigo-500/20" />
                                             </div>
-                                            <div className="w-24 text-center pb-2.5">
-                                                <label className="block text-[8px] font-bold text-gray-400 mb-1">Vencimento</label>
+                                            <div className="w-24 text-center pb-2.5 flex-shrink-0">
+                                                <label className="block text-[8px] font-bold text-gray-400 mb-1">1º Venc.</label>
                                                 <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded">
                                                     {itemDueDate ? new Date(itemDueDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '--/--'}
                                                 </span>
                                             </div>
-                                            <button type="button" onClick={() => handleRemoveItem(item.id)} className="p-2 text-gray-300 hover:text-red-500 transition-colors mb-0.5"><XCircleIcon className="w-4 h-4" /></button>
+                                            <button type="button" onClick={() => handleRemoveItem(item.id)} className="p-2 text-gray-300 hover:text-red-500 transition-colors mb-0.5 flex-shrink-0"><XCircleIcon className="w-4 h-4" /></button>
                                         </div>
                                     );
                                 })}
@@ -317,13 +359,13 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
                             <div className="flex items-center gap-3">
                                 <div className="p-3 bg-indigo-100 text-indigo-600 rounded-xl"><CreditCardIcon className="w-6 h-6" /></div>
                                 <div>
-                                    <p className="text-[10px] font-bold text-gray-400 tracking-tight leading-none mb-1">Total da fatura</p>
+                                    <p className="text-[10px] font-bold text-gray-400 tracking-tight leading-none mb-1">Total para lançamento</p>
                                     <p className="text-2xl font-black text-indigo-700 dark:text-indigo-300">{totalFatura.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                                 </div>
                             </div>
                             <div className="flex gap-3 w-full sm:w-auto">
                                 <button type="button" onClick={onClose} className="flex-1 sm:flex-none px-6 py-3 bg-gray-100 dark:bg-gray-700 text-gray-500 font-bold rounded-xl text-sm transition-all hover:bg-gray-200">Cancelar</button>
-                                <button type="submit" disabled={isLoading || activeCards.length === 0} className="flex-1 sm:flex-none px-10 py-3 bg-indigo-600 text-white font-bold rounded-xl text-sm shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center min-w-[160px]">{isLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : 'Lançar gastos'}</button>
+                                <button type="submit" disabled={isLoading || activeCards.length === 0} className="flex-1 sm:flex-none px-10 py-3 bg-indigo-600 text-white font-bold rounded-xl text-sm shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center min-w-[160px]">{isLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : 'Confirmar gastos'}</button>
                             </div>
                         </div>
                     </form>

@@ -167,7 +167,11 @@ export interface FinancialTransaction {
     categoryId: string;
     status: FinancialTransactionStatus;
     launchDate?: string;
-    batchId?: string; // Para agrupar lançamentos de cartão
+    batchId?: string; 
+    // Novos campos de parcelamento
+    billingType?: 'unico' | 'parcelado' | 'fixo';
+    installmentNumber?: number;
+    totalInstallments?: number;
 }
 
 export interface FinancialCategory {
@@ -208,7 +212,7 @@ export interface ExpenseReport {
     periodStart?: string;
     periodEnd?: string;
     items: ExpenseReportItem[];
-    attachments?: string[]; // Array de anexos base64 globais (planilha)
+    attachments?: string[]; 
     kmValueUsed: number;
     status: ExpenseReportStatus;
     createdAt: string;

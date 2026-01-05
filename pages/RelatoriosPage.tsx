@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { 
     ChartPieIcon, PrinterIcon, PlusIcon, TrashIcon, 
@@ -313,7 +314,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
         return `${new Date(r.createdAt).toLocaleDateString('pt-BR')};${r.requester};${r.sector};${r.period};${r.status};${kmVal.toFixed(2).replace('.', ',')};${tollVal.toFixed(2).replace('.', ',')};${r.totalValue.toFixed(2).replace('.', ',')}`;
     }).join('\n');
     
-    // Fix: Using global Blob and URL directly to solve type inference issues and potential shadowing.
+    // Fixed: Use the standard Blob constructor without the window. prefix to ensure correct typing and compatibility with URL.createObjectURL.
     const blob = new Blob([csvHeader + csvBody], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -758,7 +759,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                           onChange={(e: any) => setTempInst(parseFloat(e.target.value) || 0)} 
                           placeholder="0,00"
                       />
-                      <p className="text-[10px] text-gray-400 font-bold mt-3 tracking-tight leading-relaxed italic">
+                      <p className="text-[10px] text-gray-400 font-bold mt-3 tracking-tight ladies-relaxed italic">
                         Este valor será usado como padrão no campo 'instalação - placas' de novos orçamentos.
                       </p>
                   </div>
@@ -999,7 +1000,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                     </div>
                     <div className="flex gap-3">
                         <button onClick={()=>setTransferModalOpen(false)} className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl text-xs font-bold text-gray-500 transition-colors">Voltar</button>
-                        <button onClick={()=>{setTransferModalOpen(false); executeSave('Transferido');}} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all transition-all transition-colors">Confirmar</button>
+                        <button onClick={()=>{setTransferModalOpen(false); executeSave('Transferido');}} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all transition-colors">Confirmar</button>
                     </div>
                 </div>
             </Modal>

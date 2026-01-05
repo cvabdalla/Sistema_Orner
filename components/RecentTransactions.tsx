@@ -1,4 +1,3 @@
-
 import React, { useMemo, useEffect, useState } from 'react';
 import type { FinancialTransaction, FinancialTransactionStatus, FinancialCategory } from '../types';
 import { ExclamationTriangleIcon, CreditCardIcon } from '../assets/icons';
@@ -9,13 +8,13 @@ interface RecentTransactionsProps {
 }
 
 const formatCurrency = (value: number) => {
-    if (isNaN(value)) return 'R$ 0,00';
+    if (isNaN(value)) return '0,00';
     const rounded = Math.ceil(value * 100) / 100;
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 }).format(rounded);
+    return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2 }).format(rounded);
 };
 
-const TransactionRow: React.FC<{ transaction: FinancialTransaction & { isGroup?: boolean }, categoryName: string }> = ({ transaction, categoryName }) => {
-  const { description, amount, status, dueDate, type, isGroup } = transaction;
+const TransactionRow: React.FC<{ transaction: FinancialTransaction & { isGroup?: boolean, itemCount?: number, cardCount?: number }, categoryName: string }> = ({ transaction, categoryName }) => {
+  const { description, amount, status, dueDate, type, isGroup, itemCount, cardCount } = transaction;
   
   const getDateStatusInfo = (dueDate: string, status: FinancialTransactionStatus) => {
         if (status === 'pago') return null;
@@ -60,12 +59,12 @@ const TransactionRow: React.FC<{ transaction: FinancialTransaction & { isGroup?:
             ) : (
                 <div className="w-1.5 h-1.5 rounded-full bg-gray-300 mr-3 shrink-0" />
             )}
-            <div>
-                <p className={`font-bold text-sm truncate max-w-[150px] sm:max-w-[200px] ${isGroup ? 'text-indigo-700 dark:text-indigo-400' : 'text-gray-900 dark:text-white'}`}>
+            <div className="min-w-0">
+                <p className={`font-bold text-sm truncate ${isGroup ? 'text-indigo-700 dark:text-indigo-400' : 'text-gray-900 dark:text-white'}`}>
                     {description}
                 </p>
-                <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">
-                    {isGroup ? 'Fatura consolidada' : categoryName}
+                <p className="text-[10px] text-gray-500 dark:text-gray-400 font-bold tracking-tight truncate">
+                    {isGroup ? `Fatura consolidada: ${itemCount} itens de ${cardCount} cartão(ões)` : categoryName}
                 </p>
             </div>
         </div>
@@ -73,14 +72,14 @@ const TransactionRow: React.FC<{ transaction: FinancialTransaction & { isGroup?:
       <td className="py-3 px-4">
           <div className="flex flex-col">
             <span className="text-sm font-bold text-gray-700 dark:text-gray-300">{formatDate(dueDate)}</span>
-            {dateStatus?.label && <span className={`text-[9px] font-black uppercase tracking-tighter ${dateStatus.textClass}`}>{dateStatus.label}</span>}
+            {dateStatus?.label && <span className={`text-[9px] font-bold tracking-tight ${dateStatus.textClass}`}>{dateStatus.label}</span>}
           </div>
       </td>
       <td className={`py-3 px-4 font-bold text-sm text-right ${type === 'receita' ? 'text-green-600' : isGroup ? 'text-indigo-600 dark:text-indigo-400' : 'text-red-600'}`}>
-        {formatCurrency(amount).replace('R$', '').trim()}
+        {formatCurrency(amount)}
       </td>
       <td className="py-3 px-4 text-center">
-        <span className={`px-2 py-1 text-[9px] font-black uppercase rounded-lg shadow-sm ${status === 'pago' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+        <span className={`px-2 py-1 text-[9px] font-black rounded-lg shadow-sm ${status === 'pago' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
             {status === 'pago' ? 'Pago' : 'Pendente'}
         </span>
       </td>
@@ -102,7 +101,7 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({ transactions })
   const processedTransactions = useMemo(() => {
       if (!transactions || transactions.length === 0) return [];
 
-      const result: (FinancialTransaction & { isGroup?: boolean })[] = [];
+      const result: (FinancialTransaction & { isGroup?: boolean, itemCount?: number, cardCount?: number })[] = [];
       const cardGroups = new Map<string, FinancialTransaction[]>();
 
       transactions.forEach(t => {
@@ -119,20 +118,31 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({ transactions })
       cardGroups.forEach((items, key) => {
           const [dueDate, status] = key.split('_');
           const totalAmount = items.reduce((sum, item) => sum + item.amount, 0);
+          
+          const cardNames = new Set();
+          items.forEach(item => {
+              const match = item.description.match(/\[Cartão:\s*(.*?)\]/);
+              if (match) cardNames.add(match[1]);
+          });
+
           result.push({
               ...items[0],
               id: `group_${key}`,
               description: 'Cartão de crédito',
               amount: totalAmount,
               isGroup: true,
+              itemCount: items.length,
+              cardCount: cardNames.size,
               dueDate: dueDate,
               status: status as FinancialTransactionStatus
           });
       });
 
       return result.sort((a, b) => {
+          // Pendentes primeiro
           if (a.status === 'pendente' && b.status === 'pago') return -1;
           if (a.status === 'pago' && b.status === 'pendente') return 1;
+          // Depois por data
           return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
       }).slice(0, 8);
   }, [transactions]);
@@ -147,7 +157,7 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({ transactions })
       </div>
       <div className="overflow-x-auto flex-1 custom-scrollbar">
         <table className="min-w-full text-left">
-          <thead className="bg-gray-50 dark:bg-gray-700/50 text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b">
+          <thead className="bg-gray-50 dark:bg-gray-700/50 text-[10px] font-bold text-gray-400 tracking-widest border-b">
             <tr>
                 <th className="px-4 py-3">Descrição</th>
                 <th className="px-4 py-3">Venc.</th>

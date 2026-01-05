@@ -30,7 +30,7 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
     const [endDate, setEndDate] = useState('');
     const [dreYear, setDreYear] = useState(new Date().getFullYear());
     const [dreType, setDreType] = useState<DrePeriodType>('mensal');
-    const [dreGroupCards, setDreGroupCards] = useState(true); // Novo estado para agrupamento
+    const [dreGroupCards, setDreGroupCards] = useState(true); 
     const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
     const [transactionToDeleteId, setTransactionToDeleteId] = useState<string | null>(null);
 
@@ -59,29 +59,26 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
         }
     }, [view, dreYear]);
 
-    useEffect(() => {
-        const loadData = async () => {
-            setIsLoading(true);
-            if (!currentUser) return;
+    const loadData = async () => {
+        setIsLoading(true);
+        if (!currentUser) return;
+        try {
+            const txs = await dataService.getAll<FinancialTransaction>(
+                'financial_transactions',
+                currentUser.id,
+                currentUser.profileId === '00000000-0000-0000-0000-000000000001'
+            );
+            setTransactions(txs || []);
+            const cats = await dataService.getAll<FinancialCategory>('financial_categories');
+            setCategories(cats || []);
+        } catch (error) {
+            console.error("Erro ao carregar dados financeiros:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
-            try {
-                const txs = await dataService.getAll<FinancialTransaction>(
-                    'financial_transactions',
-                    currentUser.id,
-                    currentUser.profileId === '00000000-0000-0000-0000-000000000001'
-                );
-                setTransactions(txs || []);
-
-                const cats = await dataService.getAll<FinancialCategory>('financial_categories');
-                setCategories(cats || []);
-            } catch (error) {
-                console.error("Erro ao carregar dados financeiros:", error);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        loadData();
-    }, [currentUser]);
+    useEffect(() => { loadData(); }, [currentUser]);
 
     const filteredTransactions = useMemo(() => {
         return transactions.filter(t => {
@@ -105,27 +102,30 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
 
     const handleImportTransactions = async (newTransactions: FinancialTransaction[]) => {
         if (!currentUser) return;
-        const txsWithOwner = newTransactions.map(tx => ({ ...tx, owner_id: currentUser.id }));
-        for (const tx of txsWithOwner) {
-            await dataService.save('financial_transactions', tx);
+        try {
+            for (const tx of newTransactions) {
+                await dataService.save('financial_transactions', { ...tx, owner_id: currentUser.id });
+            }
+            await loadData();
+        } catch (e: any) {
+            alert(`Erro na importação: ${e.message}`);
         }
-        setTransactions(prev => [...prev, ...txsWithOwner]);
     };
 
     const handleBatchSaveTransactions = async (newTransactions: FinancialTransaction[]) => {
         if (!currentUser) return;
-        const txsWithOwner = newTransactions.map(tx => ({ ...tx, owner_id: currentUser.id }));
-        
         setIsLoading(true);
         try {
-            for (const tx of txsWithOwner) {
-                await dataService.save('financial_transactions', tx);
+            for (const tx of newTransactions) {
+                const txToSave = { ...tx, owner_id: currentUser.id };
+                await dataService.save('financial_transactions', txToSave);
             }
-            setTransactions(prev => [...prev, ...txsWithOwner]);
+            await loadData();
             setCreditCardModalOpen(false);
-        } catch (e) {
-            console.error(e);
-            alert("Erro ao salvar faturas do cartão.");
+            alert("Lançamentos de cartão salvos com sucesso no banco!");
+        } catch (e: any) {
+            console.error("Falha no salvamento em lote:", e);
+            alert(`FALHA AO SALVAR NO BANCO DE DADOS:\n${e.message}\n\nNenhum dado de cartão foi registrado.`);
         } finally {
             setIsLoading(false);
         }
@@ -134,51 +134,46 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
     const handleSaveTransaction = async (transaction: FinancialTransaction, recurrence?: { frequency: 'mensal' | 'trimestral' | 'semestral' | 'anual', occurrences: number }) => {
         if (!currentUser) return;
         const baseTx = { ...transaction, owner_id: currentUser.id };
-        const transactionsToSave: FinancialTransaction[] = [];
+        try {
+            if (editingTransaction) {
+                await dataService.save('financial_transactions', baseTx);
+            } else if (recurrence) {
+                let monthsToAddPerStep = 0;
+                switch(recurrence.frequency) {
+                    case 'mensal': monthsToAddPerStep = 1; break;
+                    case 'trimestral': monthsToAddPerStep = 3; break;
+                    case 'semestral': monthsToAddPerStep = 6; break;
+                    case 'anual': monthsToAddPerStep = 12; break;
+                }
+                const baseDateParts = baseTx.dueDate.split('-').map(Number);
+                const baseDate = new Date(baseDateParts[0], baseDateParts[1] - 1, baseDateParts[2], 12, 0, 0);
 
-        if (editingTransaction) {
-            transactionsToSave.push(baseTx);
-            setTransactions(prev => prev.map(t => t.id === baseTx.id ? baseTx : t));
-        } else if (recurrence) {
-            let monthsToAddPerStep = 0;
-            switch(recurrence.frequency) {
-                case 'mensal': monthsToAddPerStep = 1; break;
-                case 'trimestral': monthsToAddPerStep = 3; break;
-                case 'semestral': monthsToAddPerStep = 6; break;
-                case 'anual': monthsToAddPerStep = 12; break;
+                for (let i = 0; i < recurrence.occurrences; i++) {
+                    const nextDate = new Date(baseDate);
+                    nextDate.setMonth(baseDate.getMonth() + (i * monthsToAddPerStep));
+                    const y = nextDate.getFullYear();
+                    const m = String(nextDate.getMonth() + 1).padStart(2, '0');
+                    const d = String(nextDate.getDate()).padStart(2, '0');
+                    const formattedDate = `${y}-${m}-${d}`;
+                    const suffix = i > 0 ? ` (${i + 1}/${recurrence.occurrences})` : ` (1/${recurrence.occurrences})`;
+
+                    await dataService.save('financial_transactions', {
+                        ...baseTx,
+                        id: i === 0 ? baseTx.id : `${baseTx.id}-${i}`,
+                        description: `${baseTx.description}${suffix}`,
+                        dueDate: formattedDate,
+                        status: i === 0 ? baseTx.status : 'pendente',
+                        paymentDate: (i === 0 && baseTx.status === 'pago') ? baseTx.paymentDate : undefined
+                    });
+                }
+            } else {
+                await dataService.save('financial_transactions', baseTx);
             }
-
-            const baseDateParts = baseTx.dueDate.split('-').map(Number);
-            const baseDate = new Date(baseDateParts[0], baseDateParts[1] - 1, baseDateParts[2], 12, 0, 0);
-
-            for (let i = 0; i < recurrence.occurrences; i++) {
-                const nextDate = new Date(baseDate);
-                nextDate.setMonth(baseDate.getMonth() + (i * monthsToAddPerStep));
-                const y = nextDate.getFullYear();
-                const m = String(nextDate.getMonth() + 1).padStart(2, '0');
-                const d = String(nextDate.getDate()).padStart(2, '0');
-                const formattedDate = `${y}-${m}-${d}`;
-                const suffix = i > 0 ? ` (${i + 1}/${recurrence.occurrences})` : ` (1/${recurrence.occurrences})`;
-
-                transactionsToSave.push({
-                    ...baseTx,
-                    id: i === 0 ? baseTx.id : `${baseTx.id}-${i}`,
-                    description: `${baseTx.description}${suffix}`,
-                    dueDate: formattedDate,
-                    status: i === 0 ? baseTx.status : 'pendente',
-                    paymentDate: (i === 0 && baseTx.status === 'pago') ? baseTx.paymentDate : undefined
-                });
-            }
-            setTransactions(prev => [...prev, ...transactionsToSave]);
-        } else {
-            transactionsToSave.push(baseTx);
-            setTransactions(prev => [...prev, baseTx]);
+            await loadData();
+            handleCloseModal();
+        } catch (e: any) {
+            alert(`Erro ao salvar transação: ${e.message}`);
         }
-
-        for (const tx of transactionsToSave) {
-            await dataService.save('financial_transactions', tx);
-        }
-        handleCloseModal();
     };
     
     const handleDeleteTransaction = (id: string) => {
@@ -189,29 +184,29 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
     const confirmDeleteTransaction = async () => {
         if (transactionToDeleteId) {
             const isDueGroup = transactionToDeleteId.startsWith('due_group_');
-            
-            if (isDueGroup) {
-                // BUG FIX: Parse correto do ID composto (Ex: due_group_2023-10-10_pendente)
-                const groupKey = transactionToDeleteId.replace('due_group_', '');
-                const parts = groupKey.split('_');
-                const dueDate = parts[0];
-                const originalStatus = parts[1];
-                
-                const groupItems = transactions.filter(t => 
-                    t.description.includes('[Cartão:') && 
-                    t.dueDate === dueDate && 
-                    t.status === originalStatus
-                );
+            try {
+                if (isDueGroup) {
+                    const groupKey = transactionToDeleteId.replace('due_group_', '');
+                    const parts = groupKey.split('_');
+                    const dueDate = parts[0];
+                    const originalStatus = parts[1];
+                    
+                    const groupItems = transactions.filter(t => 
+                        t.description.includes('[Cartão:') && 
+                        t.dueDate === dueDate && 
+                        t.status === originalStatus
+                    );
 
-                for (const item of groupItems) {
-                    await dataService.delete('financial_transactions', item.id);
+                    for (const item of groupItems) {
+                        await dataService.delete('financial_transactions', item.id);
+                    }
+                } else {
+                    await dataService.delete('financial_transactions', transactionToDeleteId);
                 }
-                setTransactions(prev => prev.filter(t => !groupItems.some(gi => gi.id === t.id)));
-            } else {
-                await dataService.delete('financial_transactions', transactionToDeleteId);
-                setTransactions(prev => prev.filter(t => t.id !== transactionToDeleteId));
+                await loadData();
+            } catch (e: any) {
+                alert(`Erro ao excluir: ${e.message}`);
             }
-            
             setTransactionToDeleteId(null);
             setDeleteModalOpen(false);
         }
@@ -221,32 +216,31 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
         const isDueGroup = id.startsWith('due_group_');
         const paymentDate = status === 'pago' ? new Date().toISOString().split('T')[0] : undefined;
 
-        if (isDueGroup) {
-            // BUG FIX: Parse correto do ID composto (Ex: due_group_2023-10-10_pendente)
-            const groupKey = id.replace('due_group_', '');
-            const parts = groupKey.split('_');
-            const dueDate = parts[0];
-            const originalStatus = parts[1];
+        try {
+            if (isDueGroup) {
+                const groupKey = id.replace('due_group_', '');
+                const parts = groupKey.split('_');
+                const dueDate = parts[0];
+                const originalStatus = parts[1];
 
-            const groupItems = transactions.filter(t => 
-                t.description.includes('[Cartão:') && 
-                t.dueDate === dueDate && 
-                t.status === originalStatus
-            );
-            
-            const itemIds = groupItems.map(i => i.id);
-            setTransactions(prev => prev.map(t => itemIds.includes(t.id) ? { ...t, status, paymentDate } : t));
-            
-            for (const item of groupItems) {
-                await dataService.save('financial_transactions', { ...item, status, paymentDate });
+                const groupItems = transactions.filter(t => 
+                    t.description.includes('[Cartão:') && 
+                    t.dueDate === dueDate && 
+                    t.status === originalStatus
+                );
+                
+                for (const item of groupItems) {
+                    await dataService.save('financial_transactions', { ...item, status, paymentDate });
+                }
+            } else {
+                const tx = transactions.find(t => t.id === id);
+                if (tx) {
+                    await dataService.save('financial_transactions', { ...tx, status, paymentDate });
+                }
             }
-        } else {
-            const tx = transactions.find(t => t.id === id);
-            if (tx) {
-                const updatedTx = { ...tx, status, paymentDate };
-                setTransactions(prev => prev.map(t => t.id === id ? updatedTx : t));
-                await dataService.save('financial_transactions', updatedTx);
-            }
+            await loadData();
+        } catch (e: any) {
+            alert(`Erro ao alterar status: ${e.message}`);
         }
     };
 
@@ -263,18 +257,14 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
     const handleUpdateCategory = async (id: string, newName: string) => {
         const category = categories.find(c => c.id === id);
         if (!category) return;
-
         const updatedCategory = { ...category, name: newName };
-        setCategories(prev => prev.map(c => c.id === id ? updatedCategory : c));
         await dataService.save('financial_categories', updatedCategory);
+        setCategories(prev => prev.map(c => c.id === id ? updatedCategory : c));
     };
 
     const handleDeleteCategory = async (id: string) => {
         const isUsed = transactions.some(t => t.categoryId === id);
-        if (isUsed) {
-            alert("Categoria em uso por transações existentes.");
-            return;
-        }
+        if (isUsed) { alert("Categoria em uso por transações existentes."); return; }
         await dataService.delete('financial_categories', id);
         setCategories(prev => prev.filter(c => c.id !== id));
     };
