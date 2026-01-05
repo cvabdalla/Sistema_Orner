@@ -152,7 +152,9 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
   }
 
   const filtered = useMemo(() => {
-      let v = 0; let l = 0;
+      let totalVenda = 0; 
+      let totalLucro = 0;
+      
       const f = orcamentos.filter(orc => {
           const d = getDisplayData(orc);
           const s = orc.status || 'Em Aberto';
@@ -160,10 +162,20 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
           if (filterStatus !== 'Todos' && s !== filterStatus) return false;
           if (startDate && d.dataOrcamento < startDate) return false;
           if (endDate && d.dataOrcamento > endDate) return false;
-          v += d.displayPrice; l += d.lucroLiquido;
+          
+          totalVenda += d.displayPrice; 
+          totalLucro += d.lucroLiquido;
           return true;
       });
-      return { filteredOrcamentos: f, totalVendaFiltrado: v, totalLucroFiltrado: l };
+
+      // Ordenação decrescente pela data de abertura do projeto
+      f.sort((a, b) => {
+          const dataA = getDisplayData(a).dataOrcamento;
+          const dataB = getDisplayData(b).dataOrcamento;
+          return dataB.localeCompare(dataA);
+      });
+
+      return { filteredOrcamentos: f, totalVendaFiltrado: totalVenda, totalLucroFiltrado: totalLucro };
   }, [orcamentos, searchTerm, filterStatus, startDate, endDate]);
 
   if (isLoading) return <div className="flex justify-center p-20"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
