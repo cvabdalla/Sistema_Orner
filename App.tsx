@@ -113,6 +113,11 @@ const App: React.FC = () => {
       setCurrentPage('RELATORIOS_HISTORICO');
   };
 
+  const handleCancelReport = () => {
+      setEditingReport(null);
+      setCurrentPage('RELATORIOS_HISTORICO');
+  };
+
   const hasPermission = (page: Page) => {
       if (userPermissions.includes('ALL')) return true;
       return userPermissions.includes(page);
@@ -188,7 +193,7 @@ const App: React.FC = () => {
       case 'RELATORIOS_VISAO_GERAL':
         return <RelatoriosPage view="analise" currentUser={currentUser} />;
       case 'RELATORIOS_NOVO':
-        return <RelatoriosPage view="reembolso" reportToEdit={editingReport} onSave={handleSaveReport} currentUser={currentUser} />;
+        return <RelatoriosPage view="reembolso" reportToEdit={editingReport} onSave={handleSaveReport} onCancel={handleCancelReport} currentUser={currentUser} />;
       case 'RELATORIOS_STATUS':
         return <RelatoriosPage view="status" onEditReport={handleEditReport} currentUser={currentUser} />;
       case 'RELATORIOS_HISTORICO':

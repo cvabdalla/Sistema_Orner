@@ -1,11 +1,11 @@
-
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { 
     ChartPieIcon, PrinterIcon, PlusIcon, TrashIcon, 
     CogIcon, SaveIcon, EditIcon, ClipboardListIcon, 
     CheckCircleIcon, DollarIcon, ExclamationTriangleIcon, 
     DocumentReportIcon, XCircleIcon, LockClosedIcon,
-    ArrowLeftIcon, EyeIcon, CalendarIcon, TableIcon, FilterIcon, UsersIcon, ChevronDownIcon
+    ArrowLeftIcon, EyeIcon, CalendarIcon, TableIcon, FilterIcon, UsersIcon, ChevronDownIcon,
+    UploadIcon, LinkIcon
 } from '../assets/icons';
 import Modal from '../components/Modal';
 import DashboardCard from '../components/DashboardCard';
@@ -25,12 +25,13 @@ const StandardInput = (props: any) => (
     />
 );
 
-const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onSave, onEditReport, currentUser }) => {
+const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onSave, onCancel, onEditReport, currentUser }) => {
   const [solicitante, setSolicitante] = useState('');
   const [setor, setSetor] = useState('');
   const [periodStart, setPeriodStart] = useState('');
   const [periodEnd, setPeriodEnd] = useState('');
   const [valorPorKm, setValorPorKm] = useState(1.20);
+  const [reportAttachments, setReportAttachments] = useState<string[]>([]);
   
   // Filtros para o Resumo
   const [filterStart, setFilterStart] = useState('');
@@ -64,6 +65,9 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
   const [items, setItems] = useState<ExpenseReportItem[]>([
     { id: '1', date: '', description: '', origin: '', destination: '', km: 0, toll: 0 },
   ]);
+
+  const reportFileInputRef = useRef<HTMLInputElement>(null);
+  const [viewingAttachment, setViewingAttachment] = useState<string | null>(null);
 
   const isAdmin = useMemo(() => currentUser.profileId === '00000000-0000-0000-0000-000000000001', [currentUser]);
 
@@ -131,6 +135,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
             setPeriodEnd(reportToEdit.periodEnd || ''); 
             setItems(reportToEdit.items || []); 
             setValorPorKm(reportToEdit.kmValueUsed || configKmValue);
+            setReportAttachments(reportToEdit.attachments || []);
         } else {
             setSolicitante(currentUser.name); 
             setSetor(''); 
@@ -138,6 +143,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
             setPeriodEnd(''); 
             setItems([{ id: Date.now().toString(), date: '', description: '', origin: '', destination: '', km: 0, toll: 0 }]); 
             setValorPorKm(configKmValue);
+            setReportAttachments([]);
         }
     }
   }, [view, reportToEdit, currentUser, configKmValue]);
@@ -269,6 +275,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
         periodStart, 
         periodEnd, 
         items: items.map(i => ({...i, id: i.id || String(Math.random())})), 
+        attachments: reportAttachments,
         kmValueUsed: valorPorKm, 
         status: targetStatus, 
         createdAt: reportToEdit?.createdAt || new Date().toISOString(), 
@@ -297,7 +304,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
 
   const handleExportResumo = () => {
     const csvHeader = "\uFEFFData;Solicitante;Setor;Periodo;Status;KM (R$);Pedagio (R$);Total (R$)\n";
-    const csvBody = analysisData.filteredReports.map(r => {
+    const csvBody = analysisData.filteredReports.map((r: ExpenseReport) => {
         let kmVal = 0; let tollVal = 0;
         r.items.forEach(it => {
             kmVal += Math.ceil(((it.km || 0) * (r.kmValueUsed || 1.20)) * 100) / 100;
@@ -306,13 +313,35 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
         return `${new Date(r.createdAt).toLocaleDateString('pt-BR')};${r.requester};${r.sector};${r.period};${r.status};${kmVal.toFixed(2).replace('.', ',')};${tollVal.toFixed(2).replace('.', ',')};${r.totalValue.toFixed(2).replace('.', ',')}`;
     }).join('\n');
     
+    // Fix: Using global Blob and URL directly to solve type inference issues and potential shadowing.
     const blob = new Blob([csvHeader + csvBody], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
+    link.href = url;
     link.setAttribute("download", `resumo_reembolsos_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleReportFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files) return;
+
+      Array.from(files).forEach(file => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+              const base64 = reader.result as string;
+              setReportAttachments(prev => [...prev, base64]);
+          };
+          reader.readAsDataURL(file);
+      });
+      e.target.value = '';
+  };
+
+  const removeAttachment = (index: number) => {
+      setReportAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
   const PIE_COLORS = ['#6366F1', '#10B981', '#F59E0B', '#EF4444'];
@@ -425,7 +454,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                       Listagem resumida
                   </h3>
                   <div className="space-y-3 overflow-y-auto max-h-[350px] pr-2 custom-scrollbar">
-                      {analysisData.filteredReports.map(r => (
+                      {analysisData.filteredReports.map((r: ExpenseReport) => (
                           <div key={r.id} className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-transparent hover:border-indigo-100 transition-all">
                               <div className="flex justify-between items-start mb-1">
                                   <span className="text-[10px] font-black text-gray-400 tracking-tighter">{new Date(r.createdAt).toLocaleDateString('pt-BR')}</span>
@@ -488,7 +517,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                                         : `${selectedUsersStatus.length} selecionado(s)`}
                                 </span>
                             </div>
-                            <ChevronDownIcon className={`w-3 h-3 transition-transform ${isUserDropdownStatusOpen ? 'rotate-180' : ''}`} />
+                            <ChevronDownIcon className={`w-4 h-4 transition-transform ${isUserDropdownStatusOpen ? 'rotate-180' : ''}`} />
                         </button>
 
                         {isUserDropdownStatusOpen && (
@@ -743,6 +772,16 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
         <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-2xl border border-gray-100 dark:border-gray-700 print:shadow-none animate-fade-in">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-10 gap-4 print:hidden">
                 <div className="flex items-center gap-4">
+                    {onCancel && (
+                        <button 
+                            onClick={onCancel}
+                            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 border-2 border-indigo-100 dark:border-indigo-900 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all shadow-sm group active:scale-95"
+                            title="Voltar para a lista"
+                        >
+                            <ArrowLeftIcon className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+                            <span className="text-xs font-black tracking-wider">Voltar</span>
+                        </button>
+                    )}
                     <div className="p-3 bg-indigo-100 text-indigo-600 rounded-xl">
                         <DocumentReportIcon className="w-8 h-8" />
                     </div>
@@ -802,7 +841,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                        {items.map(item => (
+                        {items.map((item) => (
                             <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/20 transition-colors">
                                 <td className="p-1 min-w-[120px]">
                                     <input type="date" value={item.date} onChange={e => setItems(p=>p.map(x=>x.id===item.id?{...x, date:e.target.value}:x))} disabled={isReadOnly} className="w-full p-2.5 bg-transparent text-sm font-semibold outline-none text-gray-700 dark:text-white" />
@@ -846,7 +885,100 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                     <PlusIcon className="w-5 h-5" /> Adicionar nova despesa
                 </button>
             )}
+
+            {/* Nova seção de Anexos do Relatório (Globais da Planilha) */}
+            <div className="mt-10 border-t dark:border-gray-700 pt-8">
+                <div className="flex justify-between items-center mb-6">
+                    <div>
+                        <h3 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                            <UploadIcon className="w-5 h-5 text-indigo-500" />
+                            Documentos e Comprovantes Anexados
+                        </h3>
+                        <p className="text-[10px] text-gray-400 font-bold tracking-wider">Anexos gerais da planilha ({reportAttachments.length} arquivos)</p>
+                    </div>
+                    {!isReadOnly && (
+                        <button 
+                            onClick={() => reportFileInputRef.current?.click()}
+                            className="flex items-center gap-2 px-4 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg font-bold text-xs hover:bg-indigo-100 transition-all"
+                        >
+                            <PlusIcon className="w-4 h-4" /> Adicionar comprovante
+                        </button>
+                    )}
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                    {reportAttachments.map((att, idx) => (
+                        <div key={idx} className="group relative aspect-square bg-gray-50 dark:bg-gray-700/50 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden shadow-sm hover:shadow-md transition-all">
+                            {att.startsWith('data:application/pdf') ? (
+                                <div className="w-full h-full flex flex-col items-center justify-center p-4">
+                                    <DocumentReportIcon className="w-10 h-10 text-red-400" />
+                                    <span className="text-[9px] font-black text-gray-400 mt-2">PDF</span>
+                                </div>
+                            ) : (
+                                <img src={att} className="w-full h-full object-cover" alt={`Anexo ${idx + 1}`} />
+                            )}
+                            
+                            <div className="absolute inset-0 bg-indigo-600/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                                <button 
+                                    onClick={() => setViewingAttachment(att)}
+                                    className="p-2 bg-white text-indigo-600 rounded-full shadow-lg hover:scale-110 transition-transform"
+                                    title="Visualizar"
+                                >
+                                    <EyeIcon className="w-4 h-4" />
+                                </button>
+                                {!isReadOnly && (
+                                    <button 
+                                        onClick={() => removeAttachment(idx)}
+                                        className="p-2 bg-red-500 text-white rounded-full shadow-lg hover:scale-110 transition-transform"
+                                        title="Remover"
+                                    >
+                                        <TrashIcon className="w-4 h-4" />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                    
+                    {!isReadOnly && reportAttachments.length === 0 && (
+                        <div 
+                            onClick={() => reportFileInputRef.current?.click()}
+                            className="aspect-square border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl flex flex-col items-center justify-center text-gray-400 hover:border-indigo-300 hover:text-indigo-400 cursor-pointer transition-all"
+                        >
+                            <UploadIcon className="w-8 h-8 mb-2 opacity-20" />
+                            <span className="text-[10px] font-bold text-center px-4">Nenhum comprovante anexado</span>
+                        </div>
+                    )}
+                </div>
+            </div>
         </div>
+
+        {/* Input de arquivo oculto múltiplo */}
+        <input 
+            type="file" 
+            ref={reportFileInputRef} 
+            className="hidden" 
+            multiple
+            accept="image/*,application/pdf"
+            onChange={handleReportFilesChange}
+        />
+
+        {/* Modal para visualizar anexo */}
+        {viewingAttachment && (
+            <Modal title="Visualização de Documento" onClose={() => setViewingAttachment(null)} maxWidth="max-w-4xl">
+                <div className="flex flex-col items-center gap-4">
+                    {viewingAttachment.startsWith('data:application/pdf') ? (
+                        <div className="w-full h-[600px] bg-gray-100 rounded-xl flex flex-col items-center justify-center border-2 border-dashed">
+                             <DocumentReportIcon className="w-20 h-20 text-red-400 mb-4" />
+                             <p className="text-sm font-bold text-gray-500">Documento PDF (Visualização indisponível em Base64)</p>
+                             <a href={viewingAttachment} download="comprovante.pdf" className="mt-6 px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg">Baixar arquivo agora</a>
+                        </div>
+                    ) : (
+                        <img src={viewingAttachment} className="max-w-full h-auto rounded-xl shadow-2xl border dark:border-gray-700" alt="Anexo" />
+                    )}
+                    <button onClick={() => setViewingAttachment(null)} className="px-6 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg font-bold text-xs mt-4">Fechar visualização</button>
+                </div>
+            </Modal>
+        )}
 
         {isSuccessModalOpen && (
             <Modal title="Operação concluída" onClose={()=>setSuccessModalOpen(false)}>
@@ -866,8 +998,8 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                         <p className="text-sm text-gray-500 mt-2">Após o envio, você não poderá mais editar os valores até que o financeiro avalie.</p>
                     </div>
                     <div className="flex gap-3">
-                        <button onClick={()=>setTransferModalOpen(false)} className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl text-xs font-bold text-gray-500 transition-colors transition-colors">Voltar</button>
-                        <button onClick={()=>{setTransferModalOpen(false); executeSave('Transferido');}} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all transition-colors">Confirmar</button>
+                        <button onClick={()=>setTransferModalOpen(false)} className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl text-xs font-bold text-gray-500 transition-colors">Voltar</button>
+                        <button onClick={()=>{setTransferModalOpen(false); executeSave('Transferido');}} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all transition-all transition-colors">Confirmar</button>
                     </div>
                 </div>
             </Modal>

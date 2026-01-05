@@ -208,6 +208,7 @@ export interface ExpenseReport {
     periodStart?: string;
     periodEnd?: string;
     items: ExpenseReportItem[];
+    attachments?: string[]; // Array de anexos base64 globais (planilha)
     kmValueUsed: number;
     status: ExpenseReportStatus;
     createdAt: string;
@@ -247,6 +248,7 @@ export interface RelatoriosPageProps {
     view: 'analise' | 'reembolso' | 'status' | 'historico' | 'config';
     reportToEdit?: ExpenseReport | null;
     onSave?: () => void;
+    onCancel?: () => void;
     onEditReport?: (report: ExpenseReport) => void;
     currentUser: User;
 }
