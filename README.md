@@ -1,38 +1,47 @@
+# Sistema Orner - Instruções de Banco de Dados (OBRIGATÓRIO)
 
-# Sistema Orner - Instruções de Banco de Dados (CRÍTICO)
-
-Se os lançamentos de cartão **continuam não salvando**, é quase certo que a coluna `id` da sua tabela `financial_transactions` está definida como `Integer` (numérica) ou as novas colunas estão faltando.
-
-**Copie e execute este código EXATAMENTE como está no SQL Editor do Supabase:**
+Para que o **Resumo de Vendas** e a aprovação de orçamentos funcionem, você deve executar o script abaixo no **SQL Editor** do seu projeto Supabase. Este script remove a tabela antiga e cria uma nova estrutura 100% compatível com as funcionalidades de custo.
 
 ```sql
--- 1. Garante que o ID da tabela aceite texto (necessário para lançamentos de cartão)
--- Isso muda o tipo da coluna id de serial/int para text se necessário
-ALTER TABLE public.financial_transactions ALTER COLUMN id TYPE text;
+-- 1. Remove a tabela antiga para limpar o cache de esquema
+DROP TABLE IF EXISTS public.sales_summary;
 
--- 2. Adiciona colunas extras para controle de cartões e parcelas (se não existirem)
-ALTER TABLE public.financial_transactions ADD COLUMN IF NOT EXISTS "billingType" text DEFAULT 'unico';
-ALTER TABLE public.financial_transactions ADD COLUMN IF NOT EXISTS "installmentNumber" integer;
-ALTER TABLE public.financial_transactions ADD COLUMN IF NOT EXISTS "totalInstallments" integer;
-ALTER TABLE public.financial_transactions ADD COLUMN IF NOT EXISTS "launchDate" text;
-ALTER TABLE public.financial_transactions ADD COLUMN IF NOT EXISTS "batchId" text;
-
--- 3. Garante que a tabela de cartões exista com os tipos corretos
-CREATE TABLE IF NOT EXISTS public.credit_cards (
-  id text PRIMARY KEY,
+-- 2. Cria a tabela com as colunas exatas (preservando o CamelCase com aspas duplas)
+CREATE TABLE public.sales_summary (
+  id bigint PRIMARY KEY,
+  "orcamentoId" bigint,
   owner_id text,
-  name text NOT NULL,
-  card_number text,
-  last_digits text,
-  due_day integer DEFAULT 10,
-  closing_day integer DEFAULT 1,
-  active boolean DEFAULT true,
+  "clientName" text,
+  "date" text,
+  "closedValue" numeric DEFAULT 0,
+  "systemCost" numeric DEFAULT 0,
+  supplier text,
+  "visitaTecnica" numeric DEFAULT 0,
+  homologation numeric DEFAULT 0,
+  installation numeric DEFAULT 0,
+  "travelCost" numeric DEFAULT 0,
+  "adequationCost" numeric DEFAULT 0,
+  "materialCost" numeric DEFAULT 0,
+  "invoicedTax" numeric DEFAULT 0,
+  commission numeric DEFAULT 0,
+  "bankFees" numeric DEFAULT 0,
+  "totalCost" numeric DEFAULT 0,
+  "netProfit" numeric DEFAULT 0,
+  "finalMargin" numeric DEFAULT 0,
+  status text DEFAULT 'Aprovado',
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now())
 );
 
--- 4. DESABILITA RLS (Row Level Security) temporariamente para garantir permissão de escrita
--- Rode estes comandos se receber erro "42501" ou "Permission Denied"
+-- 3. Desabilita RLS para garantir que o frontend consiga salvar os dados sem erros de permissão
+ALTER TABLE public.orcamentos DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sales_summary DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.stock_items DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.financial_transactions DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.credit_cards DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.financial_categories DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.expense_reports DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.system_users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.system_profiles DISABLE ROW LEVEL SECURITY;
+
+-- 4. Garante que os IDs de orçamentos suportem números grandes
+ALTER TABLE public.orcamentos ALTER COLUMN id TYPE bigint;
 ```

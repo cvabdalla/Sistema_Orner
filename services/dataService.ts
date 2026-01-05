@@ -1,4 +1,3 @@
-
 import { supabase } from '../supabaseClient';
 import * as mocks from '../constants';
 
@@ -26,17 +25,17 @@ class SupabaseDataService implements IDataService {
     }
 
     private formatError(e: any): string {
+        if (!e) return "Erro desconhecido";
         if (typeof e === 'string') return e;
-        const code = e?.code || '';
-        const msg = e?.message || '';
         
-        if (code === '42703') return "Coluna inexistente no banco. Execute o SQL de atualização no README.";
-        if (code === '23503') return "Erro de vínculo (Foreign Key).";
-        if (code === '42501') return "Permissão negada (RLS). Execute 'DISABLE ROW LEVEL SECURITY' no Supabase.";
-        if (code === '42P01') return "A tabela não existe no Supabase.";
-        if (code === '22P02') return "Erro de tipo de dado: Você está tentando salvar um texto em uma coluna de número. Verifique o tipo da coluna 'id'.";
+        // Extrai a mensagem de erro de forma amigável para evitar [object Object]
+        const message = e.message || e.details || e.hint || (e.error && e.error.message) || JSON.stringify(e);
+        const code = e.code || '';
         
-        return msg || String(e);
+        if (code === '42703') return `Coluna inexistente no banco de dados: ${message}. Execute o SQL do README no Supabase.`;
+        if (code === 'PGRST204') return `Schema desatualizado: ${message}. Tente recriar a tabela no SQL Editor.`;
+        
+        return message;
     }
 
     async getAll<T>(collection: string, userId?: string, isAdmin?: boolean): Promise<T[]> {
@@ -83,17 +82,16 @@ class SupabaseDataService implements IDataService {
 
             if (error) {
                 const errorMsg = this.formatError(error);
-                console.error(`[Supabase Error]`, error);
-                // LANÇA O ERRO para que a interface saiba que falhou
+                console.error(`[Supabase Error Details]`, error);
                 throw new Error(errorMsg);
             }
 
-            // Apenas se salvou no banco, sincronizamos o local
             this.saveLocal(collection, itemToSave);
             return (data && data.length > 0 ? data[0] : itemToSave) as T;
         } catch (e: any) {
-            console.error(`[DataService Save Failure]`, e.message);
-            throw e; // Repassa o erro para o componente
+            const msg = this.formatError(e);
+            console.error(`[DataService Save Failure]`, msg);
+            throw new Error(msg);
         }
     }
 

@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { 
     ChartPieIcon, PrinterIcon, PlusIcon, TrashIcon, 
@@ -247,10 +246,9 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
 
-  const handlePayReport = async () => {
-      if (!reportToPay) return;
+  const handlePayReport = async (report: ExpenseReport) => {
       try {
-          const updated = { ...reportToPay, status: 'Pago' as any };
+          const updated = { ...report, status: 'Pago' as any };
           await dataService.save('expense_reports', updated);
           await loadReports();
           setPayModalOpen(false);
@@ -314,16 +312,16 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
         return `${new Date(r.createdAt).toLocaleDateString('pt-BR')};${r.requester};${r.sector};${r.period};${r.status};${kmVal.toFixed(2).replace('.', ',')};${tollVal.toFixed(2).replace('.', ',')};${r.totalValue.toFixed(2).replace('.', ',')}`;
     }).join('\n');
     
-    // Fixed: Use the standard Blob constructor without the window. prefix to ensure correct typing and compatibility with URL.createObjectURL.
-    const blob = new Blob([csvHeader + csvBody], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
+    // Fixed: Explicitly use window.Blob and window.URL to avoid conflicts with other definitions and fix the 'unknown' argument type error.
+    const blob = new window.Blob([csvHeader + csvBody], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob as Blob);
     const link = document.createElement("a");
     link.href = url;
     link.setAttribute("download", `resumo_reembolsos_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    window.URL.revokeObjectURL(url);
   };
 
   const handleReportFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -618,7 +616,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                         <p className="text-sm font-semibold text-gray-600">Deseja marcar como pago o valor de {formatCurrency(reportToPay.totalValue)} para {reportToPay.requester}?</p>
                         <div className="flex gap-2 pt-4">
                             <button onClick={() => setPayModalOpen(false)} className="flex-1 py-2.5 bg-gray-100 rounded-lg text-xs font-bold text-gray-500 transition-colors">Cancelar</button>
-                            <button onClick={handlePayReport} className="flex-1 py-2.5 bg-green-600 text-white rounded-lg text-xs font-bold shadow-lg">Confirmar</button>
+                            <button onClick={() => handlePayReport(reportToPay)} className="flex-1 py-2.5 bg-green-600 text-white rounded-lg text-xs font-bold shadow-lg">Confirmar</button>
                         </div>
                     </div>
                 </Modal>

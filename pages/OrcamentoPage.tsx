@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import type { SavedOrcamento, OrcamentoPageProps, OrcamentoStatus, SalesSummaryItem } from '../types';
-import { TrashIcon, AddIcon, EditIcon, FilterIcon, CalendarIcon, DollarIcon, TrendUpIcon, EyeIcon } from '../assets/icons';
+import { TrashIcon, AddIcon, EditIcon, FilterIcon, CalendarIcon, DollarIcon, TrendUpIcon, EyeIcon, CheckCircleIcon } from '../assets/icons';
 import Modal from '../components/Modal';
 import DashboardCard from '../components/DashboardCard';
 import { dataService } from '../services/dataService';
@@ -19,38 +18,35 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
 
   const ADMIN_PROFILE_ID = '00000000-0000-0000-0000-000000000001';
 
-  useEffect(() => {
-    const loadData = async () => {
-        setIsLoading(true);
+  const loadData = async () => {
+    setIsLoading(true);
+    const isAdmin = currentUser.profileId === ADMIN_PROFILE_ID;
+    try {
         const data = await dataService.getAll<SavedOrcamento>(
             'orcamentos',
             currentUser.id,
-            currentUser.profileId === ADMIN_PROFILE_ID
+            isAdmin
         );
         setOrcamentos(data);
+    } catch (e) {
+        console.error("Falha ao carregar orçamentos:", e);
+    } finally {
         setIsLoading(false);
-    };
-    loadData();
+    }
+  };
 
-    const date = new Date();
-    const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
-    const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-    const formatDate = (d: Date) => {
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    };
-    setStartDate(formatDate(firstDay));
-    setEndDate(formatDate(lastDay));
+  useEffect(() => {
+    loadData();
   }, [currentUser]);
 
   const confirmDelete = async () => {
     if (orcamentoToDeleteId !== null) {
       await dataService.delete('orcamentos', orcamentoToDeleteId);
-      const currentSales = await dataService.getAll<SalesSummaryItem>('sales_summary');
-      const saleToDelete = currentSales.find(s => s.orcamentoId === orcamentoToDeleteId);
+      // Remove do resumo de vendas caso estivesse lá
+      const allSales = await dataService.getAll<SalesSummaryItem>('sales_summary', undefined, true);
+      const saleToDelete = allSales.find(s => String(s.orcamentoId) === String(orcamentoToDeleteId));
       if (saleToDelete) await dataService.delete('sales_summary', saleToDelete.id);
+      
       setOrcamentos(prev => prev.filter(o => o.id !== orcamentoToDeleteId));
       setDeleteModalOpen(false);
       setOrcamentoToDeleteId(null);
@@ -59,62 +55,69 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
 
   const handleStatusChange = async (id: number, newStatus: OrcamentoStatus) => {
       const orcamento = orcamentos.find(o => o.id === id);
-      if (orcamento) {
-          const updatedOrcamento = { ...orcamento, status: newStatus };
-          setOrcamentos(p => p.map(o => o.id === id ? updatedOrcamento : o));
+      if (!orcamento) return;
+
+      const updatedOrcamento = { ...orcamento, status: newStatus };
+      
+      try {
+          // 1. Salva a alteração de status no orçamento original
           await dataService.save('orcamentos', updatedOrcamento);
+          setOrcamentos(p => p.map(o => o.id === id ? updatedOrcamento : o));
           
+          // 2. Busca o registro correspondente no resumo de vendas
+          const allSales = await dataService.getAll<SalesSummaryItem>('sales_summary', undefined, true);
+          const existingSale = allSales.find(s => String(s.orcamentoId) === String(id));
+
           if (newStatus === 'Aprovado') {
-              const currentSales = await dataService.getAll<SalesSummaryItem>('sales_summary');
-              let variant = orcamento.variants?.find(v => v.isPrincipal) || orcamento.variants?.[0] || { formState: orcamento.formState, calculated: orcamento.calculated };
-              
-              if (variant.formState && variant.calculated) {
-                  const fs = variant.formState;
-                  const calc = variant.calculated;
+              // Busca a variante favorita (Principal)
+              let fs: any = null;
+              let calc: any = null;
 
-                  const thirdPartyInstallation = (fs.terceiroInstalacaoQtd || 0) * (fs.terceiroInstalacaoCusto || 0);
+              if (orcamento.variants && orcamento.variants.length > 0) {
+                  const variant = orcamento.variants.find(v => v.isPrincipal) || orcamento.variants[0];
+                  fs = variant.formState;
+                  calc = variant.calculated;
+              } else if (orcamento.formState) {
+                  fs = orcamento.formState;
+                  calc = orcamento.calculated;
+              }
 
+              if (fs && calc) {
                   const saleItem: SalesSummaryItem = {
-                      id: Date.now(),
-                      orcamentoId: orcamento.id,
-                      owner_id: orcamento.owner_id,
-                      clientName: fs.nomeCliente || 'Cliente sem nome',
-                      date: fs.dataOrcamento || orcamento.savedAt.split('T')[0],
-                      closedValue: calc.precoVendaFinal || 0,
-                      systemCost: calc.valorVendaSistema || 0,
-                      supplier: fs.fornecedor || 'N/A',
-                      visitaTecnica: fs.visitaTecnicaCusto || 0,
-                      homologation: fs.projetoHomologacaoCusto || 0,
-                      installation: thirdPartyInstallation,
-                      travelCost: fs.custoViagem || 0,
-                      adequationCost: fs.adequacaoLocalCusto || 0,
-                      materialCost: calc.totalEstrutura || 0,
-                      invoicedTax: calc.nfServicoValor || 0,
-                      commission: calc.comissaoVendasValor || 0,
-                      bankFees: 0,
-                      totalCost: 
-                          (fs.visitaTecnicaCusto || 0) + 
-                          (fs.projetoHomologacaoCusto || 0) + 
-                          thirdPartyInstallation + 
-                          (fs.custoViagem || 0) + 
-                          (fs.adequacaoLocalCusto || 0) + 
-                          (calc.totalEstrutura || 0) + 
-                          (calc.nfServicoValor || 0) + 
-                          (calc.comissaoVendasValor || 0),
-                      netProfit: calc.lucroLiquido || 0,
-                      finalMargin: calc.margemLiquida || 0,
+                      id: existingSale ? Number(existingSale.id) : Date.now(),
+                      orcamentoId: Number(id),
+                      owner_id: String(orcamento.owner_id || currentUser.id),
+                      clientName: String(fs.nomeCliente || 'Cliente sem nome'),
+                      date: String(fs.dataOrcamento || orcamento.savedAt.split('T')[0]),
+                      closedValue: Number(calc.precoVendaFinal) || 0,
+                      systemCost: Number(fs.custoSistema) || 0,
+                      supplier: String(fs.fornecedor || 'N/A'),
+                      visitaTecnica: Number(fs.visitaTecnicaCusto) || 0,
+                      homologation: Number(fs.projetoHomologacaoCusto) || 0,
+                      installation: (Number(fs.terceiroInstalacaoQtd) || 0) * (Number(fs.terceiroInstalacaoCusto) || 0),
+                      travelCost: Number(fs.custoViagem) || 0,
+                      adequationCost: Number(fs.adequacaoLocalCusto) || 0,
+                      materialCost: Number(calc.totalEstrutura) || 0,
+                      invoicedTax: Number(calc.nfServicoValor) || 0,
+                      commission: Number(calc.comissaoVendasValor) || 0,
+                      bankFees: 0, 
+                      totalCost: (Number(calc.totalCustoTerceiro) || 0) + (Number(fs.custoSistema) || 0) + (Number(calc.nfServicoValor) || 0) + (Number(calc.comissaoVendasValor) || 0),
+                      netProfit: Number(calc.lucroLiquido) || 0,
+                      finalMargin: Number(calc.margemLiquida) || 0,
                       status: 'Aprovado'
                   };
-
-                  const existing = currentSales.find(s => s.orcamentoId === orcamento.id);
-                  if (existing) await dataService.save('sales_summary', { ...saleItem, id: existing.id });
-                  else await dataService.save('sales_summary', saleItem);
+                  
+                  await dataService.save('sales_summary', saleItem);
               }
-          } else {
-              const currentSales = await dataService.getAll<SalesSummaryItem>('sales_summary');
-              const saleToRemove = currentSales.find(s => s.orcamentoId === id);
-              if (saleToRemove) await dataService.delete('sales_summary', saleToRemove.id);
+          } else if (existingSale) {
+              // Se o status NÃO for mais aprovado, removemos do resumo de vendas
+              await dataService.delete('sales_summary', existingSale.id);
           }
+      } catch (e: any) {
+          const errorMsg = e.message || "Erro desconhecido";
+          console.error("Erro ao sincronizar venda:", errorMsg);
+          alert(`Erro na sincronização: ${errorMsg}`);
+          loadData();
       }
   };
 
