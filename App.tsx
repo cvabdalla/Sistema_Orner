@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
-import Header from '././components/Header';
+import Header from './components/Header';
 import DashboardPage from './pages/DashboardPage';
-import WelcomePage from './pages/WelcomePage'; // Importação da nova página
+import WelcomePage from './pages/WelcomePage';
 import OrcamentoPage from './pages/OrcamentoPage';
 import FinanceiroPage from './pages/FinanceiroPage';
 import RelatoriosPage from './pages/RelatoriosPage';
@@ -24,14 +24,12 @@ const App: React.FC = () => {
   const [editingOrcamento, setEditingOrcamento] = useState<SavedOrcamento | null>(null);
   const [editingReport, setEditingReport] = useState<ExpenseReport | null>(null);
   
-  // Estado de Autenticação e Permissões
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [userPermissions, setUserPermissions] = useState<string[]>([]);
   const [isUserInitialized, setIsUserInitialized] = useState(false);
 
   const ADMIN_PROFILE_ID = '00000000-0000-0000-0000-000000000001';
 
-  // Busca permissões do perfil
   const fetchPermissions = async (profileId: string) => {
     try {
       const profiles = await dataService.getAll<UserProfile>('system_profiles', undefined, true);
@@ -46,7 +44,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Verifica sessão ao carregar
   useEffect(() => {
     const session = authService.getSession();
     if (session) {
@@ -56,7 +53,6 @@ const App: React.FC = () => {
     setIsUserInitialized(true);
   }, []);
 
-  // Sincroniza o usuário e permissões
   useEffect(() => {
     if (!currentUser) return;
 
@@ -100,7 +96,7 @@ const App: React.FC = () => {
     if (page !== 'NOVO_ORCAMENTO') setEditingOrcamento(null);
     if (page !== 'RELATORIOS_NOVO') setEditingReport(null);
     setCurrentPage(page);
-  }
+  };
 
   const handleEditOrcamento = (orcamento: SavedOrcamento) => {
     setEditingOrcamento(orcamento);
@@ -110,23 +106,21 @@ const App: React.FC = () => {
   const handleEditReport = (report: ExpenseReport) => {
       setEditingReport(report);
       setCurrentPage('RELATORIOS_NOVO');
-  }
+  };
 
   const handleSaveReport = () => {
       setEditingReport(null);
       setCurrentPage('RELATORIOS_HISTORICO');
-  }
+  };
 
   const hasPermission = (page: Page) => {
-      if (userPermissions.includes('ALL')) return true; // Admin master
-      // Dashboard agora é validado como qualquer outra página
+      if (userPermissions.includes('ALL')) return true;
       return userPermissions.includes(page);
   };
 
   const renderPage = () => {
     if (!currentUser) return null;
 
-    // Bloqueio de Acesso por Inatividade
     if (!currentUser.active) {
         return (
             <div className="flex flex-col items-center justify-center h-full space-y-6 animate-fade-in text-center px-4">
@@ -142,17 +136,14 @@ const App: React.FC = () => {
         );
     }
 
-    // Lógica Especial para o Dashboard
     if (currentPage === 'DASHBOARD') {
         if (hasPermission('DASHBOARD')) {
             return <DashboardPage />;
         } else {
-            // Se não tem acesso ao Dashboard, mostra a página de boas-vindas com menus permitidos
             return <WelcomePage currentUser={currentUser} userPermissions={userPermissions} onNavigate={handleSetCurrentPage} />;
         }
     }
 
-    // Verificação de Permissão de Rota para demais páginas
     if (!hasPermission(currentPage)) {
         return (
             <div className="flex flex-col items-center justify-center h-full space-y-4 animate-fade-in text-center px-4">
@@ -218,7 +209,6 @@ const App: React.FC = () => {
     if (!currentUser.active) return "Restrição de Acesso";
     if (currentPage === 'NOVO_ORCAMENTO') return editingOrcamento ? 'Editar orçamento' : 'Novo orçamento';
     
-    // Se estiver no Dashboard mas sem permissão, o título é "Bem-vindo"
     if (currentPage === 'DASHBOARD' && !hasPermission('DASHBOARD')) return "Início";
 
     const titles: Record<string, string> = {

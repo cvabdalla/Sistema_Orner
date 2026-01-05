@@ -1,56 +1,45 @@
 
 # Sistema Orner - Instruções de Banco de Dados
 
-Para que a integração com o Supabase funcione totalmente, você precisa executar o seguinte SQL no **SQL Editor** do seu painel Supabase:
+Para que a integração com o Supabase funcione totalmente, você precisa executar o seguinte SQL no **SQL Editor** do seu painel Supabase. 
+
+**IMPORTANTE:** Esta versão usa apenas letras minúsculas nas colunas para evitar erros de sintaxe no PostgreSQL.
 
 ```sql
--- Criar tabela de usuários
-create table system_users (
-  id text primary key,
-  name text not null,
-  email text unique not null,
-  password text,
-  "profileId" text,
-  active boolean default true,
-  avatar text,
-  created_at timestamp with time zone default timezone('utc'::text, now())
-);
+-- Criar tabela de cartões de crédito (VERSÃO FINAL)
+DROP TABLE IF EXISTS public.credit_cards;
 
--- Criar tabela de orçamentos
-create table orcamentos (
-  id bigint primary key,
-  owner_id text references system_users(id),
-  status text,
-  "savedAt" timestamp with time zone,
-  variants jsonb,
-  "formState" jsonb,
-  calculated jsonb
-);
-
--- Criar categorias financeiras
-create table financial_categories (
-  id text primary key,
-  name text not null,
-  type text check (type in ('receita', 'despesa'))
+CREATE TABLE public.credit_cards (
+  id text PRIMARY KEY,
+  owner_id text,
+  name text NOT NULL,
+  card_number text,
+  last_digits text,
+  due_day integer DEFAULT 10,
+  active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now())
 );
 
 -- Criar transações financeiras
-create table financial_transactions (
-  id text primary key,
+CREATE TABLE IF NOT EXISTS public.financial_transactions (
+  id text PRIMARY KEY,
   owner_id text,
   description text,
   amount decimal,
   type text,
   "dueDate" date,
   "paymentDate" date,
-  "categoryId" text references financial_categories(id),
+  "categoryId" text,
   status text,
-  "launchDate" date
+  "launchDate" date,
+  "batchId" text
 );
 
--- Habilitar Realtime (opcional)
-alter publication supabase_realtime add table system_users;
-alter publication supabase_realtime add table orcamentos;
-```
+-- DESABILITAR RLS PARA TESTES INICIAIS
+ALTER TABLE public.credit_cards DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.financial_transactions DISABLE ROW LEVEL SECURITY;
 
-O sistema agora possui um mecanismo de **Fallback**, então ele funcionará com dados de demonstração até que essas tabelas sejam detectadas.
+-- Habilitar Realtime (opcional)
+alter publication supabase_realtime add table credit_cards;
+alter publication supabase_realtime add table financial_transactions;
+```

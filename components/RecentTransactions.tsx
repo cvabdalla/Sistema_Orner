@@ -1,7 +1,7 @@
 
 import React, { useMemo, useEffect, useState } from 'react';
 import type { FinancialTransaction, FinancialTransactionStatus, FinancialCategory } from '../types';
-import { ExclamationTriangleIcon } from '../assets/icons';
+import { ExclamationTriangleIcon, CreditCardIcon } from '../assets/icons';
 import { dataService } from '../services/dataService';
 
 interface RecentTransactionsProps {
@@ -14,8 +14,8 @@ const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 }).format(rounded);
 };
 
-const TransactionRow: React.FC<{ transaction: FinancialTransaction, categoryName: string }> = ({ transaction, categoryName }) => {
-  const { description, amount, status, dueDate, type } = transaction;
+const TransactionRow: React.FC<{ transaction: FinancialTransaction & { isGroup?: boolean }, categoryName: string }> = ({ transaction, categoryName }) => {
+  const { description, amount, status, dueDate, type, isGroup } = transaction;
   
   const getDateStatusInfo = (dueDate: string, status: FinancialTransactionStatus) => {
         if (status === 'pago') return null;
@@ -37,7 +37,9 @@ const TransactionRow: React.FC<{ transaction: FinancialTransaction, categoryName
   };
 
   const dateStatus = getDateStatusInfo(dueDate, status);
-  const rowClasses = dateStatus?.rowClass || 'border-l-4 border-l-transparent hover:bg-gray-50 dark:hover:bg-gray-700/50';
+  const rowClasses = isGroup 
+    ? 'bg-indigo-50/40 dark:bg-indigo-900/10 border-l-4 border-l-indigo-600 hover:bg-indigo-100/50'
+    : dateStatus?.rowClass || 'border-l-4 border-l-transparent hover:bg-gray-50 dark:hover:bg-gray-700/50';
   
   const formatDate = (dateString: string) => {
       if (!dateString) return '-';
@@ -49,24 +51,38 @@ const TransactionRow: React.FC<{ transaction: FinancialTransaction, categoryName
     <tr className={`border-b border-gray-200 dark:border-gray-700 transition-colors ${rowClasses}`}>
       <td className="py-3 px-4">
         <div className="flex items-center">
-            {dateStatus?.type === 'overdue' && <ExclamationTriangleIcon className="w-4 h-4 text-red-500 mr-2 flex-shrink-0" />}
+            {isGroup ? (
+                <div className="p-1.5 bg-indigo-600 text-white rounded-lg mr-3 shadow-sm shrink-0">
+                    <CreditCardIcon className="w-3.5 h-3.5" />
+                </div>
+            ) : dateStatus?.type === 'overdue' ? (
+                <ExclamationTriangleIcon className="w-4 h-4 text-red-500 mr-2 flex-shrink-0" />
+            ) : (
+                <div className="w-1.5 h-1.5 rounded-full bg-gray-300 mr-3 shrink-0" />
+            )}
             <div>
-                <p className="font-semibold text-gray-900 dark:text-white text-sm truncate max-w-[150px] sm:max-w-[200px]">{description}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">{categoryName}</p>
+                <p className={`font-bold text-sm truncate max-w-[150px] sm:max-w-[200px] ${isGroup ? 'text-indigo-700 dark:text-indigo-400' : 'text-gray-900 dark:text-white'}`}>
+                    {description}
+                </p>
+                <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">
+                    {isGroup ? 'Fatura consolidada' : categoryName}
+                </p>
             </div>
         </div>
       </td>
       <td className="py-3 px-4">
           <div className="flex flex-col">
-            <span className="text-sm text-gray-700 dark:text-gray-300">{formatDate(dueDate)}</span>
-            {dateStatus?.label && <span className={`text-[10px] font-bold ${dateStatus.textClass}`}>{dateStatus.label}</span>}
+            <span className="text-sm font-bold text-gray-700 dark:text-gray-300">{formatDate(dueDate)}</span>
+            {dateStatus?.label && <span className={`text-[9px] font-black uppercase tracking-tighter ${dateStatus.textClass}`}>{dateStatus.label}</span>}
           </div>
       </td>
-      <td className={`py-3 px-4 font-semibold text-sm ${type === 'receita' ? 'text-green-600' : 'text-red-600'}`}>
-        {type === 'receita' ? '+' : '-'} {formatCurrency(amount).replace('R$', '').trim()}
+      <td className={`py-3 px-4 font-bold text-sm text-right ${type === 'receita' ? 'text-green-600' : isGroup ? 'text-indigo-600 dark:text-indigo-400' : 'text-red-600'}`}>
+        {formatCurrency(amount).replace('R$', '').trim()}
       </td>
       <td className="py-3 px-4 text-center">
-        <span className={`px-2 py-1 text-[10px] font-bold rounded-full capitalize ${status === 'pago' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>{status}</span>
+        <span className={`px-2 py-1 text-[9px] font-black uppercase rounded-lg shadow-sm ${status === 'pago' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+            {status === 'pago' ? 'Pago' : 'Pendente'}
+        </span>
       </td>
     </tr>
   );
@@ -83,35 +99,68 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({ transactions })
     loadCats();
   }, []);
 
-  const sortedTransactions = useMemo(() => {
+  const processedTransactions = useMemo(() => {
       if (!transactions || transactions.length === 0) return [];
-      return [...transactions].sort((a, b) => {
+
+      const result: (FinancialTransaction & { isGroup?: boolean })[] = [];
+      const cardGroups = new Map<string, FinancialTransaction[]>();
+
+      transactions.forEach(t => {
+          const isCard = t.description.includes('[Cartão:');
+          if (isCard) {
+              const key = `${t.dueDate}_${t.status}`;
+              if (!cardGroups.has(key)) cardGroups.set(key, []);
+              cardGroups.get(key)!.push(t);
+          } else {
+              result.push(t);
+          }
+      });
+
+      cardGroups.forEach((items, key) => {
+          const [dueDate, status] = key.split('_');
+          const totalAmount = items.reduce((sum, item) => sum + item.amount, 0);
+          result.push({
+              ...items[0],
+              id: `group_${key}`,
+              description: 'Cartão de crédito',
+              amount: totalAmount,
+              isGroup: true,
+              dueDate: dueDate,
+              status: status as FinancialTransactionStatus
+          });
+      });
+
+      return result.sort((a, b) => {
           if (a.status === 'pendente' && b.status === 'pago') return -1;
           if (a.status === 'pago' && b.status === 'pendente') return 1;
-          if (a.status === 'pendente') return a.dueDate.localeCompare(b.dueDate);
-          return (b.paymentDate || b.dueDate).localeCompare(a.paymentDate || a.dueDate);
-      }).slice(0, 6);
+          return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+      }).slice(0, 8);
   }, [transactions]);
 
   const getCatName = (id: string) => categories.find(c => c.id === id)?.name || 'Geral';
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden h-full flex flex-col">
+    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden h-full flex flex-col border border-gray-100 dark:border-gray-700">
       <div className="p-6 border-b border-gray-100 dark:border-gray-700">
         <h3 className="text-xl font-bold text-gray-900 dark:text-white">Movimentações & Alertas</h3>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Itens vencidos ou próximos do vencimento aparecem primeiro.</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Itens vencidos ou consolidados de cartão aparecem primeiro.</p>
       </div>
-      <div className="overflow-x-auto flex-1">
+      <div className="overflow-x-auto flex-1 custom-scrollbar">
         <table className="min-w-full text-left">
-          <thead className="bg-gray-50 dark:bg-gray-700/50 text-xs text-gray-700 dark:text-gray-400 tracking-wider">
-            <tr><th className="px-4 py-3">Descrição</th><th className="px-4 py-3">Vencimento</th><th className="px-4 py-3">Valor</th><th className="px-4 py-3 text-center">Status</th></tr>
+          <thead className="bg-gray-50 dark:bg-gray-700/50 text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b">
+            <tr>
+                <th className="px-4 py-3">Descrição</th>
+                <th className="px-4 py-3">Venc.</th>
+                <th className="px-4 py-3 text-right">Valor</th>
+                <th className="px-4 py-3 text-center">Status</th>
+            </tr>
           </thead>
-          <tbody>
-            {sortedTransactions.map((tx) => (
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+            {processedTransactions.map((tx) => (
               <TransactionRow key={tx.id} transaction={tx} categoryName={getCatName(tx.categoryId)} />
             ))}
-            {sortedTransactions.length === 0 && (
-                <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">Nenhuma transação registrada.</td></tr>
+            {processedTransactions.length === 0 && (
+                <tr><td colSpan={4} className="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400 italic">Nenhuma movimentação pendente no momento.</td></tr>
             )}
           </tbody>
         </table>

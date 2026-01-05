@@ -8,6 +8,7 @@ interface DREViewProps {
     transactions: FinancialTransaction[]; 
     categories: FinancialCategory[];
     periodType: DrePeriodType;
+    groupCards?: boolean; // Prop opcional para agrupamento
 }
 
 const formatCurrency = (value: number) => {
@@ -47,7 +48,7 @@ const getColumnsConfig = (type: DrePeriodType) => {
     }
 };
 
-const DREView: React.FC<DREViewProps> = ({ transactions, categories, periodType }) => {
+const DREView: React.FC<DREViewProps> = ({ transactions, categories, periodType, groupCards = false }) => {
     
     const matrixData = useMemo(() => {
         const columns = getColumnsConfig(periodType);
@@ -79,8 +80,13 @@ const DREView: React.FC<DREViewProps> = ({ transactions, categories, periodType 
             if (colIndex === -1) return;
 
             const catType = getCategoryType(t.categoryId);
-            const catName = getCategoryName(t.categoryId);
+            let catName = getCategoryName(t.categoryId);
             const amount = t.amount;
+
+            // Lógica de agrupamento de cartões se habilitado
+            if (groupCards && t.description.includes('[Cartão:')) {
+                catName = "Cartão de crédito";
+            }
 
             if (catType === 'receita') {
                 columnData[colIndex].receitaBruta += amount;
@@ -137,7 +143,7 @@ const DREView: React.FC<DREViewProps> = ({ transactions, categories, periodType 
             expenseCategories: Array.from(activeExpenseCats).sort(),
             totals: { ...totals, margem: totals.receitaBruta > 0 ? (totals.lucroLiquido / totals.receitaBruta) * 100 : 0 }
         };
-    }, [transactions, categories, periodType]);
+    }, [transactions, categories, periodType, groupCards]);
 
     const handlePrint = () => window.print();
 
@@ -179,7 +185,7 @@ const DREView: React.FC<DREViewProps> = ({ transactions, categories, periodType 
             <div className="flex justify-between items-center mb-4">
                 <div>
                     <h3 className="text-xl font-bold text-gray-900 dark:text-white">DRE - {periodType.charAt(0).toUpperCase() + periodType.slice(1)}</h3>
-                    <p className="text-xs text-gray-500">Valores em R$ (Regime de Caixa)</p>
+                    <p className="text-xs text-gray-500">Valores em R$ (Regime de Caixa) {groupCards && <span className="ml-2 bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded text-[10px] font-bold">Cartões Agrupados</span>}</p>
                 </div>
                 <div className="flex gap-2 print:hidden">
                     <button onClick={handlePrint} className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 transition-colors text-sm">

@@ -167,12 +167,24 @@ export interface FinancialTransaction {
     categoryId: string;
     status: FinancialTransactionStatus;
     launchDate?: string;
+    batchId?: string; // Para agrupar lançamentos de cartão
 }
 
 export interface FinancialCategory {
     id: string;
     name: string;
     type: FinancialTransactionType;
+}
+
+export interface CreditCard {
+    id: string;
+    owner_id: string;
+    name: string;
+    card_number?: string;
+    last_digits?: string;
+    due_day: number; 
+    closing_day: number;
+    active: boolean;
 }
 
 export interface ExpenseReportItem {

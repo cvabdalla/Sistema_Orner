@@ -171,14 +171,24 @@ const compressImage = (base64Str: string): Promise<string> => {
         img.src = base64Str;
         img.onload = () => {
             const canvas = document.createElement('canvas');
-            const MAX_WIDTH = 1200;
-            const MAX_HEIGHT = 1200;
+            const MAX_SIZE = 1200;
             let width = img.width;
             let height = img.height;
-            if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } }
-            /* FIXED: Changed MAX_SIZE to MAX_HEIGHT as MAX_SIZE was not defined */
-            else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
-            canvas.width = width; canvas.height = height;
+            
+            if (width > height) {
+                if (width > MAX_SIZE) {
+                    height *= MAX_SIZE / width;
+                    width = MAX_SIZE;
+                }
+            } else {
+                if (height > MAX_SIZE) {
+                    width *= MAX_SIZE / height;
+                    height = MAX_SIZE;
+                }
+            }
+            
+            canvas.width = width;
+            canvas.height = height;
             const ctx = canvas.getContext('2d');
             ctx?.drawImage(img, 0, 0, width, height);
             resolve(canvas.toDataURL('image/jpeg', 0.6));
@@ -310,7 +320,6 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
             const currentTable = getTableName(statusTargetEntry.type);
             const updated = { ...statusTargetEntry, status };
             
-            // LÓGICA CHECK-IN: RESERVA E REPOSIÇÃO AUTOMÁTICA NA CONFIRMAÇÃO DE VENDA
             if (status === 'Efetivado' && statusTargetEntry.type === 'checkin') {
                 const components = statusTargetEntry.details.componentesEstoque || [];
                 const currentStock = await dataService.getAll<StockItem>('stock_items');
@@ -325,7 +334,6 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                         await dataService.save('stock_items', updatedStockItem);
 
                         if (futureStock < stockItem.minQuantity) {
-                            // Cálculo: (Mínimo * 2) - Saldo Atual
                             const buyQty = (stockItem.minQuantity * 2) - stockItem.quantity;
                             if (buyQty > 0) {
                                 const autoRequest: PurchaseRequest = {
@@ -340,7 +348,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                                     status: 'Pendente',
                                     clientName: `Reposição via Obra: ${statusTargetEntry.project}`,
                                     purchaseType: 'Reposição',
-                                    observation: `Pedido automático: Saldo futuro (${futureStock}) abaixo do mínimo (${stockItem.minQuantity}) após reserva. Quantidade calculada: ((Min*2)-EstoqueAtual).`
+                                    observation: `Pedido automático: Saldo futuro (${futureStock}) abaixo do mínimo (${stockItem.minQuantity}) após reserva.`
                                 };
                                 await dataService.save('purchase_requests', autoRequest);
                             }
@@ -348,7 +356,6 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                     }
                 }
 
-                // Cria o registro de checkout automaticamente quando o checkin é efetivado
                 const autoCheckout: ChecklistEntry = {
                     id: statusTargetEntry.id, owner_id: statusTargetEntry.owner_id, type: 'checkout',
                     project: statusTargetEntry.project, responsible: currentUser.name, date: new Date().toISOString(), status: 'Aberto',
@@ -363,25 +370,21 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                 alert(`Venda confirmada! Materiais reservados e ordem de instalação criada.`);
             }
 
-            // LÓGICA FINALIZAÇÃO (CHECK-OUT E MANUTENCAO): BAIXA DEFINITIVA E LIMPEZA DE RESERVA
             if (status === 'Finalizado' && (statusTargetEntry.type === 'checkout' || statusTargetEntry.type === 'manutencao')) {
                 const consumedComponents = statusTargetEntry.details.componentesEstoque || [];
                 const currentStock = await dataService.getAll<StockItem>('stock_items');
 
                 let reservedComponents = [];
                 if (statusTargetEntry.type === 'checkout') {
-                    // Busca o checkin original para saber quanto foi reservado na entrada.
                     const allCheckins = await dataService.getAll<ChecklistEntry>('checklist_checkin');
                     const originalCheckin = allCheckins.find(c => String(c.id) === String(statusTargetEntry.id));
                     reservedComponents = originalCheckin?.details?.componentesEstoque || [];
                     
-                    // Atualiza o status do check-in original para 'Finalizado' para que ele suma das Reservas na tela de estoque
                     if (originalCheckin) {
                         await dataService.save('checklist_checkin', { ...originalCheckin, status: 'Finalizado' });
                     }
                 }
 
-                // Identificamos todos os IDs de itens envolvidos (sejam reservados ou consumidos)
                 const allInvolvedItemIds = new Set([
                     ...consumedComponents.map((c: any) => String(c.itemId)),
                     ...reservedComponents.map((r: any) => String(r.itemId))
@@ -401,7 +404,6 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                         };
                         await dataService.save('stock_items', updatedStockItem);
 
-                        // REGISTRO DE MOVIMENTAÇÃO NO HISTÓRICO
                         if (consumedQty > 0) {
                             const movement: StockMovement = {
                                 id: `mov-${Date.now()}-${stockItem.id}`,
@@ -415,9 +417,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                             await dataService.save('stock_movements', movement);
                         }
 
-                        // PEDIDO DE COMPRA AUTOMÁTICO SE ESTOQUE ABAIXO DO MÍNIMO APÓS BAIXA
                         if (newQty < stockItem.minQuantity) {
-                            // Cálculo: (Mínimo * 2) - Saldo Atual (pós baixa)
                             const buyQty = (stockItem.minQuantity * 2) - newQty;
                             if (buyQty > 0) {
                                 const autoRequest: PurchaseRequest = {
@@ -432,14 +432,14 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                                     status: 'Pendente',
                                     clientName: 'Reposição Central',
                                     purchaseType: 'Reposição',
-                                    observation: `Pedido automático: Estoque atual (${newQty}) abaixo do mínimo (${stockItem.minQuantity}) após conclusão de ${statusTargetEntry.type === 'checkout' ? 'obra' : 'manutenção'}. Quantidade calculada: ((Min*2)-EstoqueAtual).`
+                                    observation: `Pedido automático: Estoque atual (${newQty}) abaixo do mínimo (${stockItem.minQuantity}) após conclusão.`
                                 };
                                 await dataService.save('purchase_requests', autoRequest);
                             }
                         }
                     }
                 }
-                alert(`${statusTargetEntry.type === 'checkout' ? 'Obra' : 'Manutenção'} finalizada com sucesso! Estoque e reservas atualizados.`);
+                alert(`${statusTargetEntry.type === 'checkout' ? 'Obra' : 'Manutenção'} finalizada com sucesso!`);
             }
 
             await dataService.save(currentTable, updated);
@@ -736,7 +736,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                                                 <div><FormLabel>Área útil suficiente?</FormLabel><SelectButton disabled={isViewOnly} options={["Sim", "Não"]} value={form.areaUtilSuficiente} onChange={(v) => setForm({...form, areaUtilSuficiente: v})} /></div>
                                                 <div><FormLabel>Sombreamento?</FormLabel><SelectButton disabled={isViewOnly} options={["Sim", "Não"]} value={form.sombreamento} onChange={(v) => setForm({...form, sombreamento: v})} /></div>
                                             </div>
-                                            <div><FormLabel>Informe a inclinação do telhado em graus e a orientação da inclinação (Norte, Sul, Leste, Oeste, ...)</FormLabel><StandardInput disabled={isViewOnly} value={form.inclinacaoOrientacao} onChange={(e: any) => setForm({...form, inclinacaoOrientacao: e.target.value})} /></div>
+                                            <div><FormLabel>Informe a inclinação do telhado em graus e a orientação da inclinação</FormLabel><StandardInput disabled={isViewOnly} value={form.inclinacaoOrientacao} onChange={(e: any) => setForm({...form, inclinacaoOrientacao: e.target.value})} /></div>
                                             <div><FormLabel>Existe aterramento no local de instalação ?</FormLabel><SelectButton disabled={isViewOnly} options={["Sim", "Não"]} value={form.existeAterramentoNoLocal} onChange={(v) => setForm({...form, existeAterramentoNoLocal: v})} /></div>
                                         </div>
                                     )}
@@ -754,18 +754,18 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                                                 {form.espessuraCabo === 'Outro' && (<div className="animate-fade-in"><StandardInput placeholder="Informe o cabo transversal..." value={form.espessuraCaboOutro} onChange={(e: any) => setForm({...form, espessuraCaboOutro: e.target.value})} disabled={isViewOnly} /></div>)}
                                             </div>
                                             <div><FormLabel>Ligação entrada</FormLabel><SelectButton disabled={isViewOnly} options={["Aérea", "Subterrânea"]} value={form.tipoLigacaoEntrada} onChange={(v) => setForm({...form, tipoLigacaoEntrada: v})} /></div>
-                                            {form.tipoLigacaoEntrada === 'Aérea' && (<div className="animate-fade-in"><FormLabel>Informar o comprimento do ramal de ligação</FormLabel><StandardInput value={form.comprimentoRamalAereo} onChange={(e: any) => setForm({...form, comissaoVendasValor: e.target.value})} disabled={isViewOnly} /></div>)}
+                                            {form.tipoLigacaoEntrada === 'Aérea' && (<div className="animate-fade-in"><FormLabel>Informar o comprimento do ramal de ligação</FormLabel><StandardInput value={form.comprimentoRamalAereo} onChange={(e: any) => setForm({...form, comprimentoRamalAereo: e.target.value})} disabled={isViewOnly} /></div>)}
                                         </div>
                                     )}
                                     {activeStep === 4 && (
                                         <div className="space-y-4 animate-fade-in">
                                             <div>
-                                                <FormLabel>Cliente possui transformador exclusivo? Se sim, informar a potência em kVA</FormLabel>
+                                                <FormLabel>Cliente possui transformador exclusivo?</FormLabel>
                                                 <SelectButton options={["Sim", "Não"]} value={form.possuiTransformador} onChange={(v) => setForm({...form, possuiTransformador: v})} disabled={isViewOnly} />
                                                 {form.possuiTransformador === 'Sim' && (<div className="animate-fade-in mt-2"><FormLabel>Potência em kVA</FormLabel><StandardInput value={form.transformadorKVA} onChange={(e: any) => setForm({...form, transformadorKVA: e.target.value})} disabled={isViewOnly} /></div>)}
                                             </div>
                                             <div>
-                                                <FormLabel>Qual será o local de conexão do inversor ou microinversor com a rede?</FormLabel>
+                                                <FormLabel>Qual será o local de conexão do inversor?</FormLabel>
                                                 <SelectButton disabled={isViewOnly} cols="grid-cols-1" options={["Quadro de distribuição central", "Caixa de passagem (não existente)", "Caixa de passagem (existente)", "Outro"]} value={form.localConexaoRede} onChange={(v) => setForm({...form, localConexaoRede: v})} />
                                                 {form.localConexaoRede === 'Outro' && (<div className="mt-2 animate-fade-in"><StandardInput value={form.localConexaoRedeOutro} onChange={(e: any) => setForm({...form, localConexaoRedeOutro: e.target.value})} disabled={isViewOnly} /></div>)}
                                             </div>
@@ -779,10 +779,9 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                                                 />
                                             </div>
                                             <div className="grid grid-cols-1 gap-3 pt-2 border-t">
-                                                <div><FormLabel>Qual a corrente do disjuntor do padrão de entrada?</FormLabel><StandardInput disabled={isViewOnly} placeholder="Ex: 40A" value={form.correnteDisjuntorPadrao} onChange={(e: any) => setForm({...form, correnteDisjuntorPadrao: e.target.value})} /></div>
-                                                <div><FormLabel>Informar as distancias dos postes da concessionária entre si</FormLabel><StandardInput disabled={isViewOnly} value={form.distanciaPostesConcessionaria} onChange={(e: any) => setForm({...form, distanciaPostesConcessionaria: e.target.value})} /></div>
-                                                <div><FormLabel>Informar a distancia em metros do inversor até o disjuntor do sistema.</FormLabel><StandardInput disabled={isViewOnly} value={form.distanciaInversorDisjuntor} onChange={(e: any) => setForm({...form, distanciaInversorDisjuntor: e.target.value})} /></div>
-                                                <div><FormLabel>Informar a distancia em metros do disjuntor do sistema até o padrão de entrada.</FormLabel><StandardInput disabled={isViewOnly} value={form.distanciaDisjuntorPadrao} onChange={(e: any) => setForm({...form, distanciaDisjuntorPadrao: e.target.value})} /></div>
+                                                <div><FormLabel>Corrente do disjuntor do padrão de entrada</FormLabel><StandardInput disabled={isViewOnly} placeholder="Ex: 40A" value={form.correnteDisjuntorPadrao} onChange={(e: any) => setForm({...form, correnteDisjuntorPadrao: e.target.value})} /></div>
+                                                <div><FormLabel>Distância metros do inversor até o disjuntor</FormLabel><StandardInput disabled={isViewOnly} value={form.distanciaInversorDisjuntor} onChange={(e: any) => setForm({...form, distanciaInversorDisjuntor: e.target.value})} /></div>
+                                                <div><FormLabel>Distância metros do disjuntor até o padrão</FormLabel><StandardInput disabled={isViewOnly} value={form.distanciaDisjuntorPadrao} onChange={(e: any) => setForm({...form, distanciaDisjuntorPadrao: e.target.value})} /></div>
                                             </div>
                                         </div>
                                     )}
@@ -791,23 +790,23 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                                             {renderComponentStep()}
                                             <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 space-y-4">
                                                 <div>
-                                                    <FormLabel>Será necessária a compra de algum material especial?</FormLabel>
+                                                    <FormLabel>Necessita material especial?</FormLabel>
                                                     <SelectButton disabled={isViewOnly} options={["Sim", "Não"]} value={form.necessitaMaterialExtra} onChange={(v) => setForm({...form, necessitaMaterialExtra: v})} />
                                                 </div>
                                                 {form.necessitaMaterialExtra === 'Sim' && (
-                                                    <StandardTextArea disabled={isViewOnly} placeholder="Descreva aqui os materiais extras..." value={form.materialExtraDescricao} onChange={(e: any) => setForm({...form, materialExtraDescricao: e.target.value})} />
+                                                    <StandardTextArea disabled={isViewOnly} placeholder="Descreva os materiais..." value={form.materialExtraDescricao} onChange={(e: any) => setForm({...form, materialExtraDescricao: e.target.value})} />
                                                 )}
                                             </div>
                                             <div className="grid grid-cols-1 gap-4">
                                                 {[
-                                                    { field: 'fotoFachada', label: 'Foto da Fachada do Imóvel (Deve aparecer o Padrão de Entrada)' },
-                                                    { field: 'fotoRamal', label: 'Foto do Ramal de Ligação (parte superior do poste onde os fios entram para residência)' },
-                                                    { field: 'fotoPadraoEntrada', label: 'Foto do Padrão de Entrada (Todo o poste com o medidor em uma única imagem)' },
-                                                    { field: 'fotoMedidorDisjuntor', label: 'Foto do Medidor em conjunto com o disjuntor do medidor' },
-                                                    { field: 'fotoDisjuntorPadrao', label: 'Foto do Disjuntor do padrão de entrada (com o valor do disjuntor legível)' },
-                                                    { field: 'fotoQuadroInversor', label: 'Foto do Quadro de Disjuntores onde será conectado o Microinversor ou o Inversor.' },
-                                                    { field: 'fotoAmplaTelhado', label: 'Foto ampla do telhado onde serão fixados os painéis' },
-                                                    { field: 'fotoLocalInversor', label: 'Qual local será instalado o inversor / string box ?' },
+                                                    { field: 'fotoFachada', label: 'Foto da Fachada do Imóvel' },
+                                                    { field: 'fotoRamal', label: 'Foto do Ramal de Ligação' },
+                                                    { field: 'fotoPadraoEntrada', label: 'Foto do Padrão de Entrada' },
+                                                    { field: 'fotoMedidorDisjuntor', label: 'Foto do Medidor com disjuntor' },
+                                                    { field: 'fotoDisjuntorPadrao', label: 'Foto do Disjuntor padrão (legível)' },
+                                                    { field: 'fotoQuadroInversor', label: 'Foto do Quadro de Disjuntores inversor' },
+                                                    { field: 'fotoAmplaTelhado', label: 'Foto ampla do telhado' },
+                                                    { field: 'fotoLocalInversor', label: 'Local de instalação do inversor' },
                                                 ].map(item => renderGalleryItem(item.field, item.label))}
                                             </div>
                                         </div>
@@ -828,7 +827,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                                             {[
                                                 { field: 'fotosPlacas', label: 'Fotos Placas Instaladas *', max: 10 },
                                                 { field: 'fotosInversores', label: 'Fotos dos Micros Inversores / Inversor *', max: 10 },
-                                                { field: 'fotosAterramento', label: 'Fotos de instalação do aterramento das Placas Solares *', max: 10 },
+                                                { field: 'fotosAterramento', label: 'Fotos de instalação do aterramento *', max: 10 },
                                             ].map(item => renderGalleryItem(item.field, item.label, item.max))}
                                         </div>
                                     )}
@@ -845,8 +844,8 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                                         <div className="space-y-4 animate-fade-in">
                                             {renderGalleryItem('fotoPadraoPoste', 'Foto Padrão (Poste) com Placas de Identificação', 1)}
                                             <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 space-y-4">
-                                                <div><FormLabel>Concessionaria ENEL - Video de Antilhamento foi feito? *</FormLabel><SelectButton disabled={isViewOnly} options={["Sim", "Não", "N/A"]} value={form.videoAntilhamento} onChange={(v) => setForm({...form, videoAntilhamento: v})} /></div>
-                                                <div><FormLabel>O link do video já foi enviado para o Youtube? *</FormLabel><SelectButton disabled={isViewOnly} options={["Sim", "Não", "N/A"]} value={form.videoYoutube} onChange={(v) => setForm({...form, videoYoutube: v})} /></div>
+                                                <div><FormLabel>Video de Antilhamento foi feito? *</FormLabel><SelectButton disabled={isViewOnly} options={["Sim", "Não", "N/A"]} value={form.videoAntilhamento} onChange={(v) => setForm({...form, videoAntilhamento: v})} /></div>
+                                                <div><FormLabel>Link do video Youtube? *</FormLabel><SelectButton disabled={isViewOnly} options={["Sim", "Não", "N/A"]} value={form.videoYoutube} onChange={(v) => setForm({...form, videoYoutube: v})} /></div>
                                                 {form.videoYoutube === 'Sim' && (
                                                     <StandardInput disabled={isViewOnly} placeholder="Cole o link aqui" value={form.linkYoutube} onChange={(e: any) => setForm({...form, linkYoutube: e.target.value})} />
                                                 )}
@@ -871,13 +870,13 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                                     )}
                                     {activeStep === 2 && (
                                         <div className="space-y-4 animate-fade-in">
-                                            <div><FormLabel>Relato do Cliente (Motivo do Chamado)</FormLabel><StandardTextArea disabled={isViewOnly} placeholder="O que o cliente reportou de anormal?" value={form.relatoCliente} onChange={(e: any) => setForm({...form, relatoCliente: e.target.value})} /></div>
-                                            <div><FormLabel>Diagnóstico Técnico (Situação encontrada)</FormLabel><StandardTextArea disabled={isViewOnly} placeholder="O que foi identificado ao chegar no local?" value={form.diagnosticoTecnico} onChange={(e: any) => setForm({...form, diagnosticoTecnico: e.target.value})} /></div>
+                                            <div><FormLabel>Relato do Cliente</FormLabel><StandardTextArea disabled={isViewOnly} placeholder="Motivo do chamado?" value={form.relatoCliente} onChange={(e: any) => setForm({...form, relatoCliente: e.target.value})} /></div>
+                                            <div><FormLabel>Diagnóstico Técnico</FormLabel><StandardTextArea disabled={isViewOnly} placeholder="O que foi identificado?" value={form.diagnosticoTecnico} onChange={(e: any) => setForm({...form, diagnosticoTecnico: e.target.value})} /></div>
                                         </div>
                                     )}
                                     {activeStep === 3 && (
                                         <div className="space-y-4 animate-fade-in">
-                                            <div><FormLabel>Serviço Realizado / Ações Tomadas</FormLabel><StandardTextArea disabled={isViewOnly} placeholder="Descreva as etapas da manutenção executada..." value={form.servicoRealizado} onChange={(e: any) => setForm({...form, servicoRealizado: e.target.value})} /></div>
+                                            <div><FormLabel>Serviço Realizado</FormLabel><StandardTextArea disabled={isViewOnly} placeholder="Etapas executadas..." value={form.servicoRealizado} onChange={(e: any) => setForm({...form, servicoRealizado: e.target.value})} /></div>
                                             <div><FormLabel>Status Final do Sistema</FormLabel><SelectButton disabled={isViewOnly} options={["Operacional", "Operacional Parcial", "Aguardando Peça"]} value={form.statusSistemaFinal} onChange={(v) => setForm({...form, statusSistemaFinal: v})} /></div>
                                             <div><FormLabel>Observações Finais</FormLabel><StandardTextArea disabled={isViewOnly} placeholder="Detalhes técnicos adicionais..." value={form.observacoesFinais} onChange={(e: any) => setForm({...form, observacoesFinais: e.target.value})} /></div>
                                         </div>
@@ -885,9 +884,9 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                                     {activeStep === 4 && (
                                         <div className="space-y-4 animate-fade-in max-h-[65vh] overflow-y-auto pr-1">
                                             {[
-                                                { field: 'fotosAntes', label: 'Fotos do Estado Inicial (Problema) *', max: 5 },
-                                                { field: 'fotosDepois', label: 'Fotos do Serviço Concluído (Solução) *', max: 5 },
-                                                { field: 'fotosEquipamentos', label: 'Equipamentos (Etiquetas/Série) *', max: 5 },
+                                                { field: 'fotosAntes', label: 'Fotos do Estado Inicial *', max: 5 },
+                                                { field: 'fotosDepois', label: 'Fotos do Serviço Concluído *', max: 5 },
+                                                { field: 'fotosEquipamentos', label: 'Equipamentos (Etiquetas) *', max: 5 },
                                             ].map(item => renderGalleryItem(item.field, item.label, item.max))}
                                         </div>
                                     )}
