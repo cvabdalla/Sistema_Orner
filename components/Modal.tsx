@@ -12,19 +12,19 @@ const Modal: React.FC<ModalProps> = ({ title, onClose, children, maxWidth = 'max
   return (
     <div 
       className="fixed inset-0 bg-black bg-opacity-50 z-40 flex justify-center items-center p-4"
-      onClick={onClose}
+      /* Removido o onClick={onClose} para evitar fechar ao clicar fora */
       aria-modal="true"
       role="dialog"
     >
       <div 
         className={`relative bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full ${maxWidth} p-6 flex flex-col max-h-[90vh]`}
-        onClick={(e) => e.stopPropagation()} // Prevent closing modal when clicking inside
+        onClick={(e) => e.stopPropagation()} // Garante que cliques internos não propaguem
       >
         <div className="flex justify-between items-center pb-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
           <h3 className="text-xl font-semibold text-gray-900 dark:text-white">{title}</h3>
           <button 
             onClick={onClose}
-            className="text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg text-sm p-1.5"
+            className="text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg text-sm p-1.5 transition-colors"
             aria-label="Close modal"
           >
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">

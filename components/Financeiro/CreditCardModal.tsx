@@ -1,7 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import Modal from '../Modal';
-import { PlusIcon, CreditCardIcon, SaveIcon, CogIcon, XCircleIcon, CalendarIcon, CheckCircleIcon, ExclamationTriangleIcon, EditIcon } from '../../assets/icons';
-import type { FinancialCategory, FinancialTransaction, CreditCard } from '../../types';
+import { 
+    TrashIcon, PlusIcon, CreditCardIcon, CogIcon, 
+    EditIcon, CheckCircleIcon, XCircleIcon, CalendarIcon,
+    DollarIcon, ExclamationTriangleIcon, TableIcon
+} from '../../assets/icons';
+import type { FinancialCategory, FinancialTransaction, CreditCard, BankAccount } from '../../types';
 import { dataService } from '../../services/dataService';
 
 interface CreditCardItem {
@@ -9,9 +13,11 @@ interface CreditCardItem {
     date: string;
     description: string;
     categoryId: string;
+    billingType: 'À vista (Único)' | 'Parcelado' | 'Recorrente (Fixo)';
+    count: number; 
     amount: number;
-    billingType: 'unico' | 'parcelado' | 'fixo';
-    installments: number;
+    calculatedDueDate: string;
+    errors?: { [key: string]: boolean };
 }
 
 interface CreditCardModalProps {
@@ -19,469 +25,491 @@ interface CreditCardModalProps {
     onClose: () => void;
     onSave: (transactions: FinancialTransaction[]) => void;
     categories: FinancialCategory[];
-    ownerId: string;
+    bankAccounts: BankAccount[];
 }
 
-const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSave, categories, ownerId }) => {
-    const [activeTab, setActiveTab] = useState<'lancamentos' | 'cartoes'>('lancamentos');
+const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSave, categories, bankAccounts }) => {
+    const [activeTab, setActiveTab] = useState<'lancar' | 'config'>('lancar');
     const [cards, setCards] = useState<CreditCard[]>([]);
     const [selectedCardId, setSelectedCardId] = useState('');
-    const [items, setItems] = useState<CreditCardItem[]>([
-        { id: '1', date: new Date().toISOString().split('T')[0], description: '', categoryId: '', amount: 0, billingType: 'unico', installments: 1 }
-    ]);
-    
-    const [editingCardId, setEditingCardId] = useState<string | null>(null);
-    const [newCardName, setNewCardName] = useState('');
-    const [newCardNumber, setNewCardNumber] = useState('');
-    const [newCardDueDay, setNewCardDueDay] = useState<number>(10);
-    const [newCardClosingDay, setNewCardClosingDay] = useState<number>(1);
-    
-    const [isLoading, setIsLoading] = useState(false);
-    const [isConfirming, setIsConfirming] = useState(false);
+    const [selectedBankId, setSelectedBankId] = useState('');
+    const [isSavingLocal, setIsSavingLocal] = useState(false);
 
-    useEffect(() => {
-        if (isOpen) {
-            loadCards();
-        }
-    }, [isOpen]);
+    // Form de lançamento
+    const [items, setItems] = useState<CreditCardItem[]>([
+        { id: '1', date: new Date().toISOString().split('T')[0], description: '', categoryId: '', billingType: 'À vista (Único)', count: 1, amount: 0, calculatedDueDate: '' }
+    ]);
+
+    // Form de cadastro de cartão
+    const [cardForm, setCardForm] = useState<Partial<CreditCard>>({
+        name: '', lastDigits: '', closingDay: 1, dueDay: 10, active: true
+    });
+    const [editingCardId, setEditingCardId] = useState<string | null>(null);
 
     const loadCards = async () => {
         try {
-            const data = await dataService.getAll<CreditCard>('credit_cards', ownerId);
-            const sorted = (data || []).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-            setCards(sorted);
-            
-            const activeCards = sorted.filter(c => c.active);
-            if (activeCards.length > 0 && !selectedCardId) {
-                setSelectedCardId(activeCards[0].id);
+            const data = await dataService.getAll<CreditCard>('credit_cards');
+            setCards(data);
+            if (data.length > 0 && !selectedCardId) {
+                const active = data.find(c => c.active);
+                if (active) setSelectedCardId(active.id);
+                else setSelectedCardId(data[0].id);
             }
-        } catch (error) {
-            console.error("Erro ao carregar cartões:", error);
+            if (bankAccounts.length > 0 && !selectedBankId) {
+                const defaultBank = bankAccounts.find(b => b.active) || bankAccounts[0];
+                setSelectedBankId(defaultBank.id);
+            }
+        } catch (e) {
+            console.error(e);
         }
     };
+
+    useEffect(() => {
+        if (isOpen) loadCards();
+    }, [isOpen, bankAccounts]);
 
     const selectedCard = useMemo(() => cards.find(c => c.id === selectedCardId), [cards, selectedCardId]);
-    const activeCards = useMemo(() => cards.filter(c => c.active), [cards]);
 
-    const calculateDueDate = (spentDateStr: string, card: CreditCard, monthsOffset: number = 0) => {
-        const spentDate = new Date(spentDateStr);
-        let day = spentDate.getUTCDate();
-        let month = spentDate.getUTCMonth();
-        let year = spentDate.getUTCFullYear();
+    const calculateDueDate = (expenseDate: string, card?: CreditCard): string => {
+        if (!expenseDate || !card) return '';
+        const [year, month, day] = expenseDate.split('-').map(Number);
+        let dueMonth = month - 1;
+        let dueYear = year;
+        
+        // Regra de fechamento
+        if (day > card.closingDay) dueMonth++;
+        dueMonth++; 
+        
+        // Forçar 12:00 para evitar desvios de fuso horário ISO
+        const finalDueDate = new Date(dueYear, dueMonth, card.dueDay, 12, 0, 0);
+        return finalDueDate.toISOString().split('T')[0];
+    };
 
-        if (day > card.closing_day) {
-            month++;
+    const addMonths = (dateStr: string, months: number): string => {
+        const [y, m, d] = dateStr.split('-').map(Number);
+        const date = new Date(y, m - 1 + months, d, 12, 0, 0);
+        return date.toISOString().split('T')[0];
+    };
+
+    useEffect(() => {
+        if (selectedCard) {
+            setItems(prev => prev.map(item => ({
+                ...item,
+                calculatedDueDate: calculateDueDate(item.date, selectedCard)
+            })));
         }
-
-        month += monthsOffset;
-
-        const due = new Date(Date.UTC(year, month, card.due_day));
-        return due.toISOString().split('T')[0];
-    };
-
-    const totalFatura = useMemo(() => {
-        return items.reduce((sum, item) => sum + item.amount, 0);
-    }, [items]);
-
-    const handleTrySaveCard = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!newCardName.trim()) {
-            alert("O nome do cartão é obrigatório.");
-            return;
-        }
-        setIsConfirming(true);
-    };
-
-    const handleConfirmSave = async () => {
-        setIsConfirming(false);
-        setIsLoading(true);
-
-        try {
-            const lastDigitsStr = newCardNumber.trim().length >= 4 
-                ? newCardNumber.trim().slice(-4) 
-                : newCardNumber.trim();
-
-            const card: CreditCard = {
-                id: editingCardId || `card-${Date.now()}`,
-                owner_id: ownerId,
-                name: newCardName.trim(),
-                card_number: newCardNumber.trim(),
-                last_digits: lastDigitsStr,
-                due_day: newCardDueDay,
-                closing_day: newCardClosingDay,
-                active: editingCardId ? (cards.find(c => c.id === editingCardId)?.active ?? true) : true
-            };
-            
-            await dataService.save('credit_cards', card);
-            resetForm();
-            alert(editingCardId ? 'Cartão atualizado com sucesso!' : 'Cartão cadastrado com sucesso!');
-            await loadCards();
-        } catch (error: any) {
-            alert(`Erro ao salvar: ${error.message}`);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const resetForm = () => {
-        setEditingCardId(null);
-        setNewCardName('');
-        setNewCardNumber('');
-        setNewCardDueDay(10);
-        setNewCardClosingDay(1);
-    };
-
-    const handleEditCard = (card: CreditCard) => {
-        setEditingCardId(card.id);
-        setNewCardName(card.name);
-        setNewCardNumber(card.card_number || '');
-        setNewCardDueDay(card.due_day);
-        setNewCardClosingDay(card.closing_day);
-        const container = document.querySelector('.overflow-y-auto');
-        if (container) container.scrollTo({ top: 0, behavior: 'smooth' });
-    };
-
-    const handleChangeStatus = async (card: CreditCard, isActive: boolean) => {
-        try {
-            const updatedCard = { ...card, active: isActive };
-            await dataService.save('credit_cards', updatedCard);
-            if (!isActive && selectedCardId === card.id) {
-                setSelectedCardId('');
-            }
-            await loadCards();
-        } catch (error: any) {
-            alert("Erro ao alterar status: " + error.message);
-        }
-    };
+    }, [selectedCardId, selectedCard]);
 
     const handleAddItem = () => {
+        const lastDate = items[items.length - 1]?.date || new Date().toISOString().split('T')[0];
         setItems([...items, { 
-            id: Date.now().toString(), 
-            date: new Date().toISOString().split('T')[0], 
+            id: Math.random().toString(36).substr(2, 9), 
+            date: lastDate, 
             description: '', 
             categoryId: '', 
-            amount: 0,
-            billingType: 'unico',
-            installments: 1
+            billingType: 'À vista (Único)', 
+            count: 1,
+            amount: 0, 
+            calculatedDueDate: calculateDueDate(lastDate, selectedCard) 
         }]);
     };
 
     const handleRemoveItem = (id: string) => {
-        if (items.length > 1) {
-            setItems(items.filter(item => item.id !== id));
-        }
+        if (items.length > 1) setItems(items.filter(item => item.id !== id));
     };
 
     const handleUpdateItem = (id: string, field: keyof CreditCardItem, value: any) => {
-        setItems(items.map(item => {
+        setItems(prev => prev.map(item => {
             if (item.id === id) {
-                const updated = { ...item, [field]: value };
-                if (field === 'billingType') {
-                    if (value === 'parcelado') updated.installments = Math.max(item.installments, 2);
-                    else if (value === 'fixo') updated.installments = Math.max(item.installments, 1);
-                    else updated.installments = 1;
-                }
-                return updated;
+                const newItem = { ...item, [field]: value, errors: { ...item.errors, [field]: false } };
+                if (field === 'date') newItem.calculatedDueDate = calculateDueDate(value, selectedCard);
+                if (field === 'billingType' && value === 'À vista (Único)') newItem.count = 1;
+                return newItem;
             }
             return item;
         }));
     };
 
-    const handleSubmitTransactions = async (e: React.FormEvent) => {
+    const totalFatura = useMemo(() => items.reduce((sum, item) => sum + (item.amount || 0), 0), [items]);
+
+    const handleSaveTransactions = async (e: React.MouseEvent) => {
         e.preventDefault();
-        if (!selectedCardId || !selectedCard || totalFatura <= 0) {
-            alert('Preencha os gastos e selecione um cartão ativo.');
+        if (isSavingLocal) return;
+
+        if (!selectedCard) {
+            alert('Por favor, selecione um cartão de crédito ativo.');
             return;
         }
 
-        setIsLoading(true);
+        if (!selectedBankId) {
+            alert('Por favor, selecione a conta bancária para o débito da fatura.');
+            return;
+        }
+
+        let hasErrors = false;
+        const validatedItems = items.map(item => {
+            const errors: any = {};
+            if (!item.description.trim()) { errors.description = true; hasErrors = true; }
+            if (!item.categoryId) { errors.categoryId = true; hasErrors = true; }
+            if (item.amount <= 0) { errors.amount = true; hasErrors = true; }
+            return { ...item, errors };
+        });
+
+        if (hasErrors) {
+            setItems(validatedItems);
+            alert('Preencha corretamente os campos destacados.');
+            return;
+        }
+
+        setIsSavingLocal(true);
+        const allTransactions: FinancialTransaction[] = [];
+        const timestamp = Date.now();
+
+        items.forEach((item, idx) => {
+            const iterations = item.billingType === 'À vista (Único)' ? 1 : Math.max(1, item.count);
+            for (let i = 0; i < iterations; i++) {
+                const isInstallment = item.billingType === 'Parcelado';
+                const effectiveAmount = isInstallment ? (item.amount / iterations) : item.amount;
+                const suffix = iterations > 1 ? ` (${i + 1}/${iterations})` : '';
+                const dueDate = addMonths(item.calculatedDueDate, i);
+
+                allTransactions.push({
+                    id: `cc-${timestamp}-${idx}-${i}`,
+                    owner_id: '', 
+                    description: `[${selectedCard.name}] ${item.description}${suffix}`,
+                    amount: Math.ceil(effectiveAmount * 100) / 100,
+                    type: 'despesa',
+                    dueDate: dueDate,
+                    bankId: selectedBankId, 
+                    launchDate: new Date().toISOString().split('T')[0],
+                    categoryId: item.categoryId,
+                    status: 'pendente'
+                });
+            }
+        });
+
         try {
-            const batchId = `batch-cc-${Date.now()}`;
-            const cardDisplay = selectedCard.last_digits ? `${selectedCard.name} (**** ${selectedCard.last_digits})` : selectedCard.name;
-            
-            const allTransactions: FinancialTransaction[] = [];
-
-            items.forEach(item => {
-                const numLctos = (item.billingType === 'parcelado' || item.billingType === 'fixo') ? item.installments : 1;
-                const valorUnitario = item.billingType === 'parcelado' ? (item.amount / item.installments) : item.amount;
-
-                for (let i = 0; i < numLctos; i++) {
-                    let suffix = '';
-                    if (item.billingType === 'parcelado') suffix = ` (${i + 1}/${item.installments})`;
-                    if (item.billingType === 'fixo') suffix = ` (Recorrente ${i + 1}/${item.installments})`;
-
-                    allTransactions.push({
-                        id: `cc-${batchId}-${item.id}-${i}`,
-                        owner_id: ownerId,
-                        description: `[Cartão: ${cardDisplay}] ${item.description}${suffix}`,
-                        amount: Math.ceil(valorUnitario * 100) / 100,
-                        type: 'despesa',
-                        dueDate: calculateDueDate(item.date, selectedCard, i),
-                        launchDate: item.date,
-                        categoryId: item.categoryId,
-                        status: 'pendente',
-                        batchId: batchId,
-                        billingType: item.billingType,
-                        installmentNumber: i + 1,
-                        totalInstallments: numLctos
-                    });
-                }
-            });
-
             await onSave(allTransactions);
-            setItems([{ id: '1', date: new Date().toISOString().split('T')[0], description: '', categoryId: '', amount: 0, billingType: 'unico', installments: 1 }]);
-            onClose();
+            setItems([{ id: '1', date: new Date().toISOString().split('T')[0], description: '', categoryId: '', billingType: 'À vista (Único)', count: 1, amount: 0, calculatedDueDate: '' }]);
         } catch (error) {
-            console.error("Erro ao gerar lista de transações:", error);
-            alert("Erro ao lançar faturas.");
+            console.error(error);
+            alert("Erro ao processar salvamento da fatura.");
         } finally {
-            setIsLoading(false);
+            setIsSavingLocal(false);
         }
     };
 
-    const expenseCategories = categories.filter(c => c.type === 'despesa');
+    const handleSaveCard = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!cardForm.name) return;
+        const newCard: CreditCard = {
+            id: editingCardId || Date.now().toString(),
+            owner_id: '',
+            name: cardForm.name!,
+            lastDigits: cardForm.lastDigits || '****',
+            closingDay: Number(cardForm.closingDay),
+            dueDay: Number(cardForm.dueDay),
+            active: cardForm.active ?? true
+        };
+        await dataService.save('credit_cards', newCard);
+        setCardForm({ name: '', lastDigits: '', closingDay: 1, dueDay: 10, active: true });
+        setEditingCardId(null);
+        loadCards();
+    };
+
+    const editCard = (card: CreditCard) => {
+        setEditingCardId(card.id);
+        setCardForm(card);
+    };
+
+    const toggleCardStatus = async (card: CreditCard) => {
+        await dataService.save('credit_cards', { ...card, active: !card.active });
+        loadCards();
+    };
+
+    const expenseCategories = categories.filter(c => c.type === 'despesa').sort((a,b) => a.name.localeCompare(b.name));
+
+    if (!isOpen) return null;
+
+    const ChevronDownIcon = ({ className }: { className?: string }) => (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" /></svg>
+    );
 
     return (
-        <Modal title="Gestão de cartão de crédito" onClose={onClose} maxWidth="max-w-7xl">
-            {isConfirming && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-sm border-2 border-indigo-500 animate-fade-in">
-                        <div className="flex flex-col items-center text-center space-y-4">
-                            <div className="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600">
-                                <ExclamationTriangleIcon className="w-10 h-10" />
-                            </div>
-                            <h3 className="text-xl font-bold text-gray-800 dark:text-white">{editingCardId ? 'Confirmar alteração?' : 'Confirmar cadastro?'}</h3>
-                            <p className="text-sm text-gray-500 font-medium">Deseja realmente salvar o cartão <b>"{newCardName}"</b>?</p>
-                            <div className="flex gap-3 w-full pt-2">
-                                <button onClick={() => setIsConfirming(false)} className="flex-1 px-4 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold text-xs hover:bg-gray-200 transition-all">Não</button>
-                                <button onClick={handleConfirmSave} className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl font-bold text-xs shadow-lg hover:bg-indigo-700 transition-all">Sim, salvar</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            <div className="space-y-6">
-                <div className="flex bg-gray-100 dark:bg-gray-700/50 p-1 rounded-xl border border-gray-200 dark:border-gray-600">
-                    <button onClick={() => setActiveTab('lancamentos')} className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-all ${activeTab === 'lancamentos' ? 'bg-white dark:bg-gray-800 text-indigo-600 shadow-sm border border-gray-100' : 'text-gray-500'}`}><PlusIcon className="w-4 h-4" /> Lançar gastos</button>
-                    <button onClick={() => setActiveTab('cartoes')} className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-all ${activeTab === 'cartoes' ? 'bg-white dark:bg-gray-800 text-indigo-600 shadow-sm border border-gray-100' : 'text-gray-500'}`}><CogIcon className="w-4 h-4" /> Meus cartões</button>
+        <Modal title="Lançamento em cartão" onClose={onClose} maxWidth="max-w-7xl">
+            <div className="space-y-4">
+                <div className="flex bg-gray-50 dark:bg-gray-700/30 p-1 rounded-xl border border-gray-100 dark:border-gray-600 w-fit">
+                    <button 
+                        onClick={() => setActiveTab('lancar')}
+                        className={`flex items-center gap-2 px-5 py-1.5 text-[10px] font-bold rounded-lg transition-all ${activeTab === 'lancar' ? 'bg-white dark:bg-gray-800 text-indigo-600 shadow-sm border border-gray-100 dark:border-gray-700' : 'text-gray-400 hover:text-gray-600'}`}
+                    >
+                        <PlusIcon className="w-3 h-3" /> Lançar gastos
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('config')}
+                        className={`flex items-center gap-2 px-5 py-1.5 text-[10px] font-bold rounded-lg transition-all ${activeTab === 'config' ? 'bg-white dark:bg-gray-800 text-indigo-600 shadow-sm border border-gray-100 dark:border-gray-700' : 'text-gray-400 hover:text-gray-600'}`}
+                    >
+                        <CogIcon className="w-3 h-3" /> Configurar cartões
+                    </button>
                 </div>
 
-                {activeTab === 'lancamentos' ? (
-                    <form onSubmit={handleSubmitTransactions} className="space-y-6 animate-fade-in">
-                        <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-xl border border-indigo-100 dark:border-indigo-800 shadow-sm">
-                            <label className="block text-xs font-bold text-gray-500 mb-1">Selecionar cartão ativo</label>
-                            <select 
-                                required
-                                value={selectedCardId} 
-                                onChange={(e) => setSelectedCardId(e.target.value)} 
-                                className="w-full rounded-lg border-transparent bg-white dark:bg-gray-800 p-2 text-sm font-bold text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500/20"
-                            >
-                                <option value="">Selecione um cartão ativo...</option>
-                                {activeCards.map(c => (
-                                    <option key={c.id} value={c.id}>
-                                        {c.name} {c.last_digits ? `(**** ${c.last_digits})` : ''} - Fecha dia {c.closing_day} / Venc. dia {c.due_day}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div className="space-y-3">
-                            <div className="flex justify-between items-center px-1">
-                                <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300">Detalhamento dos gastos</h4>
-                                <button type="button" onClick={handleAddItem} className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-2 py-1 rounded-lg transition-colors"><PlusIcon className="w-4 h-4" /> Adicionar linha</button>
-                            </div>
-
-                            <div className="max-h-[450px] overflow-y-auto pr-1 space-y-2 custom-scrollbar">
-                                {items.map((item) => {
-                                    const itemDueDate = selectedCard ? calculateDueDate(item.date, selectedCard) : null;
-                                    return (
-                                        <div key={item.id} className="flex gap-2 items-end group animate-fade-in border-b border-gray-100 dark:border-gray-800 pb-4">
-                                            <div className="w-32 flex-shrink-0">
-                                                <label className="block text-[10px] font-bold text-gray-400 mb-1 ml-1">Data gasto</label>
-                                                <input required type="date" value={item.date} onChange={(e) => handleUpdateItem(item.id, 'date', e.target.value)} className="w-full rounded-lg border-transparent bg-gray-50 dark:bg-gray-700/50 p-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-indigo-500/20" />
-                                            </div>
-                                            <div className="flex-1">
-                                                <label className="block text-[10px] font-bold text-gray-400 mb-1 ml-1">Descrição</label>
-                                                <input required type="text" value={item.description} onChange={(e) => handleUpdateItem(item.id, 'description', e.target.value)} placeholder="Ex: Almoço cliente" className="w-full rounded-lg border-transparent bg-gray-50 dark:bg-gray-700/50 p-2 text-xs font-semibold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20" />
-                                            </div>
-                                            <div className="w-36 flex-shrink-0">
-                                                <label className="block text-[10px] font-bold text-gray-400 mb-1 ml-1">Categoria</label>
-                                                <select required value={item.categoryId} onChange={(e) => handleUpdateItem(item.id, 'categoryId', e.target.value)} className="w-full rounded-lg border-transparent bg-gray-50 dark:bg-gray-700/50 p-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-indigo-500/20">
-                                                    <option value="">Selecione...</option>
-                                                    {expenseCategories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
-                                                </select>
-                                            </div>
-                                            <div className="w-32 flex-shrink-0">
-                                                <label className="block text-[10px] font-bold text-gray-400 mb-1 ml-1">Tipo cobrança</label>
-                                                <select value={item.billingType} onChange={(e) => handleUpdateItem(item.id, 'billingType', e.target.value)} className="w-full rounded-lg border-transparent bg-gray-50 dark:bg-gray-700/50 p-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-indigo-500/20">
-                                                    <option value="unico">À vista (Único)</option>
-                                                    <option value="parcelado">Parcelado</option>
-                                                    <option value="fixo">Recorrente (Fixo)</option>
-                                                </select>
-                                            </div>
-                                            {(item.billingType === 'parcelado' || item.billingType === 'fixo') && (
-                                                <div className="w-20 flex-shrink-0 animate-fade-in">
-                                                    <label className="block text-[10px] font-bold text-gray-400 mb-1 ml-1">
-                                                        {item.billingType === 'parcelado' ? 'Parcelas' : 'Meses'}
-                                                    </label>
-                                                    <input 
-                                                        required 
-                                                        type="number" 
-                                                        min={item.billingType === 'parcelado' ? 2 : 1} 
-                                                        max="60" 
-                                                        value={item.installments} 
-                                                        onChange={(e) => handleUpdateItem(item.id, 'installments', parseInt(e.target.value) || 1)} 
-                                                        className="w-full rounded-lg border-transparent bg-indigo-50 dark:bg-indigo-900/30 p-2 text-xs font-bold text-center text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500/20" 
-                                                    />
-                                                </div>
-                                            )}
-                                            <div className="w-28 flex-shrink-0">
-                                                <label className="block text-[10px] font-bold text-gray-400 mb-1 ml-1">
-                                                    {item.billingType === 'parcelado' ? 'Valor Total' : 'Valor (R$)'}
-                                                </label>
-                                                <input required type="number" step="0.01" value={item.amount || ''} onChange={(e) => handleUpdateItem(item.id, 'amount', parseFloat(e.target.value) || 0)} className="w-full rounded-lg border-transparent bg-gray-50 dark:bg-gray-700/50 p-2 text-xs font-bold text-right outline-none focus:ring-2 focus:ring-indigo-500/20" />
-                                            </div>
-                                            <div className="w-24 text-center pb-2.5 flex-shrink-0">
-                                                <label className="block text-[8px] font-bold text-gray-400 mb-1">1º Venc.</label>
-                                                <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded">
-                                                    {itemDueDate ? new Date(itemDueDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '--/--'}
-                                                </span>
-                                            </div>
-                                            <button type="button" onClick={() => handleRemoveItem(item.id)} className="p-2 text-gray-300 hover:text-red-500 transition-colors mb-0.5 flex-shrink-0"><XCircleIcon className="w-4 h-4" /></button>
+                {activeTab === 'lancar' ? (
+                    <div className="animate-fade-in space-y-4">
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                            <div className="lg:col-span-8 relative overflow-hidden p-4 bg-gradient-to-r from-slate-700 to-slate-800 rounded-2xl text-white shadow-sm border border-slate-600">
+                                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                    <div className="space-y-1">
+                                        <p className="text-[9px] font-bold tracking-widest opacity-60">Escolha o cartão</p>
+                                        <div className="relative">
+                                            <select 
+                                                value={selectedCardId}
+                                                onChange={(e) => setSelectedCardId(e.target.value)}
+                                                className="appearance-none bg-white/10 border border-white/10 rounded-xl py-1.5 px-3 pr-8 text-xs font-bold outline-none focus:ring-1 focus:ring-white/30 cursor-pointer"
+                                            >
+                                                {cards.length === 0 && <option value="">Nenhum cartão cadastrado</option>}
+                                                {cards.filter(c => c.active).map(c => (
+                                                    <option key={c.id} value={c.id} className="text-gray-900">
+                                                        {c.name} (**** {c.lastDigits})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <ChevronDownIcon className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none opacity-60" />
                                         </div>
-                                    );
-                                })}
+                                    </div>
+                                    {selectedCard && (
+                                        <div className="flex gap-6">
+                                            <div><p className="text-[9px] font-bold opacity-60 tracking-tighter">Fechamento</p><p className="text-xs font-black">Dia {selectedCard.closingDay}</p></div>
+                                            <div><p className="text-[9px] font-bold opacity-60 tracking-tighter">Vencimento</p><p className="text-xs font-black">Dia {selectedCard.dueDay}</p></div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="lg:col-span-4 p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-800">
+                                <p className="text-[9px] font-bold text-indigo-400 tracking-widest uppercase mb-1">Banco para débito</p>
+                                <div className="relative">
+                                    <select 
+                                        value={selectedBankId}
+                                        onChange={(e) => setSelectedBankId(e.target.value)}
+                                        className="w-full appearance-none bg-white dark:bg-gray-800 border border-indigo-100 dark:border-gray-700 rounded-xl py-1.5 px-3 pr-8 text-xs font-bold text-indigo-700 dark:text-indigo-300 outline-none shadow-sm cursor-pointer"
+                                    >
+                                        <option value="">Selecionar banco...</option>
+                                        {bankAccounts.map(b => <option key={b.id} value={b.id}>{b.accountName}</option>)}
+                                    </select>
+                                    <ChevronDownIcon className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none opacity-40 text-indigo-600" />
+                                </div>
                             </div>
                         </div>
 
-                        <div className="flex flex-col sm:flex-row justify-between items-center pt-6 border-t border-gray-100 dark:border-gray-700 gap-4">
-                            <div className="flex items-center gap-3">
-                                <div className="p-3 bg-indigo-100 text-indigo-600 rounded-xl"><CreditCardIcon className="w-6 h-6" /></div>
-                                <div>
-                                    <p className="text-[10px] font-bold text-gray-400 tracking-tight leading-none mb-1">Total para lançamento</p>
-                                    <p className="text-2xl font-black text-indigo-700 dark:text-indigo-300">{totalFatura.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-                                </div>
+                        <div className="space-y-2">
+                            <div className="flex justify-between items-center px-1">
+                                <h4 className="text-[10px] font-black text-gray-400 tracking-widest uppercase">Detalhamento dos gastos</h4>
+                                <button 
+                                    onClick={handleAddItem} 
+                                    className="flex items-center gap-1 text-[10px] font-black text-indigo-500 hover:text-indigo-600 transition-colors"
+                                >
+                                    <PlusIcon className="w-3 h-3" /> Adicionar item
+                                </button>
                             </div>
-                            <div className="flex gap-3 w-full sm:w-auto">
-                                <button type="button" onClick={onClose} className="flex-1 sm:flex-none px-6 py-3 bg-gray-100 dark:bg-gray-700 text-gray-500 font-bold rounded-xl text-sm transition-all hover:bg-gray-200">Cancelar</button>
-                                <button type="submit" disabled={isLoading || activeCards.length === 0} className="flex-1 sm:flex-none px-10 py-3 bg-indigo-600 text-white font-bold rounded-xl text-sm shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center min-w-[160px]">{isLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : 'Confirmar gastos'}</button>
-                            </div>
-                        </div>
-                    </form>
-                ) : (
-                    <div className="space-y-8 animate-fade-in">
-                        <div className={`p-5 rounded-2xl border border-dashed transition-all ${editingCardId ? 'bg-indigo-50 border-indigo-300 dark:bg-indigo-900/20 dark:border-indigo-800' : 'bg-gray-50 dark:bg-gray-700/30 border-gray-200 dark:border-gray-600'}`}>
-                            <div className="flex justify-between items-center mb-4">
-                                <p className={`text-xs font-bold tracking-tighter ${editingCardId ? 'text-indigo-600' : 'text-gray-500'}`}>
-                                    {editingCardId ? 'Editando cadastro do cartão' : 'Cadastrar novo cartão'}
-                                </p>
-                                {editingCardId && (
-                                    <button onClick={resetForm} className="text-[10px] font-black text-red-500 hover:underline">Cancelar edição</button>
-                                )}
-                            </div>
-                            <form onSubmit={handleTrySaveCard} className="space-y-4">
-                                <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-                                    <div className="md:col-span-2">
-                                        <label className="block text-xs font-bold text-gray-500 mb-1.5 ml-1">Nome do cartão (apelido)</label>
-                                        <input required type="text" value={newCardName} onChange={(e) => setNewCardName(e.target.value)} placeholder="Ex: Nubank empresa..." className="w-full rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 p-2.5 text-sm font-bold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm" />
-                                    </div>
-                                    <div className="md:col-span-2">
-                                        <label className="block text-xs font-bold text-gray-500 mb-1.5 ml-1">Número do cartão (opcional)</label>
-                                        <input type="text" value={newCardNumber} onChange={(e) => setNewCardNumber(e.target.value)} placeholder="Apenas para referência..." className="w-full rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 p-2.5 text-sm font-bold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-gray-500 mb-1.5 ml-1">Dia fechamento</label>
-                                        <input required type="number" min="1" max="31" value={newCardClosingDay} onChange={(e) => setNewCardClosingDay(parseInt(e.target.value) || 1)} className="w-full rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 p-2.5 text-sm font-bold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-gray-500 mb-1.5 ml-1">Dia vencimento</label>
-                                        <input required type="number" min="1" max="31" value={newCardDueDay} onChange={(e) => setNewCardDueDay(parseInt(e.target.value) || 1)} className="w-full rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 p-2.5 text-sm font-bold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm" />
-                                    </div>
-                                </div>
-                                <div className="flex justify-end pt-2">
-                                    <button type="submit" disabled={isLoading || !newCardName.trim()} className="px-10 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2">
-                                        {isLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <SaveIcon className="w-4 h-4" />}
-                                        {isLoading ? 'Salvando...' : editingCardId ? 'Atualizar cadastro' : 'Cadastrar cartão'}
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
 
-                        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden shadow-sm">
-                            <div className="overflow-x-auto">
-                                <table className="min-w-full text-left text-sm border-collapse">
-                                    <thead className="bg-gray-50 dark:bg-gray-700/50 text-[10px] font-bold text-gray-400 border-b border-gray-100 dark:border-gray-600">
-                                        <tr>
-                                            <th className="px-6 py-4">Cartão / apelido</th>
-                                            <th className="px-6 py-4">Final / número</th>
-                                            <th className="px-6 py-4 text-center">Fechamento</th>
-                                            <th className="px-6 py-4 text-center">Vencimento</th>
-                                            <th className="px-6 py-4 text-center">Status</th>
-                                            <th className="px-6 py-4 text-right">Ações</th>
+                            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden shadow-sm">
+                                <table className="w-full text-left">
+                                    <thead className="bg-gray-50/50 dark:bg-gray-900/40 border-b border-gray-100 dark:border-gray-700">
+                                        <tr className="text-[9px] font-black text-gray-400 tracking-tighter">
+                                            <th className="py-2.5 pl-4">Data</th>
+                                            <th className="py-2.5">Descrição</th>
+                                            <th className="py-2.5">Categoria</th>
+                                            <th className="py-2.5">Cobrança</th>
+                                            <th className="py-2.5 text-center">Parcelas</th>
+                                            <th className="py-2.5 text-right">Valor total</th>
+                                            <th className="py-2.5 text-center">Vencimento</th>
+                                            <th className="py-2.5 pr-4"></th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                        {cards.map(card => (
-                                            <tr key={card.id} className={`hover:bg-gray-50 dark:hover:bg-gray-900/40 transition-colors ${!card.active ? 'opacity-60 bg-red-50/10' : ''}`}>
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className={`p-2 rounded-lg ${card.active ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'bg-red-50 text-red-400'}`}>
-                                                            <CreditCardIcon className="w-5 h-5" />
-                                                        </div>
-                                                        <span className={`font-bold text-sm ${card.active ? 'text-gray-800 dark:text-gray-100' : 'text-gray-400 line-through'}`}>
-                                                            {card.name}
-                                                        </span>
-                                                    </div>
+                                    <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
+                                        {items.map(item => (
+                                            <tr key={item.id} className="hover:bg-indigo-50/10 dark:hover:bg-indigo-900/5 transition-colors">
+                                                <td className="py-2 pl-4 w-32">
+                                                    <input 
+                                                        type="date" 
+                                                        value={item.date} 
+                                                        onChange={(e) => handleUpdateItem(item.id, 'date', e.target.value)} 
+                                                        className="w-full bg-transparent border-none p-1 text-[11px] font-bold text-gray-600 dark:text-gray-300 outline-none" 
+                                                    />
                                                 </td>
-                                                <td className="px-6 py-4">
-                                                    <span className="text-xs font-bold text-gray-500 dark:text-gray-400">
-                                                        {card.last_digits ? `**** ${card.last_digits}` : '---'}
-                                                    </span>
+                                                <td className="py-2">
+                                                    <input 
+                                                        type="text" 
+                                                        value={item.description} 
+                                                        onChange={(e) => handleUpdateItem(item.id, 'description', e.target.value)} 
+                                                        placeholder="Ex: Almoço..." 
+                                                        className={`w-full rounded-lg px-2 py-1 text-[11px] font-bold outline-none transition-all ${item.errors?.description ? 'bg-red-50 text-red-600' : 'bg-transparent text-gray-700 dark:text-white focus:bg-gray-50 dark:focus:bg-gray-700'}`} 
+                                                    />
                                                 </td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <span className="text-xs font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-900/40 px-2.5 py-1 rounded-lg">
-                                                        Dia {card.closing_day}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <span className="text-xs font-black text-purple-600 bg-purple-50 dark:bg-purple-900/40 px-2.5 py-1 rounded-lg">
-                                                        Dia {card.due_day}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4 text-center">
+                                                <td className="py-2 w-40">
                                                     <select 
-                                                        value={card.active ? 'true' : 'false'}
-                                                        onChange={(e) => handleChangeStatus(card, e.target.value === 'true')}
-                                                        className={`text-[10px] font-black rounded-lg border-transparent px-2 py-1 outline-none transition-all cursor-pointer shadow-sm ${
-                                                            card.active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                                                        }`}
+                                                        value={item.categoryId} 
+                                                        onChange={(e) => handleUpdateItem(item.id, 'categoryId', e.target.value)} 
+                                                        className={`w-full bg-transparent border-none px-1 py-1 text-[11px] font-bold outline-none ${item.errors?.categoryId ? 'text-red-500' : 'text-gray-500 dark:text-gray-400'}`}
                                                     >
-                                                        <option value="true">Ativo</option>
-                                                        <option value="false">Bloqueado</option>
+                                                        <option value="">Selecione...</option>
+                                                        {expenseCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                                     </select>
                                                 </td>
-                                                <td className="px-6 py-4 text-right">
-                                                    <button 
-                                                        onClick={() => handleEditCard(card)}
-                                                        className="p-2 text-gray-400 hover:text-indigo-600 transition-colors"
-                                                        title="Editar cadastro"
+                                                <td className="py-2 w-32">
+                                                    <select 
+                                                        value={item.billingType} 
+                                                        onChange={(e) => handleUpdateItem(item.id, 'billingType', e.target.value)} 
+                                                        className="w-full bg-transparent border-none px-1 py-1 text-[11px] font-bold text-gray-500 dark:text-gray-400 outline-none"
                                                     >
-                                                        <EditIcon className="w-4 h-4" />
+                                                        <option value="À vista (Único)">À vista</option>
+                                                        <option value="Parcelado">Parcelado</option>
+                                                        <option value="Recorrente (Fixo)">Recorrente</option>
+                                                    </select>
+                                                </td>
+                                                <td className="py-2 w-20 text-center">
+                                                    {item.billingType !== 'À vista (Único)' ? (
+                                                        <input 
+                                                            type="number" 
+                                                            min="2" 
+                                                            value={item.count} 
+                                                            onChange={(e) => handleUpdateItem(item.id, 'count', parseInt(e.target.value) || 1)} 
+                                                            className="w-10 text-center bg-indigo-50 dark:bg-indigo-900/30 rounded p-0.5 text-[11px] font-black text-indigo-600 outline-none" 
+                                                        />
+                                                    ) : (
+                                                        <span className="text-gray-300 text-[10px] font-bold">---</span>
+                                                    )}
+                                                </td>
+                                                <td className="py-2 w-28">
+                                                    <input 
+                                                        type="number" 
+                                                        step="0.01" 
+                                                        value={item.amount || ''} 
+                                                        onChange={(e) => handleUpdateItem(item.id, 'amount', parseFloat(e.target.value) || 0)} 
+                                                        className={`w-full text-right bg-transparent border-none px-1 py-1 text-[11px] font-black outline-none ${item.errors?.amount ? 'text-red-500' : 'text-gray-800 dark:text-white'}`} 
+                                                        placeholder="0,00"
+                                                    />
+                                                </td>
+                                                <td className="py-2 w-28 text-center">
+                                                    <span className="text-[9px] font-black text-gray-500 bg-gray-50 dark:bg-gray-700 px-2 py-0.5 rounded-lg border border-gray-100 dark:border-gray-600 shadow-sm">
+                                                        {item.calculatedDueDate ? new Date(item.calculatedDueDate).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : '--/--/--'}
+                                                    </span>
+                                                </td>
+                                                <td className="py-2 pr-4 text-right w-8">
+                                                    <button onClick={() => handleRemoveItem(item.id)} className="p-1 text-gray-300 hover:text-red-500 transition-colors">
+                                                        <TrashIcon className="w-4 h-4" />
                                                     </button>
                                                 </td>
                                             </tr>
                                         ))}
-                                        {cards.length === 0 && (
-                                            <tr>
-                                                <td colSpan={6} className="px-6 py-10 text-center text-gray-400 italic text-xs font-medium">
-                                                    Nenhum cartão cadastrado no momento.
-                                                </td>
-                                            </tr>
-                                        )}
                                     </tbody>
                                 </table>
                             </div>
+                        </div>
+
+                        <div className="flex flex-col md:flex-row justify-between items-center bg-gray-50 dark:bg-gray-900/30 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 gap-4">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2.5 bg-white dark:bg-gray-800 rounded-xl shadow-sm text-indigo-500 border border-gray-100 dark:border-gray-700">
+                                    <DollarIcon className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <p className="text-[9px] font-black text-gray-400 tracking-widest">Total dos lançamentos</p>
+                                    <p className="text-xl font-black text-gray-800 dark:text-white leading-none mt-1">
+                                        {totalFatura.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex gap-2 w-full md:w-auto">
+                                <button onClick={onClose} className="flex-1 md:flex-none px-6 py-2.5 text-xs font-bold text-gray-400 hover:text-gray-600 transition-colors">Cancelar</button>
+                                <button 
+                                    onClick={handleSaveTransactions}
+                                    disabled={isSavingLocal}
+                                    className="flex-1 md:flex-none px-10 py-2.5 bg-indigo-600 text-white font-bold rounded-xl text-xs shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50"
+                                >
+                                    {isSavingLocal ? 'Processando...' : 'Confirmar e salvar'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="animate-fade-in space-y-5">
+                        <form onSubmit={handleSaveCard} className="p-5 bg-white dark:bg-gray-800 rounded-2xl border-2 border-dashed border-gray-100 dark:border-gray-700 space-y-4 shadow-sm">
+                            <div className="flex items-center gap-2 text-indigo-500">
+                                <CreditCardIcon className="w-4 h-4" />
+                                <h4 className="text-[10px] font-black tracking-widest">Configuração do novo cartão</h4>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                                <div>
+                                    <label className="block text-[9px] font-black text-gray-400 mb-1.5 ml-1">Identificação</label>
+                                    <input required type="text" placeholder="Ex: Nubank..." value={cardForm.name} onChange={e => setCardForm({...cardForm, name: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-900 p-2.5 text-xs font-bold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm" />
+                                </div>
+                                <div>
+                                    <label className="block text-[9px] font-black text-gray-400 mb-1.5 ml-1">Dígitos finais</label>
+                                    <input type="text" placeholder="1234" maxLength={4} value={cardForm.lastDigits} onChange={e => setCardForm({...cardForm, lastDigits: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-900 p-2.5 text-xs font-bold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm" />
+                                </div>
+                                <div>
+                                    <label className="block text-[9px] font-black text-gray-400 mb-1.5 ml-1">Fechamento (Dia)</label>
+                                    <input required type="number" min="1" max="31" value={cardForm.closingDay} onChange={e => setCardForm({...cardForm, closingDay: parseInt(e.target.value) || 1})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-900 p-2.5 text-xs font-black text-center text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm" />
+                                </div>
+                                <div>
+                                    <label className="block text-[9px] font-black text-gray-400 mb-1.5 ml-1">Vencimento (Dia)</label>
+                                    <input required type="number" min="1" max="31" value={cardForm.dueDay} onChange={e => setCardForm({...cardForm, dueDay: parseInt(e.target.value) || 1})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-900 p-2.5 text-xs font-black text-center text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm" />
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end gap-3 pt-1">
+                                {editingCardId && (
+                                    <button type="button" onClick={() => { setEditingCardId(null); setCardForm({name:'', lastDigits:'', closingDay:1, dueDay:10}); }} className="px-4 py-2 text-[9px] font-black text-gray-400 hover:text-gray-600 tracking-widest">Cancelar edição</button>
+                                )}
+                                <button type="submit" className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold text-[11px] shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-95">
+                                    {editingCardId ? <EditIcon className="w-3.5 h-3.5" /> : <PlusIcon className="w-3.5 h-3.5" />}
+                                    {editingCardId ? 'Atualizar cartão' : 'Salvar novo cartão'}
+                                </button>
+                            </div>
+                        </form>
+
+                        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                            <table className="w-full text-left text-xs">
+                                <thead className="bg-gray-50 dark:bg-gray-900/40 text-[9px] font-black text-gray-400 tracking-tighter border-b">
+                                    <tr>
+                                        <th className="px-6 py-4">Descrição do cartão</th>
+                                        <th className="px-6 py-4">Numeração</th>
+                                        <th className="px-6 py-4 text-center">Dias (F/V)</th>
+                                        <th className="px-6 py-4 text-center">Status</th>
+                                        <th className="px-6 py-4 text-right">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
+                                    {cards.length > 0 ? cards.map(card => (
+                                        <tr key={card.id} className="hover:bg-gray-50 dark:hover:bg-indigo-900/5 transition-colors">
+                                            <td className="px-6 py-3 font-black text-gray-700 dark:text-gray-200 text-xs">{card.name}</td>
+                                            <td className="px-6 py-3 text-gray-400 font-mono text-[10px]">**** {card.lastDigits}</td>
+                                            <td className="px-6 py-3">
+                                                <div className="flex justify-center gap-1.5">
+                                                    <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/20 text-blue-500 dark:text-blue-400 rounded-lg text-[8px] font-black border border-blue-100 dark:border-blue-900">Fech. {card.closingDay}</span>
+                                                    <span className="px-2 py-0.5 bg-purple-50 dark:bg-purple-900/20 text-purple-500 dark:text-purple-400 rounded-lg text-[8px] font-black border border-purple-100 dark:border-purple-900">Venc. {card.dueDay}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-3 text-center">
+                                                <button 
+                                                    onClick={() => toggleCardStatus(card)}
+                                                    className={`px-3 py-0.5 rounded-full text-[9px] font-black border transition-all ${card.active ? 'bg-green-50 text-green-600 border-green-100 hover:bg-green-100' : 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100'}`}
+                                                >
+                                                    {card.active ? 'Ativo' : 'Inativo'}
+                                                </button>
+                                            </td>
+                                            <td className="px-6 py-3 text-right">
+                                                <div className="flex justify-end gap-1">
+                                                    <button onClick={() => editCard(card)} className="p-1.5 text-gray-400 hover:text-indigo-500 transition-colors"><EditIcon className="w-4 h-4" /></button>
+                                                    <button onClick={async () => { if(confirm('Remover cartão?')) { await dataService.delete('credit_cards', card.id); loadCards(); } }} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"><TrashIcon className="w-4 h-4" /></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )) : (
+                                        <tr><td colSpan={5} className="px-6 py-12 text-center text-gray-400 italic text-[11px]">Nenhum cartão para gerenciar.</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 )}

@@ -1,12 +1,14 @@
-
-import React, { useMemo } from 'react';
-import type { FinancialTransaction } from '../../types';
+import React, { useMemo, useEffect, useState } from 'react';
+import type { FinancialTransaction, CreditCard, FinancialCategory, BankAccount } from '../../types';
 import DashboardCard from '../DashboardCard';
 import FluxoCaixaChart from './FluxoCaixaChart';
-import { DollarIcon, ArrowUpIcon, ArrowDownIcon, CalendarIcon, UploadIcon, CreditCardIcon } from '../../assets/icons';
+import { DollarIcon, ArrowUpIcon, ArrowDownIcon, CalendarIcon, UploadIcon, CreditCardIcon, CheckCircleIcon } from '../../assets/icons';
+import { dataService } from '../../services/dataService';
+import CreditCardDetailModal from './CreditCardDetailModal';
 
 interface VisaoGeralProps {
     transactions: FinancialTransaction[];
+    bankAccounts: BankAccount[];
     onOpenImport: () => void;
     onOpenCreditCard: () => void;
 }
@@ -17,72 +19,126 @@ const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 }).format(rounded);
 };
 
-const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, onOpenImport, onOpenCreditCard }) => {
+const toSentenceCase = (str: string) => {
+    if (!str) return '';
+    const clean = str.toLowerCase();
+    return clean.charAt(0).toUpperCase() + clean.slice(1);
+};
+
+const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, bankAccounts, onOpenImport, onOpenCreditCard }) => {
+    const [cards, setCards] = useState<CreditCard[]>([]);
+    const [categories, setCategories] = useState<FinancialCategory[]>([]);
+    const [selectedGroup, setSelectedGroup] = useState<FinancialTransaction[] | null>(null);
+
+    useEffect(() => {
+        dataService.getAll<CreditCard>('credit_cards').then(setCards);
+        dataService.getAll<FinancialCategory>('financial_categories').then(setCategories);
+    }, []);
     
     const metrics = useMemo(() => {
-        // Pendentes (Considera o filtro de data aplicado na página pai)
-        const aReceberPendente = transactions
-            .filter(t => t.type === 'receita' && t.status === 'pendente')
-            .reduce((sum, t) => sum + t.amount, 0);
-
-        const aPagarPendente = transactions
-            .filter(t => t.type === 'despesa' && t.status === 'pendente')
-            .reduce((sum, t) => sum + t.amount, 0);
-            
-        // Saldo do filtro atual (Pago - Pago)
-        const saldoAtual = transactions
-            .filter(t => t.status === 'pago')
-            .reduce((sum, t) => sum + (t.type === 'receita' ? t.amount : -t.amount), 0);
-            
-        // Receitas do Período (Realizado)
-        const receitasDoPeriodo = transactions
-            .filter(t => t.type === 'receita' && t.status === 'pago')
-            .reduce((sum, t) => sum + t.amount, 0);
-
-        // Despesas do Período (Realizado)
-        const despesasDoPeriodo = transactions
-            .filter(t => t.type === 'despesa' && t.status === 'pago')
-            .reduce((sum, t) => sum + t.amount, 0);
-
-        const resultadoDoPeriodo = receitasDoPeriodo - despesasDoPeriodo;
-
-        return { aReceberPendente, aPagarPendente, saldoAtual, receitasDoPeriodo, despesasDoPeriodo, resultadoDoPeriodo };
-    }, [transactions]);
-    
-    const proximosVencimentos = useMemo(() => {
-        const today = new Date().toISOString().split('T')[0];
-        // APENAS PENDENTES
-        const pending = transactions.filter(t => t.status === 'pendente' && t.dueDate >= today);
+        const activeTxs = transactions.filter(t => t.status !== 'cancelado');
+        const aReceberPendente = activeTxs.filter(t => t.type === 'receita' && t.status === 'pendente').reduce((sum, t) => sum + t.amount, 0);
+        const aPagarPendente = activeTxs.filter(t => t.type === 'despesa' && t.status === 'pendente').reduce((sum, t) => sum + t.amount, 0);
         
-        const result: (FinancialTransaction & { isGroup?: boolean })[] = [];
-        const cardGroups = new Map<string, FinancialTransaction[]>();
+        // Saldo inicial de todas as contas ativas
+        const totalSaldoInicial = bankAccounts.filter(b => b.active).reduce((sum, b) => sum + (b.initialBalance || 0), 0);
+        
+        // Movimentação realizada
+        const receitasPagas = activeTxs.filter(t => t.type === 'receita' && t.status === 'pago').reduce((sum, t) => sum + t.amount, 0);
+        const despesasPagas = activeTxs.filter(t => t.type === 'despesa' && t.status === 'pago').reduce((sum, t) => sum + t.amount, 0);
+        
+        const saldoAtual = totalSaldoInicial + receitasPagas - despesasPagas;
+        const receitasDoPeriodo = receitasPagas;
+        const despesasDoPeriodo = despesasPagas;
+        
+        return { aReceberPendente, aPagarPendente, saldoAtual, receitasDoPeriodo, despesasDoPeriodo, resultadoDoPeriodo: receitasDoPeriodo - despesasDoPeriodo };
+    }, [transactions, bankAccounts]);
+    
+    const processList = (type: 'receita' | 'despesa') => {
+        const list = transactions.filter(t => t.type === type && t.status !== 'cancelado');
+        
+        const ccGroups: Record<string, FinancialTransaction[]> = {};
+        const normals: any[] = [];
 
-        pending.forEach(t => {
-            const isCard = t.description.includes('[Cartão:');
-            if (isCard) {
-                const key = t.dueDate;
-                if (!cardGroups.has(key)) cardGroups.set(key, []);
-                cardGroups.get(key)!.push(t);
+        list.forEach(t => {
+            if (t.id.startsWith('cc-') && t.type === 'despesa') {
+                const cardMatch = t.description.match(/\[(.*?)\]/);
+                const cardName = cardMatch ? cardMatch[1] : '';
+                const card = cards.find(c => c.name === cardName);
+                const closingDay = card ? card.closingDay : '0';
+                // Chave de agrupamento global para cartões
+                const groupKey = `ALL_CC_${t.dueDate}_${closingDay}`;
+
+                if (!ccGroups[groupKey]) ccGroups[groupKey] = [];
+                ccGroups[groupKey].push(t);
             } else {
-                result.push(t);
+                normals.push({ ...t, displayDescription: toSentenceCase(t.description), isCC: false });
             }
         });
 
-        cardGroups.forEach((items, dueDate) => {
-            const totalAmount = items.reduce((sum, item) => sum + item.amount, 0);
-            result.push({
-                ...items[0],
-                id: `pv_group_${dueDate}`,
-                description: 'Cartão de crédito',
-                amount: totalAmount,
-                isGroup: true
-            });
+        const groupedCC = Object.entries(ccGroups).map(([key, items]) => {
+            const keyParts = key.split('_');
+            const dueDate = keyParts[keyParts.length - 2];
+            const allPaid = items.every(i => i.status === 'pago');
+            return {
+                id: `vg-grouped-cc-${key}`,
+                displayDescription: 'Cartão de Crédito',
+                amount: items.reduce((sum, i) => sum + i.amount, 0),
+                dueDate: dueDate,
+                status: allPaid ? 'pago' : 'pendente',
+                type: 'despesa',
+                isCC: true,
+                count: items.length,
+                originalItems: items
+            };
         });
 
-        return result
-            .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-            .slice(0, 5);
-    }, [transactions]);
+        return [...normals, ...groupedCC].sort((a, b) => {
+            if (a.status !== b.status) return a.status === 'pendente' ? -1 : 1;
+            return a.dueDate.localeCompare(b.dueDate);
+        }).slice(0, 8);
+    };
+
+    const receitasList = useMemo(() => processList('receita'), [transactions]);
+    const despesasList = useMemo(() => processList('despesa'), [transactions, cards]);
+
+    const RenderItem: React.FC<{ t: any }> = ({ t }) => {
+        const isPaid = t.status === 'pago';
+        return (
+            <div 
+                onClick={t.isCC ? () => setSelectedGroup(t.originalItems) : undefined}
+                className={`flex items-center justify-between p-3.5 rounded-2xl border transition-all ${
+                    isPaid 
+                    ? 'bg-gray-50/80 dark:bg-gray-700/20 border-transparent opacity-80' 
+                    : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 shadow-sm hover:border-indigo-300'
+                } ${t.isCC ? 'cursor-pointer' : ''}`}
+            >
+                <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-xl ${
+                        isPaid 
+                        ? 'bg-gray-200 text-gray-500' 
+                        : t.type === 'receita' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
+                    }`}>
+                        {isPaid ? <CheckCircleIcon className="w-4 h-4" /> : t.type === 'receita' ? <ArrowUpIcon className="w-4 h-4" /> : <ArrowDownIcon className="w-4 h-4" />}
+                    </div>
+                    <div>
+                        <p className={`font-bold text-[12px] leading-tight ${isPaid ? 'text-gray-500' : 'text-gray-800 dark:text-gray-100'}`}>
+                            {t.displayDescription} {t.isCC ? <span className="text-[10px] text-indigo-500 font-black ml-1">({t.count})</span> : null}
+                        </p>
+                        <p className="text-[9px] text-gray-400 font-bold mt-0.5">
+                            {isPaid ? (t.type === 'receita' ? 'Recebido em: ' : 'Pago em: ') : 'Vence em: '}
+                            {new Date(t.dueDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
+                        </p>
+                    </div>
+                </div>
+                <div className={`text-right font-black text-xs ${
+                    isPaid ? 'text-gray-400' : t.type === 'receita' ? 'text-green-600' : 'text-red-600'
+                }`}>
+                    {formatCurrency(t.amount)}
+                </div>
+            </div>
+        );
+    };
 
     return (
         <div className="space-y-6">
@@ -104,47 +160,54 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, onOpenImport, onO
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                <DashboardCard title="Resultado do período" value={formatCurrency(metrics.resultadoDoPeriodo)} icon={CalendarIcon} color="bg-purple-500" />
-                <DashboardCard title="Receitas (período)" value={formatCurrency(metrics.receitasDoPeriodo)} icon={ArrowUpIcon} color="bg-teal-500" />
-                <DashboardCard title="Despesas (período)" value={formatCurrency(metrics.despesasDoPeriodo)} icon={ArrowDownIcon} color="bg-orange-500" />
-                
-                <DashboardCard title="Saldo líquido (filtro)" value={formatCurrency(metrics.saldoAtual)} icon={DollarIcon} color="bg-blue-500" />
-                <DashboardCard title="A receber (pendente)" value={formatCurrency(metrics.aReceberPendente)} icon={ArrowUpIcon} color="bg-green-500" />
-                <DashboardCard title="A pagar (pendente)" value={formatCurrency(metrics.aPagarPendente)} icon={ArrowDownIcon} color="bg-red-500" />
+                <DashboardCard title="A Receber (Pendente)" value={formatCurrency(metrics.aReceberPendente)} icon={ArrowUpIcon} color="bg-green-500" />
+                <DashboardCard title="A Pagar (Pendente)" value={formatCurrency(metrics.aPagarPendente)} icon={ArrowDownIcon} color="bg-red-500" />
+                <DashboardCard title="Saldo em Caixa (Líquido)" value={formatCurrency(metrics.saldoAtual)} icon={DollarIcon} color="bg-blue-600" />
+                <DashboardCard title="Receitas Realizadas" value={formatCurrency(metrics.receitasDoPeriodo)} icon={ArrowUpIcon} color="bg-teal-500" />
+                <DashboardCard title="Despesas Realizadas" value={formatCurrency(metrics.despesasDoPeriodo)} icon={ArrowDownIcon} color="bg-orange-500" />
+                <DashboardCard title="Resultado do Período" value={formatCurrency(metrics.resultadoDoPeriodo)} icon={CalendarIcon} color="bg-purple-500" />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                <div className="lg:col-span-3">
-                    <FluxoCaixaChart transactions={transactions} />
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700">
+                <FluxoCaixaChart transactions={transactions.filter(t => t.status !== 'cancelado')} />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                 <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700">
+                    <h3 className="text-lg font-bold mb-5 text-gray-900 dark:text-white flex items-center gap-2">
+                        <div className="p-1.5 bg-green-100 text-green-600 rounded-lg"><ArrowUpIcon className="w-4 h-4" /></div>
+                        Contas a Receber
+                    </h3>
+                    <div className="space-y-2.5">
+                        {receitasList.length > 0 ? receitasList.map(t => <RenderItem key={t.id} t={t} />) : (
+                            <p className="text-center text-gray-400 py-10 text-xs font-bold italic">Nenhuma receita para exibir.</p>
+                        )}
+                    </div>
                 </div>
-                 <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg">
-                    <h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Próximos vencimentos (seleção)</h3>
-                    <div className="space-y-4">
-                        {proximosVencimentos.length > 0 ? proximosVencimentos.map(t => (
-                            <div key={t.id} className={`flex items-center justify-between p-3 rounded-lg ${t.isGroup ? 'bg-indigo-50/40 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800' : 'bg-gray-50 dark:bg-gray-700/50'}`}>
-                                <div className="flex items-center gap-3">
-                                    {t.isGroup && (
-                                        <div className="p-1.5 bg-indigo-600 text-white rounded-lg shadow-sm">
-                                            <CreditCardIcon className="w-4 h-4" />
-                                        </div>
-                                    )}
-                                    <div>
-                                        <p className={`font-semibold ${t.isGroup ? 'text-indigo-700 dark:text-indigo-400' : 'text-gray-800 dark:text-gray-100'}`}>{t.description}</p>
-                                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                                            Vence em: {new Date(t.dueDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className={`text-right font-bold ${t.type === 'receita' ? 'text-green-500' : t.isGroup ? 'text-indigo-600 dark:text-indigo-400' : 'text-red-500'}`}>
-                                    {formatCurrency(t.amount)}
-                                </div>
-                            </div>
-                        )) : (
-                            <p className="text-center text-gray-500 dark:text-gray-400 py-4">Nenhum vencimento no período.</p>
+
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700">
+                    <h3 className="text-lg font-bold mb-5 text-gray-900 dark:text-white flex items-center gap-2">
+                        <div className="p-1.5 bg-red-100 text-red-600 rounded-lg"><ArrowDownIcon className="w-4 h-4" /></div>
+                        Contas a Pagar
+                    </h3>
+                    <div className="space-y-2.5">
+                        {despesasList.length > 0 ? despesasList.map(t => <RenderItem key={t.id} t={t} />) : (
+                            <p className="text-center text-gray-400 py-10 text-xs font-bold italic">Nenhuma despesa para exibir.</p>
                         )}
                     </div>
                 </div>
             </div>
+
+            {selectedGroup && (
+                <CreditCardDetailModal 
+                    isOpen={!!selectedGroup} 
+                    onClose={() => setSelectedGroup(null)} 
+                    items={selectedGroup} 
+                    categories={categories}
+                    onUpdateStatus={() => {}} 
+                    onDeleteItem={() => {}}
+                />
+            )}
         </div>
     );
 };

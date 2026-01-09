@@ -1,27 +1,39 @@
-
 import React, { useEffect, useState, useMemo } from 'react';
 import DashboardCard from '../components/DashboardCard';
 import ChartComponent from '../components/ChartComponent';
 import RecentTransactions from '../components/RecentTransactions';
-import { DollarIcon, UsersIcon, TrendUpIcon, DocumentReportIcon, OrcamentoIcon, FinanceiroIcon } from '../assets/icons';
-import type { FinancialTransaction, SavedOrcamento } from '../types';
+import { 
+    DollarIcon, UsersIcon, TrendUpIcon, DocumentReportIcon, 
+    OrcamentoIcon, FinanceiroIcon, ExclamationTriangleIcon, 
+    ShoppingCartIcon, CubeIcon, ClockIcon 
+} from '../assets/icons';
+import type { FinancialTransaction, SavedOrcamento, StockItem, PurchaseRequest, ExpenseReport } from '../types';
 import { dataService } from '../services/dataService';
 
 const DashboardPage: React.FC = () => {
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
   const [orcamentos, setOrcamentos] = useState<SavedOrcamento[]>([]);
+  const [stockItems, setStockItems] = useState<StockItem[]>([]);
+  const [purchaseRequests, setPurchaseRequests] = useState<PurchaseRequest[]>([]);
+  const [expenseReports, setExpenseReports] = useState<ExpenseReport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
       const loadData = async () => {
           setIsLoading(true);
           try {
-              const [txs, orcs] = await Promise.all([
+              const [txs, orcs, items, reqs, reports] = await Promise.all([
                   dataService.getAll<FinancialTransaction>('financial_transactions'),
-                  dataService.getAll<SavedOrcamento>('orcamentos')
+                  dataService.getAll<SavedOrcamento>('orcamentos'),
+                  dataService.getAll<StockItem>('stock_items'),
+                  dataService.getAll<PurchaseRequest>('purchase_requests'),
+                  dataService.getAll<ExpenseReport>('expense_reports')
               ]);
               setTransactions(txs || []);
               setOrcamentos(orcs || []);
+              setStockItems(items || []);
+              setPurchaseRequests(reqs || []);
+              setExpenseReports(reports || []);
           } catch (error) {
               console.error("Erro ao carregar dados do dashboard:", error);
           } finally {
@@ -32,23 +44,43 @@ const DashboardPage: React.FC = () => {
   }, []);
 
   const metrics = useMemo(() => {
-      const receitaTotal = transactions.filter(t => t.type === 'receita' && t.status === 'pago').reduce((a, c) => a + c.amount, 0);
-      const despesaTotal = transactions.filter(t => t.type === 'despesa' && t.status === 'pago').reduce((a, c) => a + c.amount, 0);
+      const activeTxs = transactions.filter(t => t.status !== 'cancelado');
+      const receitaTotal = activeTxs.filter(t => t.type === 'receita' && t.status === 'pago').reduce((a, c) => a + c.amount, 0);
+      const despesaTotal = activeTxs.filter(t => t.type === 'despesa' && t.status === 'pago').reduce((a, c) => a + c.amount, 0);
       const orcamentosAprovados = orcamentos.filter(o => o.status === 'Aprovado').length;
       const orcamentosTotal = orcamentos.length;
-      return { receitaTotal, despesaTotal, orcamentosAprovados, orcamentosTotal };
-  }, [transactions, orcamentos]);
+
+      // Novas métricas de alerta
+      const openPurchaseRequests = purchaseRequests.filter(r => r.status === 'Aberto').length;
+      const lowStockItems = stockItems.filter(i => i.quantity <= i.minQuantity).length;
+      
+      const transferidos = expenseReports.filter(r => r.status === 'Transferido').length;
+      const envPagamento = expenseReports.filter(r => r.status === 'Env. p/ Pagamento').length;
+
+      return { 
+          receitaTotal, 
+          despesaTotal, 
+          orcamentosAprovados, 
+          orcamentosTotal,
+          openPurchaseRequests,
+          lowStockItems,
+          transferidos,
+          envPagamento
+      };
+  }, [transactions, orcamentos, stockItems, purchaseRequests, expenseReports]);
 
   const chartData = useMemo(() => {
       const data = [];
       const today = new Date();
+      const activeTxs = transactions.filter(t => t.status !== 'cancelado');
+
       for (let i = 5; i >= 0; i--) {
           const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
           const month = d.getMonth();
           const year = d.getFullYear();
           const monthName = d.toLocaleString('pt-BR', { month: 'short' });
           const label = `${monthName.charAt(0).toUpperCase() + monthName.slice(1)}/${year.toString().slice(2)}`;
-          const monthTxs = transactions.filter(t => {
+          const monthTxs = activeTxs.filter(t => {
               const dateRef = t.paymentDate || t.dueDate;
               if (t.status !== 'pago' || !dateRef) return false;
               const tDate = new Date(dateRef);
@@ -67,8 +99,11 @@ const DashboardPage: React.FC = () => {
 
   if (isLoading) return <div className="flex items-center justify-center h-96"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
 
+  const totalReports = metrics.transferidos + metrics.envPagamento;
+
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Seção de Métricas Principais */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <DashboardCard title="Receita (Realizada)" value={formatCurrency(metrics.receitaTotal)} icon={FinanceiroIcon} color="bg-green-500" />
         <DashboardCard title="Despesa (Realizada)" value={formatCurrency(metrics.despesaTotal)} icon={TrendUpIcon} color="bg-red-500" />
@@ -76,12 +111,69 @@ const DashboardPage: React.FC = () => {
         <DashboardCard title="Total de Orçamentos" value={metrics.orcamentosTotal.toString()} icon={UsersIcon} color="bg-indigo-500" />
       </div>
 
+      {/* Seção de Alertas e Pendências */}
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-orange-100 dark:border-orange-900/30">
+        <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-orange-100 dark:bg-orange-900/30 text-orange-600 rounded-lg">
+                <ExclamationTriangleIcon className="w-5 h-5" />
+            </div>
+            <div>
+                <h3 className="text-xl font-bold text-gray-800 dark:text-white tracking-tight">Alertas e pendências críticas</h3>
+                <p className="text-xs text-gray-500 font-semibold mt-1">Ações imediatas necessárias</p>
+            </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className={`p-4 rounded-xl border-2 transition-all flex items-center gap-4 ${metrics.openPurchaseRequests > 0 ? 'bg-orange-50 dark:bg-orange-900/10 border-orange-200 dark:border-orange-800' : 'bg-gray-50 dark:bg-gray-900/40 border-transparent opacity-60'}`}>
+                <div className={`p-3 rounded-xl ${metrics.openPurchaseRequests > 0 ? 'bg-orange-500 text-white shadow-lg shadow-orange-200' : 'bg-gray-200 text-gray-400'}`}>
+                    <ShoppingCartIcon className="w-6 h-6" />
+                </div>
+                <div>
+                    <p className="text-sm font-bold text-gray-500 dark:text-gray-400">Pedidos de compra</p>
+                    <p className={`text-xl font-black ${metrics.openPurchaseRequests > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-gray-500'}`}>
+                        {metrics.openPurchaseRequests} {metrics.openPurchaseRequests === 1 ? 'pendente' : 'pendentes'}
+                    </p>
+                </div>
+            </div>
+
+            <div className={`p-4 rounded-xl border-2 transition-all flex items-center gap-4 ${metrics.lowStockItems > 0 ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800' : 'bg-gray-50 dark:bg-gray-900/40 border-transparent opacity-60'}`}>
+                <div className={`p-3 rounded-xl ${metrics.lowStockItems > 0 ? 'bg-red-500 text-white shadow-lg shadow-red-200' : 'bg-gray-200 text-gray-400'}`}>
+                    <CubeIcon className="w-6 h-6" />
+                </div>
+                <div>
+                    <p className="text-sm font-bold text-gray-500 dark:text-gray-400">Abaixo do mínimo</p>
+                    <p className={`text-xl font-black ${metrics.lowStockItems > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500'}`}>
+                        {metrics.lowStockItems} {metrics.lowStockItems === 1 ? 'item' : 'itens'}
+                    </p>
+                </div>
+            </div>
+
+            <div className={`p-4 rounded-xl border-2 transition-all flex items-center gap-4 ${totalReports > 0 ? 'bg-indigo-50 dark:bg-indigo-900/10 border-indigo-200 dark:border-indigo-800' : 'bg-gray-50 dark:bg-gray-900/40 border-transparent opacity-60'}`}>
+                <div className={`p-3 rounded-xl ${totalReports > 0 ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-200' : 'bg-gray-200 text-gray-400'}`}>
+                    <ClockIcon className="w-6 h-6" />
+                </div>
+                <div>
+                    <p className="text-sm font-bold text-gray-500 dark:text-gray-400">Análise de reembolso</p>
+                    <div className={`text-xl font-black ${totalReports > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-500'}`}>
+                        {totalReports} pendentes
+                    </div>
+                    {totalReports > 0 && (
+                        <div className="flex gap-2 mt-0.5">
+                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{metrics.transferidos} Transf.</span>
+                            <span className="text-[10px] font-bold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">{metrics.envPagamento} Env. Pgto</span>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
             <ChartComponent data={chartData} />
         </div>
         <div className="lg:col-span-1">
-            <RecentTransactions transactions={transactions} />
+            <RecentTransactions transactions={transactions.filter(t => t.status !== 'cancelado')} />
         </div>
       </div>
     </div>

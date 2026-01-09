@@ -1,235 +1,166 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
     CubeIcon, TrashIcon, PlusIcon, 
     ExclamationTriangleIcon, DollarIcon, EditIcon, PhotographIcon, XCircleIcon,
     ArrowUpIcon, ArrowDownIcon, FilterIcon, CalendarIcon, ClipboardListIcon, ShoppingCartIcon, LinkIcon,
-    EyeIcon, CheckCircleIcon, TableIcon, UploadIcon, DocumentReportIcon, ChartPieIcon
+    EyeIcon, CheckCircleIcon, TableIcon, UploadIcon, DocumentReportIcon, ChartPieIcon, ClockIcon, TruckIcon, UsersIcon, SearchIcon, ChevronDownIcon
 } from '../assets/icons';
-import type { StockItem, EstoquePageProps, PurchaseRequest, StockMovement, ChecklistEntry, PriceHistoryEntry } from '../types';
+import type { StockItem, EstoquePageProps, PurchaseRequest, StockMovement, ChecklistEntry, PriceHistoryEntry, PurchaseRequestStatus, SavedOrcamento } from '../types';
 import { dataService } from '../services/dataService';
 import Modal from '../components/Modal';
 import DashboardCard from '../components/DashboardCard';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
 const UNITS = ["un", "mt", "kg", "cx", "par", "kit", "pç", "m²", "lt"];
-const ADMIN_PROFILE_ID = '00000000-0000-0000-0000-000000000001';
+const ADMIN_PROFILE_ID = '001';
 
-const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, currentUser }) => {
+// Componente para labels de formulário padronizado
+const FormLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <label className="block text-[12px] font-bold text-gray-500 mb-1 tracking-tight">{children}</label>
+);
+
+const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, currentUser, userPermissions }) => {
     const [items, setItems] = useState<StockItem[]>([]);
     const [requests, setRequests] = useState<PurchaseRequest[]>([]);
     const [movements, setMovements] = useState<StockMovement[]>([]);
     const [checkins, setCheckins] = useState<ChecklistEntry[]>([]);
+    const [approvedClients, setApprovedClients] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     
     const [activeTab, setActiveTab] = useState<'inventario' | 'historico'>('inventario');
-    const [movementFilter, setMovementFilter] = useState<'todos' | 'entrada' | 'saida'>('todos');
-    const [purchaseStatusFilter, setPurchaseStatusFilter] = useState<'Todos' | PurchaseRequest['status']>('Todos');
+    const [purchaseStatusFilter, setPurchaseStatusFilter] = useState<'Todos' | PurchaseRequestStatus>('Todos');
 
-    const [isProductModalOpen, setIsProductModalOpen] = useState(false);
-    const [productToEdit, setProductToEdit] = useState<StockItem | null>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    const nfFileInputRef = useRef<HTMLInputElement>(null);
+    // Filtros para o Histórico de Movimentação
+    const [historyItemId, setHistoryItemId] = useState<string>('Todos');
+    const [historySearchTerm, setHistorySearchTerm] = useState('');
+    const [showHistorySuggestions, setShowHistorySuggestions] = useState(false);
+    const historySuggestionRef = useRef<HTMLDivElement>(null);
 
-    const [productForm, setProductForm] = useState({
-        name: '',        
-        unit: 'un',      
-        quantity: 0,     
-        minQuantity: 5,  
-        ncm: '',
-        averagePrice: 0,
-        image: '',
-        isFixedInBudget: false
-    });
+    const [historyStart, setHistoryStart] = useState<string>('');
+    const [historyEnd, setHistoryEnd] = useState<string>('');
 
     const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
     const [requestToEdit, setRequestToEdit] = useState<PurchaseRequest | null>(null);
-    const [selectedRequest, setSelectedRequest] = useState<PurchaseRequest | null>(null);
     const [isManualItem, setIsManualItem] = useState(false);
 
-    const [isCancelConfirmModalOpen, setIsCancelConfirmModalOpen] = useState(false);
-    const [requestBeingCancelled, setRequestBeingCancelled] = useState<PurchaseRequest | null>(null);
-    const [isApproveConfirmModalOpen, setIsApproveConfirmModalOpen] = useState(false);
-    const [requestBeingApproved, setRequestBeingApproved] = useState<PurchaseRequest | null>(null);
-    
+    // States for status transition confirmation
+    const [isConfirmStatusModalOpen, setIsConfirmStatusModalOpen] = useState(false);
+    const [confirmRequest, setConfirmRequest] = useState<PurchaseRequest | null>(null);
+    const [nextStatus, setNextStatus] = useState<PurchaseRequestStatus | null>(null);
+
+    // Estado para histórico de custos
+    const [isPriceHistoryModalOpen, setIsPriceHistoryModalOpen] = useState(false);
+    const [selectedItemForHistory, setSelectedItemForHistory] = useState<StockItem | null>(null);
+
+    // Estado para detalhamento de reservas
+    const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
+    const [selectedItemForReservation, setSelectedItemForReservation] = useState<StockItem | null>(null);
+
+    // Estado para cadastro de produtos
+    const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+    const [productToEdit, setStockItemToEdit] = useState<StockItem | null>(null);
+    const [productForm, setProductForm] = useState({
+        name: '', ncm: '', quantity: 0, minQuantity: 1, unit: 'un', description: '', image: '', averagePrice: 0, isFixedInBudget: true
+    });
+
     const [isNFModalOpen, setIsNFModalOpen] = useState(false);
     const [nfForm, setNfForm] = useState({
-        invoiceNumber: '',
-        invoiceKey: '',
-        totalValue: 0,
-        invoiceFile: ''
+        invoiceNumber: '', invoiceKey: '', totalValue: 0, invoiceFile: '', invoiceFileName: ''
     });
 
     const [requestForm, setRequestForm] = useState({
-        itemName: '',
-        quantity: 1,
-        unit: 'un',
-        priority: 'Média' as 'Baixa' | 'Média' | 'Alta',
-        clientName: '',
-        observation: '',
-        purchaseLink: ''
+        itemName: '', 
+        quantity: 1, 
+        unit: 'un', 
+        priority: 'Média' as 'Baixa' | 'Média' | 'Alta', 
+        clientName: '', 
+        observation: '', 
+        purchaseLink: '',
+        purchaseType: 'Reposição' as 'Reposição' | 'Obra' | 'Avulso',
+        requestDate: new Date().toISOString().split('T')[0]
     });
 
-    const [selectedReservationItem, setSelectedReservationItem] = useState<StockItem | null>(null);
-    const [selectedHistoryItem, setSelectedHistoryItem] = useState<StockItem | null>(null);
-
-    const isAdmin = useMemo(() => currentUser.profileId === ADMIN_PROFILE_ID, [currentUser]);
+    const isAdmin = useMemo(() => String(currentUser.profileId) === ADMIN_PROFILE_ID || userPermissions.includes('ALL'), [currentUser, userPermissions]);
 
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const isUserAdmin = currentUser.profileId === ADMIN_PROFILE_ID;
-            const loadedItems = await dataService.getAll<StockItem>('stock_items', currentUser.id, isUserAdmin);
+            const [loadedItems, loadedMovements, loadedRequests, loadedOrcamentos, loadedCheckins] = await Promise.all([
+                dataService.getAll<StockItem>('stock_items', currentUser.id, true),
+                dataService.getAll<StockMovement>('stock_movements', currentUser.id, true),
+                view === 'compras' ? dataService.getAll<PurchaseRequest>('purchase_requests', currentUser.id, isAdmin) : Promise.resolve([]),
+                dataService.getAll<SavedOrcamento>('orcamentos', currentUser.id, isAdmin),
+                dataService.getAll<ChecklistEntry>('checklist_checkin', currentUser.id, isAdmin)
+            ]);
+
             setItems(loadedItems.sort((a,b) => (a.name || '').localeCompare(b.name || '')));
-
-            const loadedMovements = await dataService.getAll<StockMovement>('stock_movements', currentUser.id, isUserAdmin);
             setMovements(loadedMovements.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-
-            const loadedCheckins = await dataService.getAll<ChecklistEntry>('checklist_checkin', currentUser.id, isUserAdmin);
             setCheckins(loadedCheckins);
-
+            
             if (view === 'compras') {
-                const loadedRequests = await dataService.getAll<PurchaseRequest>('purchase_requests', currentUser.id, isUserAdmin);
                 setRequests(loadedRequests.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+                
+                const clients = loadedOrcamentos
+                    .filter(orc => orc.status === 'Aprovado')
+                    .map(orc => {
+                        if (orc.variants?.length) {
+                            const p = orc.variants.find(v => v.isPrincipal) || orc.variants[0];
+                            return p.formState?.nomeCliente;
+                        }
+                        return orc.formState?.nomeCliente;
+                    })
+                    .filter(name => !!name);
+                
+                setApprovedClients(Array.from(new Set(clients)).sort());
             }
-        } catch (error) {
-            console.error("Erro ao carregar dados:", error);
-        } finally {
-            setIsLoading(false);
-        }
+        } catch (error) { console.error("Erro:", error); } finally { setIsLoading(false); }
     };
 
     useEffect(() => { loadData(); }, [currentUser, view]);
 
-    const reservationsForItem = useMemo(() => {
-        if (!selectedReservationItem) return [];
-        
-        return checkins
-            .filter(c => c.status === 'Efetivado')
-            .map(c => {
-                const component = c.details.componentesEstoque?.find(
-                    (comp: any) => String(comp.itemId) === String(selectedReservationItem.id)
-                );
-                if (component) {
-                    return {
-                        id: c.id,
-                        clientName: c.project || c.details.nomeTitular || 'Cliente não identificado',
-                        quantity: component.qty,
-                        date: c.date
-                    };
-                }
-                return null;
-            })
-            .filter((r): r is { id: string, clientName: string, quantity: number, date: string } => r !== null);
-    }, [checkins, selectedReservationItem]);
-
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => setProductForm(prev => ({ ...prev, image: reader.result as string }));
-            reader.readAsDataURL(file);
-        }
-    };
-
-    const handleNFFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => setNfForm(prev => ({ ...prev, invoiceFile: reader.result as string }));
-            reader.readAsDataURL(file);
-        }
-    };
-
-    const handleOpenProductForm = (item?: StockItem) => {
-        if (item) {
-            setProductToEdit(item);
-            setProductForm({
-                name: item.name || '',
-                unit: item.unit || 'un',
-                quantity: item.quantity || 0,
-                minQuantity: item.minQuantity || 5,
-                ncm: item.ncm || '',
-                averagePrice: item.averagePrice || 0,
-                image: item.image || '',
-                isFixedInBudget: !!item.isFixedInBudget
-            });
-        } else {
-            setProductToEdit(null);
-            setProductForm({ name: '', unit: 'un', quantity: 0, minQuantity: 5, ncm: '', averagePrice: 0, image: '', isFixedInBudget: false });
-        }
-        setIsProductModalOpen(true);
-    };
-
-    const handleSaveProduct = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!productForm.name.trim()) return alert("A descrição do produto é obrigatória.");
-        setIsSaving(true);
-        const productData: StockItem = {
-            id: productToEdit ? productToEdit.id : String(Date.now()),
-            owner_id: currentUser.id,
-            name: productForm.name,
-            unit: productForm.unit,
-            quantity: Number(productForm.quantity),
-            minQuantity: Number(productForm.minQuantity),
-            ncm: productForm.ncm,
-            averagePrice: Number(productForm.averagePrice),
-            image: productForm.image || undefined,
-            isFixedInBudget: productForm.isFixedInBudget,
-            priceHistory: productToEdit?.priceHistory || []
+    // Clique fora das sugestões do histórico
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (historySuggestionRef.current && !historySuggestionRef.current.contains(event.target as Node)) {
+                setShowHistorySuggestions(false);
+            }
         };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const handleUpdateStatus = async () => {
+        if (!confirmRequest || !nextStatus) return;
+        setIsSaving(true);
         try {
-            await dataService.save('stock_items', productData);
-            setIsProductModalOpen(false);
+            const updated = { ...confirmRequest, status: nextStatus };
+            await dataService.save('purchase_requests', updated);
             await loadData();
-        } catch (error: any) {
-            alert(`Erro ao salvar: ${error.message}`);
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
-    const handleProductSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const selectedName = e.target.value;
-        const product = items.find(i => i.name === selectedName);
-        setRequestForm(prev => ({ 
-            ...prev, 
-            itemName: selectedName, 
-            unit: product ? product.unit : 'un' 
-        }));
-    };
-
-    const handleOpenRequestForm = (req?: PurchaseRequest) => {
-        if (req) {
-            setRequestToEdit(req);
-            const isInCatalog = items.some(i => i.name.toLowerCase() === req.itemName.toLowerCase());
-            setIsManualItem(!isInCatalog);
-            
-            setRequestForm({
-                itemName: req.itemName,
-                quantity: req.quantity,
-                unit: req.unit,
-                priority: req.priority,
-                clientName: req.clientName || '',
-                observation: req.observation || '',
-                purchaseLink: req.purchaseLink || ''
-            });
-        } else {
+            setIsConfirmStatusModalOpen(false);
+            setConfirmRequest(null);
+            setNextStatus(null);
+            setIsRequestModalOpen(false);
             setRequestToEdit(null);
-            setIsManualItem(false); 
-            setRequestForm({ itemName: '', quantity: 1, unit: 'un', priority: 'Média', clientName: '', observation: '', purchaseLink: '' });
+        } catch (e) { 
+            alert("Erro ao atualizar status"); 
         }
-        setIsRequestModalOpen(true);
+        finally { 
+            setIsSaving(false); 
+        }
+    };
+
+    const triggerStatusConfirmation = (request: PurchaseRequest, status: PurchaseRequestStatus) => {
+        setConfirmRequest(request);
+        setNextStatus(status);
+        setIsConfirmStatusModalOpen(true);
     };
 
     const handleSaveRequest = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!requestForm.itemName.trim()) { alert("Por favor, informe a descrição do item."); return; }
+        if (!requestForm.itemName.trim()) return;
         setIsSaving(true);
         try {
-            const finalType: 'Avulso' | 'Reposição' = isManualItem ? 'Avulso' : 'Reposição';
-            
             const requestData: PurchaseRequest = {
                 id: requestToEdit ? requestToEdit.id : String(Date.now()),
                 owner_id: requestToEdit ? requestToEdit.owner_id : currentUser.id,
@@ -237,43 +168,42 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                 quantity: Number(requestForm.quantity),
                 unit: requestForm.unit,
                 requester: requestToEdit ? requestToEdit.requester : currentUser.name,
-                date: requestToEdit ? requestToEdit.date : new Date().toISOString(),
+                date: requestForm.requestDate,
                 priority: requestForm.priority,
-                status: requestToEdit ? requestToEdit.status : 'Pendente',
-                clientName: requestForm.clientName || (isManualItem ? 'Pedido Avulso' : 'Estoque Central'),
+                status: requestToEdit ? requestToEdit.status : 'Aberto',
+                clientName: requestForm.purchaseType === 'Obra' ? requestForm.clientName : 'Estoque central',
                 purchaseLink: requestForm.purchaseLink,
-                purchaseType: finalType, 
+                purchaseType: requestForm.purchaseType, 
                 observation: requestForm.observation
             };
             await dataService.save('purchase_requests', requestData);
             setIsRequestModalOpen(false);
-            setRequestToEdit(null);
             await loadData();
-        } catch (error: any) {
-            console.error("Erro ao salvar pedido:", error);
-            alert(`Erro ao salvar pedido.`);
-        } finally {
-            setIsSaving(false);
-        }
+        } finally { setIsSaving(false); }
     };
 
-    const handleInitiateEfetivar = (request: PurchaseRequest) => {
-        setSelectedRequest(request);
-        setNfForm({ invoiceNumber: '', invoiceKey: '', totalValue: 0, invoiceFile: '' });
-        setIsNFModalOpen(true);
+    const handleNFFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const base64 = event.target?.result as string;
+                setNfForm(prev => ({
+                    ...prev,
+                    invoiceFile: base64,
+                    invoiceFileName: file.name
+                }));
+            };
+            reader.readAsDataURL(file);
+        }
     };
 
     const handleConfirmFinalization = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedRequest) return;
-        if (!nfForm.invoiceNumber || nfForm.totalValue <= 0) {
-            alert("Preencha os dados da nota fiscal corretamente.");
-            return;
-        }
-
+        if (!requestToEdit) return;
         setIsSaving(true);
         try {
-            const request = selectedRequest;
+            const request = requestToEdit;
             const stockItem = items.find(i => i.name.toLowerCase() === request.itemName.toLowerCase());
             
             if (stockItem) {
@@ -283,147 +213,208 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                 const newQtyTotal = currentQty + request.quantity;
                 const weightedAveragePrice = ((currentQty * currentAvgPrice) + (request.quantity * newUnitCost)) / newQtyTotal;
 
-                // Atualiza histórico de preços
                 const historyEntry: PriceHistoryEntry = {
-                    date: new Date().toISOString(),
-                    price: newUnitCost,
-                    invoiceNumber: nfForm.invoiceNumber
+                    date: new Date().toISOString(), price: newUnitCost, invoiceNumber: nfForm.invoiceNumber
                 };
                 const updatedPriceHistory = [...(stockItem.priceHistory || []), historyEntry];
 
-                const updatedItem = {
+                await dataService.save('stock_items', {
                     ...stockItem,
                     quantity: newQtyTotal,
                     averagePrice: Math.round(weightedAveragePrice * 100) / 100,
                     priceHistory: updatedPriceHistory
-                };
-                await dataService.save('stock_items', updatedItem);
+                });
 
-                const movement: StockMovement = {
+                await dataService.save('stock_movements', {
                     id: `mov-${Date.now()}`,
                     owner_id: currentUser.id,
                     itemId: String(stockItem.id),
                     quantity: request.quantity,
                     type: 'entrada',
                     date: new Date().toISOString(),
-                    observation: `Entrada via NF ${nfForm.invoiceNumber} (Pedido #${request.id}) - Custo Unit: ${formatCurrency(newUnitCost)} | Destino: ${request.clientName || 'Estoque'}`
-                };
-                await dataService.save('stock_movements', movement);
+                    observation: `Entrada via nf ${nfForm.invoiceNumber}`
+                });
             }
 
-            const updatedRequest: PurchaseRequest = { 
+            await dataService.save('purchase_requests', { 
                 ...request, 
-                status: 'Comprado',
+                status: 'Concluído',
                 invoiceFile: nfForm.invoiceFile || undefined,
-                observation: `${request.observation || ''}\n[NF: ${nfForm.invoiceNumber} | Valor: ${formatCurrency(nfForm.totalValue)}]`.trim()
-            };
-            await dataService.save('purchase_requests', updatedRequest);
+                invoiceKey: nfForm.invoiceKey || undefined,
+                observation: `${request.observation || ''}\n[Efetivado: nf ${nfForm.invoiceNumber}]`.trim()
+            });
             
             setIsNFModalOpen(false);
-            setSelectedRequest(null);
+            setRequestToEdit(null);
             await loadData();
-            
-            const successMsg = stockItem 
-                ? "Pedido efetivado com sucesso! Saldo e preço médio atualizados." 
-                : "Pedido efetivado com sucesso! (Item não vinculado ao estoque)";
-            alert(successMsg);
-        } catch (e) {
-            console.error(e);
-            alert("Erro ao processar a efetivação.");
-        } finally {
-            setIsSaving(false);
-        }
+            alert("Compra efetivada com sucesso! estoque atualizado.");
+        } finally { setIsSaving(false); }
     };
 
-    const handleInitiateCancel = (request: PurchaseRequest) => {
-        setRequestBeingCancelled(request);
-        setIsCancelConfirmModalOpen(true);
-    };
-
-    const handleConfirmCancel = async () => {
-        if (!requestBeingCancelled) return;
+    const handleSaveProduct = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!productForm.name.trim()) return;
         setIsSaving(true);
         try {
-            const updatedRequest: PurchaseRequest = { ...requestBeingCancelled, status: 'Cancelado' };
-            await dataService.save('purchase_requests', updatedRequest);
-            
-            setRequests(prev => prev.map(r => String(r.id) === String(updatedRequest.id) ? updatedRequest : r));
-            setIsCancelConfirmModalOpen(false);
-            setRequestBeingCancelled(null);
-            setSelectedRequest(null); 
-            
+            const itemData: StockItem = {
+                id: productToEdit ? productToEdit.id : `prod-${Date.now()}`,
+                owner_id: productToEdit ? productToEdit.owner_id : currentUser.id,
+                name: productForm.name,
+                ncm: productForm.ncm,
+                quantity: Number(productForm.quantity),
+                reservedQuantity: productToEdit ? productToEdit.reservedQuantity : 0,
+                minQuantity: productForm.minQuantity,
+                unit: productForm.unit,
+                description: productForm.description,
+                image: productForm.image,
+                averagePrice: productForm.averagePrice,
+                isFixedInBudget: productForm.isFixedInBudget,
+                priceHistory: productToEdit ? productToEdit.priceHistory : (Number(productForm.quantity) > 0 ? [{
+                    date: new Date().toISOString(),
+                    price: productForm.averagePrice,
+                }] : [])
+            };
+            await dataService.save('stock_items', itemData);
+            setIsProductModalOpen(false);
             await loadData();
-        } catch (e) {
-            console.error("Erro ao cancelar pedido:", e);
-            alert("Erro ao cancelar o pedido.");
-        } finally {
-            setIsSaving(false);
+        } finally { setIsSaving(false); }
+    };
+
+    const handleDeleteProduct = async (id: string | number) => {
+        if (confirm("Deseja realmente excluir este produto?")) {
+            await dataService.delete('stock_items', id);
+            await loadData();
         }
     };
 
-    const handleInitiateApprove = (request: PurchaseRequest) => {
-        setRequestBeingApproved(request);
-        setIsApproveConfirmModalOpen(true);
-    };
-
-    const handleConfirmApprove = async () => {
-        if (!requestBeingApproved) return;
-        setIsSaving(true);
-        try {
-            const updatedRequest: PurchaseRequest = { ...requestBeingApproved, status: 'Aprovado' };
-            await dataService.save('purchase_requests', updatedRequest);
-            
-            setRequests(prev => prev.map(r => String(r.id) === String(updatedRequest.id) ? updatedRequest : r));
-            setIsApproveConfirmModalOpen(false);
-            setRequestBeingApproved(null);
-            setSelectedRequest(null); 
-            
-            await loadData();
-        } catch (e) {
-            console.error("Erro ao aprovar pedido:", e);
-            alert("Erro ao aprovar o pedido.");
-        } finally {
-            setIsSaving(false);
+    const handleProductPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                setProductForm(prev => ({ ...prev, image: event.target?.result as string }));
+            };
+            reader.readAsDataURL(file);
         }
     };
 
-    const filteredMovements = useMemo(() => {
-        if (movementFilter === 'todos') return movements;
-        return movements.filter(m => m.type === movementFilter);
-    }, [movements, movementFilter]);
+    const formatCurrency = (value: number) => {
+        if (isNaN(value)) return 'R$ 0,00';
+        const rounded = Math.ceil(value * 100) / 100;
+        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 }).format(rounded);
+    };
+
+    const getStatusInfo = (status: PurchaseRequestStatus) => {
+        switch(status) {
+            case 'Aberto': return { color: 'bg-gray-100 text-gray-700', icon: PlusIcon, label: 'Aberto' };
+            case 'Aprovado': return { color: 'bg-blue-100 text-blue-700', icon: CheckCircleIcon, label: 'Aprovado' };
+            case 'Comprado': return { color: 'bg-indigo-100 text-indigo-700', icon: ShoppingCartIcon, label: 'Comprado' };
+            case 'Em trânsito': return { color: 'bg-purple-100 text-purple-700', icon: TruckIcon, label: 'Em trânsito' };
+            case 'Concluído': return { color: 'bg-green-100 text-green-700', icon: CheckCircleIcon, label: 'Concluído' };
+            case 'Cancelado': return { color: 'bg-red-100 text-red-700', icon: XCircleIcon, label: 'Cancelado' };
+            default: return { color: 'bg-gray-100 text-gray-400', icon: PlusIcon, label: status };
+        }
+    };
 
     const filteredRequests = useMemo(() => {
         if (purchaseStatusFilter === 'Todos') return requests;
         return requests.filter(r => r.status === purchaseStatusFilter);
     }, [requests, purchaseStatusFilter]);
 
-    const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+    const filteredMovements = useMemo(() => {
+        return movements.filter(mov => {
+            const matchesItem = historyItemId === 'Todos' || String(mov.itemId) === historyItemId;
+            const movDate = mov.date.split('T')[0];
+            const matchesStart = !historyStart || movDate >= historyStart;
+            const matchesEnd = !historyEnd || movDate <= historyEnd;
+            return matchesItem && matchesStart && matchesEnd;
+        });
+    }, [movements, historyItemId, historyStart, historyEnd]);
 
-    const getFinalidadeByItemName = (itemName: string) => {
-        const isInCatalog = items.some(i => i.name.toLowerCase() === itemName.toLowerCase());
-        return isInCatalog ? 'Reposição' : 'Avulso';
+    const filteredItemsForHistory = useMemo(() => {
+        if (!historySearchTerm) return items;
+        return items.filter(i => i.name.toLowerCase().includes(historySearchTerm.toLowerCase()));
+    }, [items, historySearchTerm]);
+
+    const handleSelectHistoryItem = (item: StockItem | 'Todos') => {
+        if (item === 'Todos') {
+            setHistoryItemId('Todos');
+            setHistorySearchTerm('');
+        } else {
+            setHistoryItemId(String(item.id));
+            setHistorySearchTerm(item.name);
+        }
+        setShowHistorySuggestions(false);
     };
 
-    // Helper para extrair tendência de preço
-    const getPriceTrend = (item: StockItem) => {
-        const history = item.priceHistory || [];
-        if (history.length < 2) return null;
-        const last = history[history.length - 1].price;
-        const prev = history[history.length - 2].price;
-        if (last > prev) return { type: 'up', color: 'text-red-500' };
-        if (last < prev) return { type: 'down', color: 'text-green-500' };
-        return { type: 'equal', color: 'text-gray-400' };
+    const editableFieldClass = "w-full rounded-lg border-2 border-indigo-400 dark:border-indigo-600 bg-white dark:bg-gray-800 px-3 py-1.5 text-[13px] font-bold text-gray-800 dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-600 transition-all shadow-sm block";
+    const labelSentenceClass = "block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-0.5 ml-0.5";
+
+    const handleManageRequest = (req: PurchaseRequest) => {
+        setRequestToEdit(req);
+        setRequestForm({
+            itemName: req.itemName,
+            quantity: req.quantity,
+            unit: req.unit,
+            priority: req.priority,
+            clientName: req.clientName || '',
+            observation: req.observation || '',
+            purchaseLink: req.purchaseLink || '',
+            purchaseType: req.purchaseType || 'Reposição',
+            requestDate: req.date
+        });
+        const inCatalog = items.some(i => i.name === req.itemName);
+        setIsManualItem(!inCatalog);
+        setIsRequestModalOpen(true);
     };
+
+    const handleShowPriceHistory = (item: StockItem) => {
+        setSelectedItemForHistory(item);
+        setIsPriceHistoryModalOpen(true);
+    };
+
+    const handleShowReservations = (e: React.MouseEvent, item: StockItem) => {
+        e.stopPropagation();
+        if ((item.reservedQuantity || 0) <= 0) return;
+        setSelectedItemForReservation(item);
+        setIsReservationModalOpen(true);
+    };
+
+    const priceHistoryChartData = useMemo(() => {
+        if (!selectedItemForHistory?.priceHistory) return [];
+        return [...selectedItemForHistory.priceHistory]
+            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+            .map(entry => ({
+                date: new Date(entry.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }),
+                price: entry.price
+            }));
+    }, [selectedItemForHistory]);
+
+    const activeReservations = useMemo(() => {
+        if (!selectedItemForReservation) return [];
+        const itemId = String(selectedItemForReservation.id);
+        
+        return checkins
+            .filter(c => (c.status === 'Efetivado' || c.status === 'Aberto') && c.details.componentesEstoque?.some((comp: any) => String(comp.itemId) === itemId))
+            .map(c => {
+                const comp = c.details.componentesEstoque.find((comp: any) => String(comp.itemId) === itemId);
+                return {
+                    project: c.project,
+                    date: c.date,
+                    qty: comp?.qty || 0,
+                    status: c.status,
+                    responsible: c.responsible
+                };
+            })
+            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    }, [selectedItemForReservation, checkins]);
 
     if (view === 'visao_geral') {
         const inventoryValue = items.reduce((acc, i) => acc + (i.quantity * (i.averagePrice || 0)), 0);
         return (
             <div className="space-y-6 animate-fade-in">
                 <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div>
-                        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Estoque geral</h2>
-                        <p className="text-xs text-gray-500 font-bold mt-1">Gestão de inventário e movimentações</p>
-                    </div>
+                    <div><h2 className="text-2xl font-bold text-gray-900 dark:text-white">Estoque geral</h2><p className="text-xs text-gray-500 font-bold mt-1">Gestão de inventário e movimentações</p></div>
                     <div className="flex bg-white dark:bg-gray-800 p-1 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                         <button onClick={() => setActiveTab('inventario')} className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${activeTab === 'inventario' ? 'bg-indigo-600 text-white shadow-md' : 'text-gray-400 hover:text-gray-600'}`}>Inventário atual</button>
                         <button onClick={() => setActiveTab('historico')} className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${activeTab === 'historico' ? 'bg-indigo-600 text-white shadow-md' : 'text-gray-400 hover:text-gray-600'}`}>Histórico de movimentação</button>
@@ -441,255 +432,328 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                         <table className="min-w-full text-left text-sm">
                             <thead className="bg-gray-50 dark:bg-gray-700 font-bold text-[11px] text-gray-500 border-b">
                                 <tr>
-                                    <th className="px-4 py-4 w-16">Foto</th>
+                                    <th className="px-4 py-4">Foto</th>
                                     <th className="px-4 py-4">Descrição</th>
-                                    <th className="px-4 py-4">NCM</th>
-                                    <th className="px-4 py-4 text-center">Und.</th>
                                     <th className="px-4 py-4 text-right">Custo unitário</th>
                                     <th className="px-4 py-4 text-center">Saldo</th>
+                                    <th className="px-4 py-4 text-center">Saldo mínimo</th>
                                     <th className="px-4 py-4 text-center">Reservado</th>
-                                    <th className="px-4 py-4 text-center">Mínimo</th>
                                     <th className="px-4 py-4 text-center">Saldo futuro</th>
-                                    <th className="px-4 py-4 text-right">Valor total</th>
                                     <th className="px-4 py-4 text-center">Status</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                {items.length > 0 ? items.map(item => {
+                                {items.map(item => {
                                     const isLowStock = item.quantity <= item.minQuantity;
-                                    const futureStock = (item.quantity || 0) - (item.reservedQuantity || 0);
-                                    const itemTotalValue = (item.quantity || 0) * (item.averagePrice || 0);
                                     const hasReservations = (item.reservedQuantity || 0) > 0;
-                                    const trend = getPriceTrend(item);
-
                                     return (
-                                        <tr key={item.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 ${isLowStock ? 'bg-red-50/50 dark:bg-red-900/10' : ''}`}>
-                                            <td className="px-4 py-3"><div className="w-10 h-10 rounded-lg border bg-gray-50 dark:bg-gray-900 flex items-center justify-center overflow-hidden">{item.image ? <img src={item.image} className="w-full h-full object-cover" alt="" /> : <PhotographIcon className="w-5 h-5 text-gray-300" />}</div></td>
-                                            <td className="px-4 py-3 font-bold text-gray-900 dark:text-white">{item.name}</td>
-                                            <td className="px-4 py-3 text-gray-400 font-medium text-xs">{item.ncm || '---'}</td>
-                                            <td className="px-4 py-3 text-center font-bold text-gray-400">{item.unit}</td>
-                                            <td className="px-4 py-3 text-right align-middle">
-                                                <button 
-                                                    onClick={() => setSelectedHistoryItem(item)}
-                                                    className="group relative flex flex-col items-end w-full h-5"
-                                                    title="Clique para ver evolução de custos"
-                                                >
-                                                    <div className="flex items-center gap-1">
-                                                        <span className="font-bold text-indigo-600 dark:text-indigo-400 group-hover:underline">
-                                                            {formatCurrency(item.averagePrice || 0)}
-                                                        </span>
-                                                        {trend && (
-                                                            <span>
-                                                                {trend.type === 'up' ? <ArrowUpIcon className={`w-3 h-3 ${trend.color}`} /> : 
-                                                                 trend.type === 'down' ? <ArrowDownIcon className={`w-3 h-3 ${trend.color}`} /> : 
-                                                                 null}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <div className="h-0 w-full relative">
-                                                        <span className="absolute top-0 right-0 text-[9px] text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity font-bold whitespace-nowrap">Ver histórico</span>
-                                                    </div>
-                                                </button>
+                                        <tr key={item.id} className={`hover:bg-indigo-50/30 dark:hover:bg-indigo-900/10 transition-colors cursor-pointer group ${isLowStock ? 'bg-red-50/50 dark:bg-red-900/10' : ''}`} onClick={() => handleShowPriceHistory(item)}>
+                                            <td className="px-4 py-3"><div className="w-10 h-10 rounded-lg border bg-white dark:bg-gray-900 flex items-center justify-center overflow-hidden">{item.image ? <img src={item.image} className="w-full h-full object-cover" alt="" /> : <PhotographIcon className="w-5 h-5 text-gray-300" />}</div></td>
+                                            <td className="px-4 py-3">
+                                                <p className="font-bold text-gray-900 dark:text-white group-hover:text-indigo-600 transition-colors">{item.name}</p>
+                                                <p className="text-[9px] text-gray-400 font-medium">Clique para ver histórico de custos</p>
                                             </td>
+                                            <td className="px-4 py-3 text-right font-bold text-indigo-600">{formatCurrency(item.averagePrice || 0)}</td>
                                             <td className="px-4 py-3 text-center font-black text-gray-900 dark:text-white">{item.quantity}</td>
-                                            <td className="px-4 py-3 text-center">
-                                                {hasReservations ? (
-                                                    <button 
-                                                        onClick={() => setSelectedReservationItem(item)}
-                                                        className="font-black text-indigo-600 dark:text-indigo-400 underline decoration-indigo-300 underline-offset-4 hover:text-indigo-800 transition-colors"
-                                                        title="Clique para ver quem reservou"
-                                                    >
-                                                        {item.reservedQuantity}
-                                                    </button>
-                                                ) : (
-                                                    <span className="font-bold text-gray-400">{item.reservedQuantity || 0}</span>
-                                                )}
+                                            <td className="px-4 py-3 text-center font-black text-orange-600">{item.minQuantity}</td>
+                                            <td 
+                                                className={`px-4 py-3 text-center font-bold ${hasReservations ? 'text-amber-600 underline decoration-dotted hover:text-amber-700' : 'text-gray-400'}`}
+                                                onClick={(e) => handleShowReservations(e, item)}
+                                                title={hasReservations ? "Clique para ver detalhes das reservas" : ""}
+                                            >
+                                                {item.reservedQuantity || 0}
                                             </td>
-                                            <td className="px-4 py-3 text-center font-bold text-gray-400">{item.minQuantity}</td>
-                                            <td className={`px-4 py-3 text-center font-bold ${futureStock < 0 ? 'text-red-600' : 'text-indigo-600'}`}>
-                                                {futureStock}
-                                            </td>
-                                            <td className="px-4 py-3 text-right font-black text-gray-700 dark:text-gray-300">{formatCurrency(itemTotalValue)}</td>
-                                            <td className="px-4 py-3 text-center">{isLowStock ? <span className="text-[10px] font-black text-red-600 bg-red-100 dark:bg-red-900/40 px-3 py-1 rounded-full tracking-tighter shadow-sm">Reposição</span> : <span className="text-[10px] font-black text-green-600 bg-green-100 dark:bg-green-900/40 px-3 py-1 rounded-full tracking-tighter shadow-sm">Normal</span>}</td>
+                                            <td className="px-4 py-3 text-center font-bold text-indigo-600">{(item.quantity || 0) - (item.reservedQuantity || 0)}</td>
+                                            <td className="px-4 py-3 text-center">{isLowStock ? <span className="text-[9px] font-black text-red-600 bg-red-100 px-2 py-1 rounded-full">Reposição</span> : <span className="text-[9px] font-black text-green-600 bg-green-100 px-2 py-1 rounded-full">Normal</span>}</td>
                                         </tr>
                                     );
-                                }) : (<tr><td colSpan={11} className="px-6 py-12 text-center text-gray-400 italic">Nenhum produto cadastrado para exibição.</td></tr>)}
+                                })}
                             </tbody>
                         </table>
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        <div className="flex flex-col sm:flex-row justify-between items-center bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm gap-4">
-                            <div className="flex items-center gap-3"><FilterIcon className="w-5 h-5 text-gray-400" /><span className="text-xs font-bold text-gray-500">Filtrar movimentações:</span></div>
-                            <div className="flex gap-2 w-full sm:w-auto">{(['todos', 'entrada', 'saida'] as const).map(f => (<button key={f} onClick={() => setMovementFilter(f)} className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all ${movementFilter === f ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-gray-50 text-gray-400 border-transparent'} border`}>{f === 'todos' ? 'Ver todas' : f === 'entrada' ? 'Entradas' : 'Saídas'}</button>))}</div>
+                        <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col md:flex-row items-end gap-4">
+                            <div className="flex-1 w-full relative" ref={historySuggestionRef}>
+                                <label className="block text-[11px] font-bold text-gray-400 mb-1.5 ml-1">Filtrar componente</label>
+                                <div className="relative">
+                                    <input 
+                                        type="text"
+                                        autoComplete="off"
+                                        placeholder="Digite para buscar componente..."
+                                        value={historySearchTerm}
+                                        onFocus={() => setShowHistorySuggestions(true)}
+                                        onChange={(e) => {
+                                            setHistorySearchTerm(e.target.value);
+                                            setShowHistorySuggestions(true);
+                                            if (e.target.value === '') setHistoryItemId('Todos');
+                                        }}
+                                        className="w-full h-11 bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 rounded-xl px-4 pr-10 text-xs font-bold text-gray-700 dark:text-gray-200 outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm"
+                                    />
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-40">
+                                        <SearchIcon className="w-4 h-4" />
+                                    </div>
+                                </div>
+
+                                {showHistorySuggestions && (
+                                    <div className="absolute top-full left-0 z-50 w-full bg-white dark:bg-gray-800 mt-1 rounded-xl shadow-2xl border border-indigo-50 dark:border-gray-700 py-2 max-h-52 overflow-y-auto custom-scrollbar animate-fade-in">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleSelectHistoryItem('Todos')}
+                                            className="w-full flex items-center px-4 py-2 text-left hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-xs font-bold text-gray-700 dark:text-gray-200"
+                                        >
+                                            Todos os componentes
+                                        </button>
+                                        <div className="h-px bg-gray-100 dark:bg-gray-700 my-1 mx-2"></div>
+                                        {filteredItemsForHistory.map(item => (
+                                            <button
+                                                key={item.id}
+                                                type="button"
+                                                onClick={() => handleSelectHistoryItem(item)}
+                                                className="w-full flex items-center px-4 py-2.5 text-left hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all border-l-2 border-transparent hover:border-indigo-600"
+                                            >
+                                                <div className="flex-1">
+                                                    <p className="text-[11px] font-bold text-gray-800 dark:text-white">{item.name}</p>
+                                                    <p className="text-[9px] text-gray-400 font-medium">Saldo: {item.quantity} {item.unit}</p>
+                                                </div>
+                                            </button>
+                                        ))}
+                                        {filteredItemsForHistory.length === 0 && (
+                                            <p className="px-4 py-3 text-[10px] text-gray-400 italic text-center">Nenhum componente encontrado.</p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                            <div className="w-full md:w-44">
+                                <label className="block text-[11px] font-bold text-gray-400 mb-1.5 ml-1">De (Data)</label>
+                                <div className="relative">
+                                    <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                    <input 
+                                        type="date" 
+                                        value={historyStart}
+                                        onChange={(e) => setHistoryStart(e.target.value)}
+                                        className="w-full h-11 bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 rounded-xl pl-10 pr-4 text-xs font-bold text-gray-700 dark:text-gray-200 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                                    />
+                                </div>
+                            </div>
+                            <div className="w-full md:w-44">
+                                <label className="block text-[11px] font-bold text-gray-400 mb-1.5 ml-1">Até (Data)</label>
+                                <div className="relative">
+                                    <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                    <input 
+                                        type="date" 
+                                        value={historyEnd}
+                                        onChange={(e) => setHistoryEnd(e.target.value)}
+                                        className="w-full h-11 bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 rounded-xl pl-10 pr-4 text-xs font-bold text-gray-700 dark:text-gray-200 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                                    />
+                                </div>
+                            </div>
+                            {(historyItemId !== 'Todos' || historySearchTerm || historyStart || historyEnd) && (
+                                <button 
+                                    onClick={() => { setHistoryItemId('Todos'); setHistorySearchTerm(''); setHistoryStart(''); setHistoryEnd(''); }}
+                                    className="h-11 px-4 text-xs font-bold text-red-500 hover:bg-red-50 rounded-xl transition-colors border border-red-100"
+                                >
+                                    Limpar
+                                </button>
+                            )}
                         </div>
+
                         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border dark:border-gray-700 overflow-hidden">
                             <table className="min-w-full text-left text-sm">
-                                <thead className="bg-gray-50 dark:bg-gray-700 font-bold text-[11px] text-gray-500 border-b">
+                                <thead className="bg-gray-50 dark:bg-gray-700 font-bold text-[11px] text-gray-400 border-b">
                                     <tr>
-                                        <th className="px-6 py-4">Data / hora</th>
+                                        <th className="px-6 py-4">Data</th>
+                                        <th className="px-6 py-4">Cliente / Obra</th>
+                                        <th className="px-6 py-4">Origem / Caminho</th>
                                         <th className="px-6 py-4">Tipo</th>
                                         <th className="px-6 py-4">Produto</th>
                                         <th className="px-6 py-4 text-center">Quantidade</th>
-                                        <th className="px-6 py-4">Observação / referência</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                    {filteredMovements.length > 0 ? filteredMovements.map(mov => {
-                                        const product = items.find(i => String(i.id) === String(mov.itemId));
-                                        return (
-                                            <tr key={mov.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                                                <td className="px-6 py-4"><div className="text-gray-900 dark:text-white font-bold">{new Date(mov.date).toLocaleDateString('pt-BR')}</div><div className="text-[10px] text-gray-400 font-mono">{new Date(mov.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div></td>
-                                                <td className="px-6 py-4">{mov.type === 'entrada' ? (<span className="flex items-center gap-1.5 text-green-600 font-bold text-[10px] bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded-full w-fit"><ArrowUpIcon className="w-3 h-3" /> Entrada</span>) : (<span className="flex items-center gap-1.5 text-red-600 font-bold text-[10px] bg-red-100 dark:bg-green-900/30 px-2 py-1 rounded-full w-fit"><ArrowDownIcon className="w-3 h-3" /> Saída</span>)}</td>
-                                                <td className="px-6 py-4 font-bold text-gray-700 dark:text-gray-200">{product?.name || 'Item não identificado'}</td>
-                                                <td className={`px-6 py-4 text-center font-black text-lg ${mov.type === 'entrada' ? 'text-green-600' : 'text-red-600'}`}>{mov.type === 'entrada' ? '+' : '-'}{mov.quantity}</td>
-                                                <td className="px-6 py-4 text-xs text-gray-500 italic max-w-xs truncate" title={mov.observation}>{mov.observation || 'Sem observação registrada.'}</td>
-                                            </tr>
-                                        );
-                                    }) : (<tr><td colSpan={5} className="px-6 py-12 text-center text-gray-400 italic">Nenhuma movimentação encontrada para o filtro selecionado.</td></tr>)}
+                                    {filteredMovements.length > 0 ? filteredMovements.map(mov => (
+                                        <tr key={mov.id}>
+                                            <td className="px-6 py-4 text-xs font-bold text-gray-500">{new Date(mov.date).toLocaleString('pt-BR')}</td>
+                                            <td className="px-6 py-4 text-xs font-bold text-gray-800 dark:text-gray-200">{mov.projectName || '---'}</td>
+                                            <td className="px-6 py-4">
+                                                <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                                                    {mov.observation || '---'}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4">{mov.type === 'entrada' ? <span className="text-green-600 font-black text-[10px] bg-green-50 px-2 py-0.5 rounded">Entrada</span> : <span className="text-red-600 font-black text-[10px] bg-red-50 px-2 py-0.5 rounded">Saída</span>}</td>
+                                            <td className="px-6 py-4 font-bold text-gray-700 dark:text-gray-200">{items.find(i => String(i.id) === String(mov.itemId))?.name || '---'}</td>
+                                            <td className={`px-6 py-4 text-center font-black ${mov.type === 'entrada' ? 'text-green-600' : 'text-red-600'}`}>{mov.type === 'entrada' ? '+' : '-'}{mov.quantity}</td>
+                                        </tr>
+                                    )) : (
+                                        <tr>
+                                            <td colSpan={6} className="px-6 py-12 text-center text-gray-400 italic font-bold text-xs">
+                                                Nenhum registro encontrado para estes filtros.
+                                            </td>
+                                        </tr>
+                                    )}
                                 </tbody>
                             </table>
                         </div>
                     </div>
                 )}
 
-                {selectedHistoryItem && (
-                    <Modal 
-                        title={`Evolução de custo: ${selectedHistoryItem.name}`} 
-                        onClose={() => setSelectedHistoryItem(null)}
-                        maxWidth="max-w-3xl"
-                    >
-                        <div className="space-y-6">
-                            <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl border dark:border-gray-700">
-                                <h4 className="text-[11px] font-black text-indigo-600 mb-6 flex items-center gap-2">
-                                    <ChartPieIcon className="w-4 h-4" /> Histórico de compras por NF
-                                </h4>
-                                
-                                <div className="h-[300px] w-full">
-                                    {selectedHistoryItem.priceHistory && selectedHistoryItem.priceHistory.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <LineChart data={selectedHistoryItem.priceHistory.map(h => ({
-                                                ...h,
-                                                displayDate: new Date(h.date).toLocaleDateString('pt-BR'),
-                                                priceNum: h.price
-                                            }))}>
-                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                                                <XAxis dataKey="displayDate" tick={{fontSize: 10}} stroke="#94a3b8" />
-                                                <YAxis tickFormatter={(val) => `R$ ${val}`} tick={{fontSize: 10}} stroke="#94a3b8" />
-                                                <Tooltip 
-                                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
-                                                    formatter={(val: number) => [formatCurrency(val), 'Preço unitário']}
-                                                    labelFormatter={(label) => `Data: ${label}`}
-                                                />
-                                                <Line 
-                                                    type="monotone" 
-                                                    dataKey="priceNum" 
-                                                    stroke="#4f46e5" 
-                                                    strokeWidth={3} 
-                                                    dot={{ r: 4, fill: '#4f46e5', strokeWidth: 2, stroke: '#fff' }}
-                                                    activeDot={{ r: 6, strokeWidth: 0 }}
-                                                />
-                                            </LineChart>
-                                        </ResponsiveContainer>
-                                    ) : (
-                                        <div className="h-full flex flex-col items-center justify-center text-gray-400 opacity-50">
-                                            <ExclamationTriangleIcon className="w-10 h-10 mb-2" />
-                                            <p className="text-xs font-bold">Nenhum histórico de NF lançado para este item.</p>
-                                        </div>
-                                    )}
+                {isPriceHistoryModalOpen && selectedItemForHistory && (
+                    <Modal title={`Histórico de custos - ${selectedItemForHistory.name}`} onClose={() => setIsPriceHistoryModalOpen(false)} maxWidth="max-w-2xl">
+                        <div className="space-y-4">
+                            <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-800 flex justify-between items-center">
+                                <div>
+                                    <p className="text-[10px] font-bold text-indigo-400">Custo médio atual</p>
+                                    <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
+                                        {formatCurrency(selectedItemForHistory.averagePrice || 0)}
+                                    </p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-[10px] font-bold text-gray-400">Saldo em estoque</p>
+                                    <p className="text-xl font-bold text-gray-700 dark:text-gray-200">{selectedItemForHistory.quantity} {selectedItemForHistory.unit}</p>
                                 </div>
                             </div>
 
-                            <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 overflow-hidden shadow-sm">
-                                <table className="min-w-full text-left text-xs">
-                                    <thead className="bg-gray-50 dark:bg-gray-700 font-bold text-gray-400 border-b">
+                            {priceHistoryChartData.length > 1 && (
+                                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-100 dark:border-gray-700 shadow-sm h-64">
+                                    <p className="text-[10px] font-bold text-gray-400 mb-4">Evolução do custo unitário</p>
+                                    <ResponsiveContainer width="100%" height="85%">
+                                        <LineChart data={priceHistoryChartData}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.1} />
+                                            <XAxis 
+                                                dataKey="date" 
+                                                tick={{ fontSize: 9, fill: '#94a3b8' }} 
+                                                axisLine={false} 
+                                                tickLine={false}
+                                                dy={10}
+                                            />
+                                            <YAxis 
+                                                hide 
+                                                domain={['auto', 'auto']}
+                                            />
+                                            <Tooltip 
+                                                contentStyle={{ fontSize: '10px', borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', backgroundColor: 'rgba(255, 255, 255, 0.9)' }}
+                                                formatter={(value: number) => [formatCurrency(value), "Custo"]}
+                                                labelStyle={{ fontWeight: 'bold', color: '#6366f1' }}
+                                            />
+                                            <Line 
+                                                type="monotone" 
+                                                dataKey="price" 
+                                                stroke="#6366f1" 
+                                                strokeWidth={3} 
+                                                dot={{ r: 4, fill: '#6366f1', strokeWidth: 2, stroke: '#fff' }}
+                                                activeDot={{ r: 6 }}
+                                                animationDuration={1000}
+                                            />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            )}
+
+                            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden shadow-sm">
+                                <table className="w-full text-left text-xs">
+                                    <thead className="bg-gray-50 dark:bg-gray-700/50 text-[10px] font-bold text-gray-500 border-b tracking-tighter">
                                         <tr>
-                                            <th className="px-4 py-3">Data lançamento</th>
-                                            <th className="px-4 py-3 text-center">NF-e</th>
-                                            <th className="px-4 py-3 text-right">Valor unitário</th>
-                                            <th className="px-4 py-3 text-center">Variação</th>
+                                            <th className="px-4 py-3">Data do registro</th>
+                                            <th className="px-4 py-3">Nº documento/nota fiscal</th>
+                                            <th className="px-4 py-3 text-right">Custo unitário</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                        {[...(selectedHistoryItem.priceHistory || [])].reverse().map((entry, idx, arr) => {
-                                            const nextEntry = arr[idx + 1];
-                                            let diffPercent = 0;
-                                            if (nextEntry) {
-                                                diffPercent = ((entry.price - nextEntry.price) / nextEntry.price) * 100;
-                                            }
-
-                                            return (
-                                                <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                                    <td className="px-4 py-3 font-medium text-gray-500">{new Date(entry.date).toLocaleDateString('pt-BR')}</td>
-                                                    <td className="px-4 py-3 text-center font-bold text-gray-700 dark:text-gray-300">{entry.invoiceNumber || '---'}</td>
-                                                    <td className="px-4 py-3 text-right font-black text-indigo-600 dark:text-indigo-400">{formatCurrency(entry.price)}</td>
-                                                    <td className="px-4 py-3 text-center">
-                                                        {idx < arr.length - 1 ? (
-                                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${diffPercent > 0 ? 'bg-red-50 text-red-600' : diffPercent < 0 ? 'bg-green-50 text-green-600' : 'bg-gray-50 text-gray-400'}`}>
-                                                                {diffPercent > 0 ? '+' : ''}{diffPercent.toFixed(1)}%
-                                                            </span>
-                                                        ) : <span className="text-[10px] text-gray-300 font-bold">---</span>}
+                                        {(selectedItemForHistory.priceHistory || []).length > 0 ? (
+                                            [...(selectedItemForHistory.priceHistory || [])].reverse().map((entry, idx) => (
+                                                <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-900/40">
+                                                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400 font-medium">
+                                                        {new Date(entry.date).toLocaleString('pt-BR')}
+                                                    </td>
+                                                    <td className="px-4 py-3 font-bold text-gray-700 dark:text-gray-200">
+                                                        {entry.invoiceNumber ? `Nota fiscal ${entry.invoiceNumber}` : 'Saldo inicial'}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right font-black text-indigo-600">
+                                                        {formatCurrency(entry.price)}
                                                     </td>
                                                 </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </Modal>
-                )}
-
-                {selectedReservationItem && (
-                    <Modal 
-                        title={`Reservas: ${selectedReservationItem.name}`} 
-                        onClose={() => setSelectedReservationItem(null)}
-                        maxWidth="max-w-xl"
-                    >
-                        <div className="space-y-4">
-                            <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-800 flex justify-between items-center">
-                                <div>
-                                    <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">Total reservado</p>
-                                    <p className="text-2xl font-black text-indigo-700 dark:text-indigo-300">{selectedReservationItem.reservedQuantity} {selectedReservationItem.unit}</p>
-                                </div>
-                                <CubeIcon className="w-10 h-10 text-indigo-200 dark:text-indigo-800" />
-                            </div>
-
-                            <div className="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 overflow-hidden shadow-sm">
-                                <table className="min-w-full text-left text-xs">
-                                    <thead className="bg-gray-50 dark:bg-gray-700 font-bold text-gray-400 border-b">
-                                        <tr>
-                                            <th className="px-4 py-3">Cliente / projeto</th>
-                                            <th className="px-4 py-3 text-center">Quantidade</th>
-                                            <th className="px-4 py-3 text-right">Data da reserva</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                        {reservationsForItem.length > 0 ? reservationsForItem.map((res, idx) => (
-                                            <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                                <td className="px-4 py-3 font-bold text-gray-800 dark:text-gray-200">{res.clientName}</td>
-                                                <td className="px-4 py-3 text-center font-black text-indigo-600 dark:text-indigo-400">{res.quantity}</td>
-                                                <td className="px-4 py-3 text-right text-gray-500 font-mono">{new Date(res.date).toLocaleDateString('pt-BR')}</td>
-                                            </tr>
-                                        )) : (
+                                            ))
+                                        ) : (
                                             <tr>
-                                                <td colSpan={3} className="px-4 py-8 text-center text-gray-400 italic">
-                                                    Nenhum check-in efetivado encontrado para este item.
+                                                <td colSpan={3} className="px-4 py-10 text-center text-gray-400 italic">
+                                                    Nenhum histórico de movimentação registrado.
                                                 </td>
                                             </tr>
                                         )}
                                     </tbody>
                                 </table>
                             </div>
+                            <button onClick={() => setIsPriceHistoryModalOpen(false)} className="w-full py-3 bg-gray-100 text-gray-500 rounded-xl font-bold text-xs hover:bg-gray-200 transition-colors">Fechar histórico</button>
+                        </div>
+                    </Modal>
+                )}
 
-                            <div className="flex justify-end pt-2">
-                                <button 
-                                    onClick={() => setSelectedReservationItem(null)}
-                                    className="px-6 py-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg font-bold text-xs"
-                                >
-                                    Fechar
-                                </button>
+                {isReservationModalOpen && selectedItemForReservation && (
+                    <Modal title={`Detalhamento de reservas - ${selectedItemForReservation.name}`} onClose={() => setIsReservationModalOpen(false)} maxWidth="max-w-xl">
+                        <div className="space-y-4">
+                            <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-2xl border border-amber-100 dark:border-amber-800 flex justify-between items-center">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-amber-500 text-white rounded-lg"><UsersIcon className="w-5 h-5" /></div>
+                                    <div>
+                                        <p className="text-[10px] font-bold text-amber-500 leading-none mb-1">Reservas ativas</p>
+                                        <p className="text-xl font-black text-amber-600 dark:text-amber-400">
+                                            {selectedItemForReservation.reservedQuantity} {selectedItemForReservation.unit}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-[10px] font-bold text-gray-400">Saldo atual</p>
+                                    <p className="text-lg font-bold text-gray-700 dark:text-gray-200">{selectedItemForReservation.quantity} {selectedItemForReservation.unit}</p>
+                                </div>
                             </div>
+
+                            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden shadow-sm">
+                                <table className="w-full text-left text-xs">
+                                    <thead className="bg-gray-50 dark:bg-gray-700/50 text-[10px] font-bold text-gray-500 border-b tracking-tighter">
+                                        <tr>
+                                            <th className="px-4 py-3">Cliente / projeto</th>
+                                            <th className="px-4 py-3">Data evento</th>
+                                            <th className="px-4 py-3 text-center">Reserva</th>
+                                            <th className="px-4 py-3 text-center">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                        {activeReservations.length > 0 ? (
+                                            activeReservations.map((res, idx) => (
+                                                <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-900/20 transition-colors">
+                                                    <td className="px-4 py-3">
+                                                        <p className="font-bold text-gray-800 dark:text-gray-100">{res.project}</p>
+                                                        <p className="text-[9px] text-gray-400 font-medium tracking-tight">Resp: {res.responsible}</p>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-gray-500 font-medium">
+                                                        {new Date(res.date).toLocaleDateString('pt-BR')}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center font-black text-amber-600">
+                                                        {res.qty} {selectedItemForReservation.unit}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center">
+                                                        <span className={`text-[8px] font-black px-2 py-0.5 rounded-full ${res.status === 'Efetivado' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                            {res.status}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        ) : (
+                                            <tr>
+                                                <td colSpan={4} className="px-4 py-10 text-center text-gray-400 italic">
+                                                    Nenhuma reserva encontrada nos check-ins ativos.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <p className="text-[10px] text-gray-400 font-bold italic px-1">
+                                * Reservas são baseadas em check-ins "Efetivados" ou "Abertos" que ainda não passaram pelo check-out (Instalação).
+                            </p>
+
+                            <button onClick={() => setIsReservationModalOpen(false)} className="w-full py-3 bg-gray-100 text-gray-500 rounded-xl font-bold text-xs hover:bg-gray-200 transition-colors">Fechar detalhamento</button>
                         </div>
                     </Modal>
                 )}
@@ -697,192 +761,279 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
         );
     }
 
-    if (view === 'cadastro') return (
-        <div className="space-y-6 animate-fade-in">
-            <header className="flex justify-between items-center bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md border dark:border-gray-700">
-                <div><h2 className="text-2xl font-bold text-gray-900 dark:text-white">Cadastrar produtos</h2><p className="text-xs text-gray-400 font-bold mt-1">Gerenciamento de materiais e equipamentos</p></div>
-                <button onClick={() => handleOpenProductForm()} className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-lg font-bold shadow-lg hover:bg-indigo-700 transition-all active:scale-95"><PlusIcon className="w-5 h-5" /> Novo produto</button>
-            </header>
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border dark:border-gray-700 overflow-hidden">
-                <table className="min-w-full text-left text-sm">
-                    <thead className="bg-gray-50 dark:bg-gray-700 font-bold text-[11px] text-gray-500 border-b">
-                        <tr>
-                            <th className="px-6 py-4 w-20">Foto</th>
-                            <th className="px-6 py-4">Descrição do produto</th>
-                            <th className="px-6 py-4">NCM</th>
-                            <th className="px-6 py-4 text-center">Und.</th>
-                            <th className="px-6 py-4 text-center">Mínimo</th>
-                            <th className="px-6 py-4 text-center">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                        {items.length > 0 ? items.map(item => (
-                            <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                <td className="px-6 py-4"><div className="w-12 h-12 rounded border bg-gray-50 dark:bg-gray-900 flex items-center justify-center overflow-hidden">{item.image ? <img src={item.image} className="w-full h-full object-cover" alt="" /> : <PhotographIcon className="w-5 h-5 text-gray-300" />}</div></td>
-                                <td className="px-6 py-4 font-bold text-gray-900 dark:text-white">{item.name}</td>
-                                <td className="px-6 py-4 text-gray-400 font-medium text-xs">{item.ncm || '---'}</td>
-                                <td className="px-6 py-4 text-center font-bold text-gray-500 dark:text-gray-400">{item.unit}</td>
-                                <td className="px-6 py-4 text-center font-bold text-orange-600 dark:text-orange-400">{item.minQuantity}</td>
-                                <td className="px-6 py-4 text-center"><div className="flex justify-center gap-2"><button onClick={() => handleOpenProductForm(item)} className="p-1.5 text-gray-400 hover:text-indigo-600 transition-colors"><EditIcon className="w-5 h-5"/></button><button onClick={() => { if(window.confirm('Excluir este produto?')) dataService.delete('stock_items', item.id).then(loadData) }} className="p-1.5 text-gray-400 hover:text-red-600 transition-colors"><TrashIcon className="w-5 h-5"/></button></div></td>
-                            </tr>
-                        )) : (<tr><td colSpan={6} className="px-6 py-12 text-center text-gray-400 italic">Nenhum produto cadastrado no catálogo.</td></tr>)}
-                    </tbody>
-                </table>
-            </div>
-            {isProductModalOpen && (
-                <Modal title={productToEdit ? "Editar produto" : "Novo produto"} onClose={() => setIsProductModalOpen(false)} maxWidth="max-w-2xl">
-                    <form onSubmit={handleSaveProduct} className="space-y-5">
-                        <div className="flex items-center gap-6 p-4 bg-gray-50 dark:bg-gray-900/40 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700">
-                             <div onClick={() => fileInputRef.current?.click()} className="w-20 h-20 rounded-2xl bg-white dark:bg-gray-800 border shadow-sm flex items-center justify-center cursor-pointer hover:border-indigo-400 transition-all overflow-hidden flex-shrink-0">
-                                {productForm.image ? (
-                                    <img src={productForm.image} className="w-full h-full object-cover" alt="Preview" />
-                                ) : (
-                                    <PhotographIcon className="w-6 h-6 text-gray-300" />
-                                )}
-                             </div>
-                             <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
-                             <div className="flex-1">
-                                <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Imagem do produto</p>
-                                <p className="text-xs text-gray-500 mb-2">Selecione uma foto para identificar o item no catálogo.</p>
-                                <div className="flex gap-3">
-                                    <button type="button" onClick={() => fileInputRef.current?.click()} className="text-[10px] font-bold text-indigo-600 tracking-wider bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-all">Upload</button>
+    if (view === 'cadastro') {
+        const canManageCatalog = isAdmin || String(currentUser.profileId) === 'vendedor-001';
+        return (
+            <div className="space-y-6 animate-fade-in">
+                <header className="flex justify-between items-center bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700">
+                    <div>
+                        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Cadastrar produtos</h2>
+                        <p className="text-xs text-gray-500 font-bold mt-1 tracking-wide">Gerenciamento de materiais e equipamentos</p>
+                    </div>
+                    {canManageCatalog && (
+                        <button 
+                            onClick={() => {
+                                setStockItemToEdit(null);
+                                setProductForm({ name: '', ncm: '', quantity: 0, minQuantity: 1, unit: 'un', description: '', image: '', averagePrice: 0, isFixedInBudget: true });
+                                setIsProductModalOpen(true);
+                            }}
+                            className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold shadow-lg hover:bg-indigo-700 transition-all active:scale-95"
+                        >
+                            <PlusIcon className="w-5 h-5" /> Novo produto
+                        </button>
+                    )}
+                </header>
+
+                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full text-left text-sm">
+                            <thead className="bg-gray-50/50 dark:bg-gray-700/50 font-bold text-[10px] text-gray-400 border-b dark:border-gray-700">
+                                <tr>
+                                    <th className="px-6 py-4 w-20">Foto</th>
+                                    <th className="px-6 py-4">Descrição do produto</th>
+                                    <th className="px-6 py-4 text-center">Ncm</th>
+                                    <th className="px-6 py-4 text-center">Und.</th>
+                                    <th className="px-6 py-4 text-center">Saldo mínimo</th>
+                                    <th className="px-6 py-4 text-right">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
+                                {items.map(item => (
+                                    <tr key={item.id} className="hover:bg-indigo-50/30 dark:hover:bg-indigo-900/10 transition-colors">
+                                        <td className="px-6 py-3">
+                                            <div className="w-12 h-12 rounded-xl border-2 border-gray-100 bg-white flex items-center justify-center overflow-hidden shadow-sm">
+                                                {item.image ? (
+                                                    <img src={item.image} className="w-full h-full object-cover" alt="" />
+                                                ) : (
+                                                    <PhotographIcon className="w-6 h-6 text-gray-200" />
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-3">
+                                            <p className="font-bold text-[13px] text-gray-800 dark:text-white leading-tight">{item.name}</p>
+                                            <p className="text-[10px] text-gray-400 font-medium mt-0.5 line-clamp-1">{item.description || 'Sem descrição detalhada'}</p>
+                                        </td>
+                                        <td className="px-6 py-3 text-center text-[11px] font-bold text-gray-500">{item.ncm || '---'}</td>
+                                        <td className="px-6 py-3 text-center text-[11px] font-bold text-gray-500">{item.unit}</td>
+                                        <td className="px-6 py-3 text-center text-[13px] font-black text-orange-600">{item.minQuantity}</td>
+                                        <td className="px-6 py-3 text-right">
+                                            <div className="flex justify-end gap-1">
+                                                {canManageCatalog && (
+                                                    <>
+                                                        <button 
+                                                            onClick={() => {
+                                                                setStockItemToEdit(item);
+                                                                setProductForm({ 
+                                                                    name: item.name, 
+                                                                    ncm: item.ncm || '', 
+                                                                    quantity: item.quantity || 0,
+                                                                    minQuantity: item.minQuantity, 
+                                                                    unit: item.unit, 
+                                                                    description: item.description || '', 
+                                                                    image: item.image || '',
+                                                                    averagePrice: item.averagePrice || 0,
+                                                                    isFixedInBudget: !!item.isFixedInBudget
+                                                                });
+                                                                setIsProductModalOpen(true);
+                                                            }}
+                                                            className="p-2 text-gray-400 hover:text-indigo-600 transition-colors"
+                                                        >
+                                                            <EditIcon className="w-5 h-5" />
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => handleDeleteProduct(item.id)}
+                                                            className="p-2 text-gray-300 hover:text-red-500 transition-colors"
+                                                        >
+                                                            <TrashIcon className="w-5 h-5" />
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {isProductModalOpen && canManageCatalog && (
+                    <Modal 
+                        title={productToEdit ? "Editar produto" : "Cadastrar novo produto"} 
+                        onClose={() => setIsProductModalOpen(false)}
+                        maxWidth="max-w-3xl"
+                    >
+                        <form onSubmit={handleSaveProduct} className="space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
+                                <div className="md:col-span-4 flex flex-col items-center">
+                                    <FormLabel>Foto do produto</FormLabel>
+                                    <div className="relative group w-full aspect-square mt-2">
+                                        <div className="w-full h-full rounded-3xl border-4 border-dashed border-gray-100 bg-gray-50 flex items-center justify-center overflow-hidden">
+                                            {productForm.image ? (
+                                                <img src={productForm.image} className="w-full h-full object-cover" alt="" />
+                                            ) : (
+                                                <PhotographIcon className="w-20 h-20 text-gray-200" />
+                                            )}
+                                        </div>
+                                        <label className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/20 transition-all cursor-pointer rounded-3xl opacity-0 group-hover:opacity-100">
+                                            <div className="p-3 bg-white rounded-full shadow-lg text-indigo-600">
+                                                <UploadIcon className="w-6 h-6" />
+                                            </div>
+                                            <input type="file" className="hidden" accept="image/*" onChange={handleProductPhotoUpload} />
+                                        </label>
+                                    </div>
                                     {productForm.image && (
-                                        <button type="button" onClick={() => setProductForm(p => ({...p, image: ''}))} className="text-[10px] font-bold text-red-500 tracking-wider bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded-lg hover:bg-red-100 transition-all">Remover</button>
+                                        <button 
+                                            type="button" 
+                                            onClick={() => setProductForm(p => ({ ...p, image: '' }))}
+                                            className="mt-3 text-[10px] font-black text-red-500 tracking-tight"
+                                        >
+                                            Remover foto
+                                        </button>
                                     )}
                                 </div>
-                             </div>
-                        </div>
 
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Descrição do produto</label>
-                            <input 
-                                required 
-                                type="text"
-                                placeholder="Ex: Inversor solar Deye 5kW" 
-                                value={productForm.name} 
-                                onChange={e => setProductForm({...productForm, name: e.target.value})} 
-                                className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700/50 p-3 text-sm font-medium text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20" 
-                            />
-                        </div>
+                                <div className="md:col-span-8 space-y-4">
+                                    <div>
+                                        <label className={labelSentenceClass}>Descrição do produto (Nome comercial)</label>
+                                        <input 
+                                            required 
+                                            type="text" 
+                                            value={productForm.name} 
+                                            onChange={e => setProductForm({...productForm, name: e.target.value})} 
+                                            className={editableFieldClass} 
+                                            placeholder="Ex: Disjuntor bipolar 20a curva c - schneider" 
+                                        />
+                                    </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className={labelSentenceClass}>Ncm (Classificação fiscal)</label>
+                                            <input 
+                                                type="text" 
+                                                value={productForm.ncm} 
+                                                onChange={e => setProductForm({...productForm, ncm: e.target.value})} 
+                                                className={editableFieldClass} 
+                                                placeholder="Ex: 8536.20.00" 
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className={labelSentenceClass}>Unidade de medida</label>
+                                            <select 
+                                                value={productForm.unit} 
+                                                onChange={e => setProductForm({...productForm, unit: e.target.value})} 
+                                                className={editableFieldClass}
+                                            >
+                                                {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-3 gap-4">
+                                        <div>
+                                            <label className={labelSentenceClass}>Saldo inicial</label>
+                                            <input 
+                                                required 
+                                                type="number" 
+                                                min="0"
+                                                value={productForm.quantity} 
+                                                onChange={e => setProductForm({...productForm, quantity: parseInt(e.target.value) || 0})} 
+                                                className={editableFieldClass + " text-indigo-600"} 
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className={labelSentenceClass}>Saldo mínimo (Alerta)</label>
+                                            <input 
+                                                required 
+                                                type="number" 
+                                                min="0"
+                                                value={productForm.minQuantity} 
+                                                onChange={e => setProductForm({...productForm, minQuantity: parseInt(e.target.value) || 0})} 
+                                                className={editableFieldClass + " text-orange-600"} 
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className={labelSentenceClass}>Custo Inicial</label>
+                                            <input 
+                                                type="number" 
+                                                step="0.01"
+                                                value={productForm.averagePrice || ''} 
+                                                onChange={e => setProductForm({...productForm, averagePrice: parseFloat(e.target.value) || 0})} 
+                                                className={editableFieldClass + " text-green-600"} 
+                                                placeholder="0,00"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <label className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-700/40 rounded-2xl border-2 border-indigo-100 dark:border-indigo-900 cursor-pointer hover:bg-white transition-all">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={productForm.isFixedInBudget} 
+                                            onChange={e => setProductForm({...productForm, isFixedInBudget: e.target.checked})} 
+                                            className="w-5 h-5 rounded text-indigo-600 border-gray-300 focus:ring-indigo-500" 
+                                        />
+                                        <div>
+                                            <p className="text-[11px] font-black text-gray-700 dark:text-white tracking-tight">Exibir fixo no orçamento</p>
+                                            <p className="text-[10px] text-gray-400 font-medium leading-none">Este item aparecerá automaticamente na tabela de orçamentos.</p>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Unidade</label>
-                                <select 
-                                    value={productForm.unit} 
-                                    onChange={e => setProductForm({...productForm, unit: e.target.value})} 
-                                    className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700/50 p-3 text-sm font-medium text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"
+                                <label className={labelSentenceClass}>Observações / especificações técnicas</label>
+                                <textarea 
+                                    rows={3} 
+                                    value={productForm.description} 
+                                    onChange={e => setProductForm({...productForm, description: e.target.value})} 
+                                    className={editableFieldClass + " resize-none font-medium text-xs"} 
+                                    placeholder="Detalhes sobre fabricante, série, aplicações recomendadas, etc." 
+                                />
+                            </div>
+
+                            <div className="flex gap-4 pt-4 border-t dark:border-gray-700">
+                                <button 
+                                    type="button" 
+                                    onClick={() => setIsProductModalOpen(false)} 
+                                    className="flex-1 py-4 bg-gray-100 dark:bg-gray-700 text-gray-500 rounded-2xl font-bold text-sm hover:bg-gray-200 transition-all"
                                 >
-                                    {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                                </select>
+                                    Cancelar
+                                </button>
+                                <button 
+                                    type="submit" 
+                                    disabled={isSaving}
+                                    className="flex-[2] py-4 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-lg hover:bg-indigo-700 transition-all active:scale-[0.98]"
+                                >
+                                    {isSaving ? 'Salvando...' : (productToEdit ? 'Atualizar produto' : 'Salvar novo produto')}
+                                </button>
                             </div>
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">NCM</label>
-                                <input 
-                                    type="text"
-                                    placeholder="0000.00.00" 
-                                    value={productForm.ncm} 
-                                    onChange={e => setProductForm({...productForm, ncm: e.target.value})} 
-                                    className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700/50 p-3 text-sm font-medium text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20" 
-                                />
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Saldo estoque inicial</label>
-                                <input 
-                                    type="number" 
-                                    step="0.01" 
-                                    value={productForm.quantity} 
-                                    onChange={e => setProductForm({...productForm, quantity: parseFloat(e.target.value) || 0})} 
-                                    className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700/50 p-3 text-sm font-medium text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20" 
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Estoque mínimo</label>
-                                <input 
-                                    type="number" 
-                                    value={productForm.minQuantity} 
-                                    onChange={e => setProductForm({...productForm, minQuantity: parseFloat(e.target.value) || 0})} 
-                                    className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700/50 p-3 text-sm font-medium text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20" 
-                                />
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 gap-4">
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Custo unitário médio (R$)</label>
-                                <input 
-                                    type="number" 
-                                    step="0.01" 
-                                    value={productForm.averagePrice || ''} 
-                                    onChange={e => setProductForm({...productForm, averagePrice: parseFloat(e.target.value) || 0})} 
-                                    className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700/50 p-3 text-sm font-bold text-indigo-600 dark:text-indigo-400 outline-none focus:ring-2 focus:ring-indigo-500/20" 
-                                    placeholder="0,00"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-xl border border-indigo-100 dark:border-indigo-800">
-                            <label className="flex items-center gap-3 cursor-pointer">
-                                <input 
-                                    type="checkbox" 
-                                    checked={productForm.isFixedInBudget} 
-                                    onChange={e => setProductForm({...productForm, isFixedInBudget: e.target.checked})} 
-                                    className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500 transition-all cursor-pointer"
-                                />
-                                <span className="text-sm font-bold text-indigo-700 dark:text-indigo-300 tracking-tight">Esse item deve ser fixo na lista de materiais de orçamento?</span>
-                            </label>
-                        </div>
-
-                        <div className="flex gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
-                            <button 
-                                type="button" 
-                                onClick={() => setIsProductModalOpen(false)} 
-                                className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl font-bold text-sm hover:bg-gray-200 transition-all"
-                            >
-                                Cancelar
-                            </button>
-                            <button 
-                                type="submit" 
-                                disabled={isSaving} 
-                                className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 active:scale-95 transition-all"
-                            >
-                                {isSaving ? 'Gravando...' : 'Salvar produto'}
-                            </button>
-                        </div>
-                    </form>
-                </Modal>
-            )}
-        </div>
-    );
+                        </form>
+                    </Modal>
+                )}
+            </div>
+        );
+    }
 
     if (view === 'compras') return (
         <div className="space-y-6 animate-fade-in">
             <header className="flex justify-between items-center bg-white dark:bg-gray-800 p-6 rounded-xl shadow-md border dark:border-gray-700">
-                <div><h2 className="text-2xl font-bold text-gray-900 dark:text-white">Pedidos de compra</h2><p className="text-xs text-gray-400 font-bold mt-1">Gestão de suprimentos</p></div>
-                <button onClick={() => handleOpenRequestForm()} className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-lg font-bold shadow-lg hover:bg-indigo-700 transition-all active:scale-95"><PlusIcon className="w-5 h-5" /> Novo pedido</button>
+                <div><h2 className="text-2xl font-bold text-gray-900 dark:text-white">Pedidos de compra</h2><p className="text-xs text-gray-400 font-bold mt-1">Gestão detalhada de suprimentos</p></div>
+                <button onClick={() => { 
+                    setRequestToEdit(null); 
+                    setIsManualItem(false);
+                    setRequestForm({ 
+                        itemName: '', quantity: 1, unit: 'un', priority: 'Média', clientName: '', observation: '', purchaseLink: '', purchaseType: 'Reposição',
+                        requestDate: new Date().toISOString().split('T')[0]
+                    }); 
+                    setIsRequestModalOpen(true); 
+                }} className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-lg font-bold shadow-lg hover:bg-indigo-700 transition-all active:scale-95"><PlusIcon className="w-5 h-5" /> Abrir novo pedido</button>
             </header>
 
             <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col md:flex-row gap-4">
-                <div className="flex items-center gap-3">
-                    <FilterIcon className="w-5 h-5 text-gray-400" />
-                    <span className="text-xs font-bold text-gray-500">Filtrar por status:</span>
-                </div>
-                <div className="flex gap-2 w-full md:w-auto">
-                    {(['Todos', 'Pendente', 'Aprovado', 'Comprado', 'Cancelado'] as const).map(f => (
-                        <button 
-                            key={f} 
-                            onClick={() => setPurchaseStatusFilter(f)} 
-                            className={`flex-1 md:flex-none px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${
-                                purchaseStatusFilter === f 
-                                ? 'bg-indigo-100 text-indigo-700 border-indigo-200 shadow-sm' 
-                                : 'bg-gray-50 text-gray-400 border-transparent hover:bg-gray-100'
-                            }`}
-                        >
-                            {f}
-                        </button>
+                <div className="flex items-center gap-3"><FilterIcon className="w-4 h-4 text-gray-400" /><span className="text-xs font-bold text-gray-500">Filtrar status:</span></div>
+                <div className="flex gap-2 flex-wrap">
+                    {(['Todos', 'Aberto', 'Aprovado', 'Comprado', 'Em trânsito', 'Concluído', 'Cancelado'] as const).map(f => (
+                        <button key={f} onClick={() => setPurchaseStatusFilter(f)} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${purchaseStatusFilter === f ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-gray-50 text-gray-400 border-transparent hover:bg-gray-100'}`}>{f}</button>
                     ))}
                 </div>
             </div>
@@ -893,389 +1044,306 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                         <tr>
                             <th className="px-6 py-4">Data</th>
                             <th className="px-6 py-4">Item solicitado</th>
-                            <th className="px-6 py-4 text-center">Prioridade</th>
                             <th className="px-6 py-4 text-center">Volume</th>
-                            <th className="px-6 py-4">Obra / destino</th>
-                            <th className="px-6 py-4">Finalidade</th>
-                            <th className="px-6 py-4">Status</th>
+                            <th className="px-6 py-4 text-center">Status atual</th>
                             <th className="px-6 py-4 text-right">Ações</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                        {filteredRequests.length > 0 ? filteredRequests.map(req => {
-                            const pType = getFinalidadeByItemName(req.itemName);
-                            const isReposicao = pType === 'Reposição';
-
+                        {filteredRequests.map(req => {
+                            const status = getStatusInfo(req.status);
+                            const StatusIcon = status.icon;
                             return (
-                                <tr key={req.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="text-gray-900 dark:text-white font-bold text-xs">{new Date(req.date).toLocaleDateString('pt-BR')}</div>
-                                        <div className="text-[9px] text-gray-400 font-mono">{new Date(req.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <div className="font-bold text-gray-900 dark:text-white text-xs">{req.itemName}</div>
-                                        <div className="text-[9px] text-gray-400 font-medium">{req.requester}</div>
-                                    </td>
+                                <tr key={req.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                                    <td className="px-6 py-4 text-xs font-bold text-gray-500">{new Date(req.date).toLocaleDateString('pt-BR')}</td>
+                                    <td className="px-6 py-4"><div className="font-bold text-gray-900 dark:text-white text-xs">{req.itemName}</div><div className="text-[10px] text-gray-400 font-medium">Solicitante: {req.requester}</div></td>
+                                    <td className="px-6 py-4 text-center font-bold text-indigo-600 text-xs">{req.quantity} {req.unit}</td>
                                     <td className="px-6 py-4 text-center">
-                                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
-                                            req.priority === 'Alta' ? 'bg-red-100 text-red-600' :
-                                            req.priority === 'Média' ? 'bg-orange-100 text-orange-600' :
-                                            'bg-blue-100 text-blue-600'
-                                        }`}>
-                                            {req.priority}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4 text-center font-bold text-indigo-600 dark:text-indigo-400 text-xs">{req.quantity} {req.unit}</td>
-                                    <td className="px-6 py-4 text-gray-500 text-[10px] font-bold truncate max-w-[120px]">{req.clientName || '---'}</td>
-                                    <td className="px-6 py-4">
-                                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black border shadow-sm tracking-tight transition-colors ${
-                                            isReposicao 
-                                            ? 'bg-blue-100 text-blue-800 border-blue-200' 
-                                            : 'bg-amber-100 text-amber-800 border-amber-200'
-                                        }`}>
-                                            {pType}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <span className={`px-2.5 py-1 rounded-full text-[9px] font-black tracking-tighter ${
-                                            req.status === 'Pendente' ? 'bg-yellow-100 text-yellow-700' : 
-                                            req.status === 'Cancelado' ? 'bg-red-100 text-red-700' : 
-                                            req.status === 'Comprado' ? 'bg-blue-100 text-blue-700' :
-                                            'bg-green-100 text-green-700'
-                                        }`}>
-                                            {req.status}
+                                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black tracking-tight ${status.color}`}>
+                                            <StatusIcon className="w-3.5 h-3.5" />
+                                            {status.label}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        <div className="flex justify-end gap-1">
-                                            {req.status === 'Pendente' && (
-                                                <button onClick={() => handleOpenRequestForm(req)} className="p-1.5 text-gray-400 hover:text-indigo-600 transition-colors" title="Editar pedido">
-                                                    <EditIcon className="w-5 h-5"/>
+                                        <div className="flex justify-end gap-2">
+                                            <button onClick={() => handleManageRequest(req)} className="p-1.5 text-gray-400 hover:text-indigo-600 transition-colors" title="Gerenciar pedido"><ClipboardListIcon className="w-5 h-5"/></button>
+                                            
+                                            {req.status === 'Aberto' && isAdmin && (
+                                                <button onClick={() => triggerStatusConfirmation(req, 'Aprovado')} className="p-1.5 text-blue-500 hover:text-blue-600 transition-colors" title="Aprovar compra">
+                                                    <CheckCircleIcon className="w-5 h-5"/>
                                                 </button>
                                             )}
-                                            <button onClick={() => setSelectedRequest(req)} className="p-1.5 text-gray-400 hover:text-indigo-600 transition-colors" title="Ver detalhes">
-                                                <EyeIcon className="w-5 h-5"/>
-                                            </button>
+                                            {req.status === 'Aprovado' && isAdmin && (
+                                                <button onClick={() => triggerStatusConfirmation(req, 'Comprado')} className="p-1.5 text-indigo-500 hover:text-indigo-600 transition-colors" title="Marcar como comprado">
+                                                    <ShoppingCartIcon className="w-5 h-5"/>
+                                                </button>
+                                            )}
+                                            {req.status === 'Comprado' && isAdmin && (
+                                                <button onClick={() => triggerStatusConfirmation(req, 'Em trânsito')} className="p-1.5 text-purple-500 hover:text-purple-600 transition-colors" title="Marcar em trânsito">
+                                                    <TruckIcon className="w-5 h-5"/>
+                                                </button>
+                                            )}
+                                            {req.status === 'Em trânsito' && isAdmin && (
+                                                <button onClick={() => { setRequestToEdit(req); setIsNFModalOpen(true); setNfForm({ invoiceNumber: '', invoiceKey: '', totalValue: 0, invoiceFile: '', invoiceFileName: '' }); }} className="p-1.5 text-green-500 hover:text-green-600 transition-colors" title="Efetivar entrega (Lançar NF)">
+                                                    <UploadIcon className="w-5 h-5"/>
+                                                </button>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>
                             );
-                        }) : (<tr><td colSpan={8} className="px-6 py-12 text-center text-gray-400 font-bold text-[10px] tracking-widest italic">Nenhum pedido registrado para este filtro.</td></tr>)}
+                        })}
                     </tbody>
                 </table>
             </div>
 
-            {selectedRequest && (
-                <Modal title="Detalhes do pedido de compra" onClose={() => setSelectedRequest(null)} maxWidth="max-w-2xl">
-                    <div className="space-y-6">
-                        <div className="flex justify-between items-start border-b pb-4 dark:border-gray-700">
-                            <div>
-                                <h4 className="text-[10px] font-bold text-gray-400 tracking-widest mb-1">Status atual</h4>
-                                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                                    selectedRequest.status === 'Pendente' ? 'bg-yellow-100 text-yellow-700' : 
-                                    selectedRequest.status === 'Cancelado' ? 'bg-red-100 text-red-700' : 
-                                    selectedRequest.status === 'Comprado' ? 'bg-blue-100 text-blue-700' :
-                                    'bg-green-100 text-green-700'
-                                }`}>
-                                    {selectedRequest.status}
-                                </span>
-                            </div>
-                            <div className="text-right">
-                                <h4 className="text-[10px] font-bold text-gray-400 tracking-widest mb-1">Prioridade</h4>
-                                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                                    selectedRequest.priority === 'Alta' ? 'bg-red-50 text-red-600 border border-red-200' : 
-                                    selectedRequest.priority === 'Média' ? 'bg-orange-50 text-orange-600 border border-orange-200' : 
-                                    selectedRequest.priority === 'Baixa' ? 'bg-blue-50 text-blue-600 border border-blue-200' : 'bg-gray-100'
-                                }`}>
-                                    {selectedRequest.priority}
-                                </span>
-                            </div>
+            {isConfirmStatusModalOpen && (
+                <Modal title="Confirmar ação" onClose={() => { setIsConfirmStatusModalOpen(false); setConfirmRequest(null); setNextStatus(null); }} maxWidth="max-w-sm">
+                    <div className="text-center p-4 space-y-6">
+                        <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-indigo-50 text-indigo-600">
+                            <ExclamationTriangleIcon className="w-10 h-10" />
                         </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <h4 className="text-[10px] font-bold text-gray-400 mb-1">Item solicitado</h4>
-                                <p className="text-lg font-bold text-gray-900 dark:text-white">{selectedRequest.itemName}</p>
-                            </div>
-                            <div>
-                                <h4 className="text-[10px] font-bold text-gray-400 mb-1">Quantidade / unidade</h4>
-                                <p className="text-lg font-bold text-indigo-600">{selectedRequest.quantity} {selectedRequest.unit}</p>
-                            </div>
-                            <div>
-                                <h4 className="text-[10px] font-bold text-gray-400 mb-1">Solicitante</h4>
-                                <p className="text-sm font-bold text-gray-700 dark:text-gray-300">{selectedRequest.requester}</p>
-                                <p className="text-[10px] text-gray-400">{new Date(selectedRequest.date).toLocaleString('pt-BR')}</p>
-                            </div>
-                            <div>
-                                <h4 className="text-[10px] font-bold text-gray-400 mb-1">Obra / destino</h4>
-                                <p className="text-sm font-bold text-gray-700 dark:text-gray-300">{selectedRequest.clientName || '---'}</p>
-                            </div>
-                        </div>
-
-                        {(selectedRequest.observation || selectedRequest.purchaseLink || selectedRequest.invoiceFile) && (
-                            <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-xl border dark:border-gray-600">
-                                <h4 className="text-[10px] font-bold text-gray-400 mb-2">Informações Adicionais</h4>
-                                {selectedRequest.observation && <p className="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap mb-3">{selectedRequest.observation}</p>}
-                                <div className="flex flex-wrap gap-4">
-                                    {selectedRequest.purchaseLink && (
-                                        <a href={selectedRequest.purchaseLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-all underline decoration-2 underline-offset-4">
-                                            <LinkIcon className="w-4 h-4" /> Link de compra
-                                        </a>
-                                    )}
-                                    {selectedRequest.invoiceFile && (
-                                        <a href={selectedRequest.invoiceFile} download={`NF-${selectedRequest.itemName}.pdf`} className="flex items-center gap-2 text-xs font-bold text-green-600 hover:text-green-800 transition-all underline decoration-2 underline-offset-4">
-                                            <DocumentReportIcon className="w-4 h-4" /> Ver Anexo da NF
-                                        </a>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="flex justify-between gap-3 pt-6 border-t dark:border-gray-700">
-                            <div className="flex gap-2">
-                                {selectedRequest.status === 'Pendente' && isAdmin && (
-                                    <>
-                                        <button 
-                                            onClick={() => handleInitiateApprove(selectedRequest)} 
-                                            disabled={isSaving}
-                                            className="px-6 py-2.5 bg-green-600 text-white rounded-lg text-xs font-bold shadow-lg shadow-green-600/20 hover:bg-green-700 transition-all disabled:opacity-50 flex items-center gap-2"
-                                        >
-                                            <CheckCircleIcon className="w-4 h-4" />
-                                            {isSaving ? 'Processando...' : 'Aprovar'}
-                                        </button>
-                                        <button 
-                                            onClick={() => handleInitiateCancel(selectedRequest)} 
-                                            disabled={isSaving}
-                                            className="px-6 py-2.5 bg-white text-red-600 border border-red-200 rounded-lg text-xs font-bold hover:bg-red-50 transition-all disabled:opacity-50"
-                                        >
-                                            Cancelar pedido
-                                        </button>
-                                    </>
-                                )}
-                                {selectedRequest.status === 'Aprovado' && (
-                                    <>
-                                        <button 
-                                            onClick={() => handleInitiateEfetivar(selectedRequest)} 
-                                            disabled={isSaving}
-                                            className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center gap-2"
-                                        >
-                                            <CheckCircleIcon className="w-4 h-4" />
-                                            Efetivar compra
-                                        </button>
-                                        <button 
-                                            onClick={() => handleInitiateCancel(selectedRequest)} 
-                                            disabled={isSaving}
-                                            className="px-6 py-2.5 bg-white text-red-600 border border-red-200 rounded-lg text-xs font-bold hover:bg-red-50 transition-all disabled:opacity-50"
-                                        >
-                                            Cancelar pedido
-                                        </button>
-                                    </>
-                                )}
-                            </div>
-                            <button onClick={() => setSelectedRequest(null)} className="px-6 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 rounded-lg text-xs font-bold">Fechar</button>
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">Deseja efetivar essa ação?</h3>
+                        <div className="flex gap-4">
+                            <button onClick={() => { setIsConfirmStatusModalOpen(false); setConfirmRequest(null); setNextStatus(null); }} className="flex-1 py-3 bg-gray-100 rounded-xl font-bold text-sm">Não</button>
+                            <button onClick={handleUpdateStatus} disabled={isSaving} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20">{isSaving ? '...' : 'Sim'}</button>
                         </div>
                     </div>
                 </Modal>
             )}
 
-            {isNFModalOpen && selectedRequest && (
-                <Modal title="Lançamento de nota fiscal" onClose={() => setIsNFModalOpen(false)} maxWidth="max-w-lg">
+            {isNFModalOpen && requestToEdit && (
+                <Modal title="Efetivar compra - nota fiscal" onClose={() => { setIsNFModalOpen(false); setRequestToEdit(null); }} maxWidth="max-w-lg">
                     <form onSubmit={handleConfirmFinalization} className="space-y-6">
                         <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-800">
-                            <h4 className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 tracking-widest mb-2">Item sendo efetivado</h4>
-                            <p className="font-bold text-gray-900 dark:text-white">{selectedRequest.itemName}</p>
-                            <p className="text-xs text-gray-500 mt-1">Quantidade: <span className="font-bold">{selectedRequest.quantity} {selectedRequest.unit}</span></p>
+                            <p className="text-[11px] font-bold text-indigo-600 mb-2">Item recebido</p>
+                            <p className="font-bold text-gray-900 dark:text-white">{requestToEdit.itemName} - {requestToEdit.quantity} {requestToEdit.unit}</p>
                         </div>
-
-                        <div className="grid grid-cols-1 gap-4">
+                        <div className="space-y-4">
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Número da NF-e</label>
-                                <input required type="text" placeholder="000.000.000" value={nfForm.invoiceNumber} onChange={e => setNfForm({...nfForm, invoiceNumber: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700/50 p-3 text-sm font-bold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20" />
+                                <label className={labelSentenceClass}>Número da nota fiscal (nf-e)</label>
+                                <input required type="text" placeholder="000.000.000" value={nfForm.invoiceNumber} onChange={e => setNfForm({...nfForm, invoiceNumber: e.target.value})} className={editableFieldClass} />
                             </div>
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Chave de acesso (NF-e)</label>
-                                <input type="text" placeholder="44 dígitos da nota" maxLength={44} value={nfForm.invoiceKey} onChange={e => setNfForm({...nfForm, invoiceKey: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700/50 p-3 text-sm text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20" />
+                                <label className={labelSentenceClass}>Chave de acesso da nota fiscal (44 dígitos)</label>
+                                <input type="text" placeholder="0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000" maxLength={44} value={nfForm.invoiceKey} onChange={e => setNfForm({...nfForm, invoiceKey: e.target.value.replace(/\D/g, '')})} className={editableFieldClass.replace('font-bold', 'font-mono')} />
                             </div>
-                            
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Anexar Nota Fiscal (PDF ou Imagem)</label>
-                                <div onClick={() => nfFileInputRef.current?.click()} className="w-full border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-400 dark:hover:border-indigo-500 transition-all bg-gray-50 dark:bg-gray-700/30">
-                                    {nfForm.invoiceFile ? (
-                                        <div className="flex items-center gap-3 text-indigo-600 dark:text-indigo-400">
-                                            <CheckCircleIcon className="w-8 h-8" />
-                                            <span className="text-xs font-bold">Arquivo anexado!</span>
-                                            <button type="button" onClick={(e) => { e.stopPropagation(); setNfForm(p => ({...p, invoiceFile: ''})); }} className="text-red-500 hover:underline text-[10px] uppercase font-black ml-2">Remover</button>
+                                <label className={labelSentenceClass}>Valor total dos itens (R$)</label>
+                                <input required type="number" step="0.01" placeholder="0,00" value={nfForm.totalValue || ''} onChange={e => setNfForm({...nfForm, totalValue: parseFloat(e.target.value) || 0})} className={editableFieldClass.replace('text-gray-800', 'text-indigo-600')} />
+                            </div>
+                            <div>
+                                <label className={labelSentenceClass}>Anexar arquivo da nota fiscal</label>
+                                <div className="flex items-center justify-center w-full">
+                                    <label className={`flex flex-col items-center justify-center w-full min-h-[120px] border-4 border-dashed rounded-2xl cursor-pointer transition-colors ${nfForm.invoiceFile ? 'border-green-400 bg-green-50 dark:bg-green-900/20' : 'border-indigo-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 hover:bg-indigo-50'}`}>
+                                        <div className="flex flex-col items-center justify-center pt-5 pb-6 px-4 text-center">
+                                            {nfForm.invoiceFile ? (
+                                                <>
+                                                    <CheckCircleIcon className="w-10 h-10 text-green-500 mb-2" />
+                                                    <p className="text-sm text-green-700 dark:text-green-400 font-bold truncate max-w-full">Arquivo carregado: {nfForm.invoiceFileName}</p>
+                                                    <p className="text-[10px] text-green-600 dark:text-green-500 font-medium mt-1">Clique para substituir</p>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <UploadIcon className="w-10 h-10 text-indigo-400 mb-2" />
+                                                    <p className="text-sm text-gray-500 dark:text-gray-400 font-bold">Clique para selecionar ou arraste o pdf/imagem</p>
+                                                </>
+                                            )}
                                         </div>
-                                    ) : (
-                                        <>
-                                            <UploadIcon className="w-8 h-8 text-gray-400 mb-2" />
-                                            <span className="text-xs text-gray-500 font-bold">Clique para selecionar o arquivo</span>
-                                        </>
-                                    )}
-                                    <input type="file" ref={nfFileInputRef} onChange={handleNFFileChange} className="hidden" accept="image/*,.pdf" />
+                                        <input type="file" className="hidden" onChange={handleNFFileUpload} accept=".pdf,image/*" />
+                                    </label>
                                 </div>
                             </div>
-
-                            <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-100 dark:border-green-800">
-                                <label className="block text-sm font-semibold text-green-600 dark:text-green-400 mb-1.5 text-center">Valor total dos itens na nota (R$)</label>
-                                <input required type="number" step="0.01" placeholder="0,00" value={nfForm.totalValue || ''} onChange={e => setNfForm({...nfForm, totalValue: parseFloat(e.target.value) || 0})} className="w-full bg-transparent border-none text-center text-2xl font-black text-green-700 dark:text-green-300 outline-none" />
-                                {nfForm.totalValue > 0 && (
-                                    <p className="text-center text-[10px] text-green-500 font-bold mt-2 uppercase">Custo unitário calculado: {formatCurrency(nfForm.totalValue / selectedRequest.quantity)}</p>
-                                )}
-                            </div>
                         </div>
-
-                        <div className="flex gap-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-                            <button type="button" onClick={() => setIsNFModalOpen(false)} className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 text-gray-500 rounded-xl font-bold text-sm">Voltar</button>
-                            <button type="submit" disabled={isSaving || nfForm.totalValue <= 0} className="flex-1 py-3 bg-green-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-green-600/20 hover:bg-green-700 disabled:opacity-50 transition-all">{isSaving ? 'Gravando...' : 'Confirmar e atualizar estoque'}</button>
+                        <div className="flex gap-4 pt-4">
+                            <button type="button" onClick={() => { setIsNFModalOpen(false); setRequestToEdit(null); }} className="flex-1 py-4 bg-gray-100 rounded-2xl font-bold text-sm">Cancelar</button>
+                            <button type="submit" disabled={isSaving || !nfForm.invoiceNumber} className="flex-1 py-4 bg-green-600 text-white rounded-2xl font-bold text-sm shadow-lg hover:bg-green-700 transition-all active:scale-95 disabled:opacity-50">{isSaving ? 'Gravando...' : 'Confirmar e finalizar'}</button>
                         </div>
                     </form>
                 </Modal>
             )}
 
-            {isCancelConfirmModalOpen && requestBeingCancelled && (
-                <Modal title="Confirmar Cancelamento" onClose={() => setIsCancelConfirmModalOpen(false)} maxWidth="max-w-md">
-                    <div className="p-4 text-center space-y-6">
-                        <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 text-red-600">
-                            <ExclamationTriangleIcon className="w-10 h-10" />
-                        </div>
-                        <div className="space-y-2">
-                            <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-                                Você deseja cancelar a compra desse item?
-                            </h3>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
-                                Item: <span className="font-bold text-gray-700 dark:text-gray-200">{requestBeingCancelled.itemName}</span>
-                                <br />
-                                Quantidade: {requestBeingCancelled.quantity} {requestBeingCancelled.unit}
-                            </p>
-                        </div>
-                        <div className="flex gap-3">
-                            <button 
-                                onClick={() => setIsCancelConfirmModalOpen(false)}
-                                className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl font-bold text-sm hover:bg-gray-200 transition-all"
-                            >
-                                Não
-                            </button>
-                            <button 
-                                onClick={handleConfirmCancel}
-                                disabled={isSaving}
-                                className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-red-600/20 hover:bg-red-700 transition-all disabled:opacity-50"
-                            >
-                                {isSaving ? 'Processando...' : 'Sim'}
-                            </button>
-                        </div>
-                    </div>
-                </Modal>
-            )}
-
-            {isApproveConfirmModalOpen && requestBeingApproved && (
-                <Modal title="Confirmar Aprovação" onClose={() => setIsApproveConfirmModalOpen(false)} maxWidth="max-w-md">
-                    <div className="p-4 text-center space-y-6">
-                        <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 text-green-600">
-                            <CheckCircleIcon className="w-10 h-10" />
-                        </div>
-                        <div className="space-y-2">
-                            <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-                                Você deseja Aprovar a compra desse item?
-                            </h3>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">
-                                Item: <span className="font-bold text-gray-700 dark:text-gray-200">{requestBeingApproved.itemName}</span>
-                                <br />
-                                Quantidade: {requestBeingApproved.quantity} {requestBeingApproved.unit}
-                            </p>
-                        </div>
-                        <div className="flex gap-3">
-                            <button 
-                                onClick={() => setIsApproveConfirmModalOpen(false)}
-                                className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl font-bold text-sm hover:bg-gray-200 transition-all"
-                            >
-                                Não
-                            </button>
-                            <button 
-                                onClick={handleConfirmApprove}
-                                disabled={isSaving}
-                                className="flex-1 py-3 bg-green-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-green-600/20 hover:bg-green-700 transition-all disabled:opacity-50"
-                            >
-                                {isSaving ? 'Processando...' : 'Sim'}
-                            </button>
-                        </div>
-                    </div>
-                </Modal>
-            )}
-
             {isRequestModalOpen && (
-                <Modal title={requestToEdit ? "Editar pedido de compra" : "Novo pedido de compra"} onClose={() => { setIsRequestModalOpen(false); setRequestToEdit(null); }} maxWidth="max-w-xl">
+                <Modal title={requestToEdit ? "Gerenciar pedido de compra" : "Novo pedido de compra"} onClose={() => { setIsRequestModalOpen(false); setRequestToEdit(null); }} maxWidth="max-w-2xl">
                     <form onSubmit={handleSaveRequest} className="space-y-4">
-                        <div className="flex bg-gray-100 dark:bg-gray-700/50 p-1 rounded-md mb-4 border border-gray-200 dark:border-gray-600">
-                            <button type="button" onClick={() => setIsManualItem(false)} className={`flex-1 py-1.5 text-xs font-semibold rounded transition-all ${!isManualItem ? 'bg-white dark:bg-gray-800 shadow-sm text-indigo-600 border border-gray-100' : 'text-gray-500'}`}>Catálogo Orner</button>
-                            <button type="button" onClick={() => { setIsManualItem(true); setRequestForm(p => ({...p, itemName: ''})); }} className={`flex-1 py-1.5 text-xs font-semibold rounded transition-all ${isManualItem ? 'bg-white dark:bg-gray-800 shadow-sm text-amber-600 border border-gray-100' : 'text-gray-500'}`}>Manual / avulso</button>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                                <label className={labelSentenceClass}>Tipo de solicitação</label>
+                                <div className="grid grid-cols-2 gap-1.5 p-1 bg-gray-100 dark:bg-gray-700/50 rounded-xl border-2 dark:border-gray-600">
+                                    <button 
+                                        type="button" 
+                                        disabled={!!requestToEdit}
+                                        onClick={() => {
+                                            setRequestForm({...requestForm, purchaseType: 'Reposição'});
+                                            setIsManualItem(false);
+                                        }} 
+                                        className={`flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold rounded-lg transition-all ${requestForm.purchaseType === 'Reposição' ? 'bg-white dark:bg-gray-800 text-indigo-600 shadow-sm border border-gray-200' : 'text-gray-400'} ${requestToEdit ? 'cursor-not-allowed opacity-80' : ''}`}
+                                    >
+                                        <CubeIcon className="w-3.5 h-3.5" /> Reposição
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        disabled={!!requestToEdit}
+                                        onClick={() => setRequestForm({...requestForm, purchaseType: 'Obra'})} 
+                                        className={`flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold rounded-lg transition-all ${requestForm.purchaseType === 'Obra' ? 'bg-white dark:bg-gray-800 text-amber-600 shadow-sm border border-gray-200' : 'text-gray-400'} ${requestToEdit ? 'cursor-not-allowed opacity-80' : ''}`}
+                                    >
+                                        <TruckIcon className="w-3.5 h-3.5" /> Compra obra
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="space-y-1">
+                                <label className={labelSentenceClass}>Data da solicitação</label>
+                                <div className="relative">
+                                    <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                                    <input type="date" disabled={!!requestToEdit} value={requestForm.requestDate} onChange={e => setRequestForm({...requestForm, requestDate: e.target.value})} className={editableFieldClass + " pl-10 py-1.5 disabled:opacity-60 disabled:bg-gray-50"} />
+                                </div>
+                            </div>
                         </div>
 
-                        <div className={`p-4 rounded-xl border ${isManualItem ? 'bg-amber-50/50 border-amber-100' : 'bg-blue-50/50 border-blue-100'}`}>
-                           <p className={`text-[10px] font-bold mb-2 ${isManualItem ? 'text-amber-600' : 'text-blue-600'}`}>
-                               Finalidade selecionada: <span className="underline">{isManualItem ? 'Avulso' : 'Reposição'}</span>
-                           </p>
-                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Descrição do item</label>
-                            {isManualItem ? (
-                                <input required autoFocus placeholder="Ex: Curva 90 graus..." value={requestForm.itemName} onChange={e => setRequestForm({...requestForm, itemName: e.target.value})} className="w-full rounded-xl border-transparent bg-white dark:bg-gray-700/50 p-3 text-sm font-bold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500/20 shadow-sm" />
+                        <div className="space-y-3 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-2xl border-2 border-indigo-100 dark:border-gray-600">
+                            {(!requestToEdit && requestForm.purchaseType === 'Obra') ? (
+                                <div className="flex bg-gray-100 dark:bg-gray-600/30 p-1 rounded-xl border border-gray-200 dark:border-gray-500 mb-2">
+                                    <button type="button" onClick={() => setIsManualItem(false)} className={`flex-1 py-1.5 text-[11px] font-bold rounded-lg transition-all ${!isManualItem ? 'bg-white dark:bg-gray-800 text-indigo-600 shadow-md' : 'text-gray-400 hover:text-gray-600'}`}>
+                                        Catálogo orner
+                                    </button>
+                                    <button type="button" onClick={() => setIsManualItem(true)} className={`flex-1 py-1.5 text-[11px] font-bold rounded-lg transition-all ${isManualItem ? 'bg-white dark:bg-gray-800 text-indigo-600 shadow-md' : 'text-gray-400 hover:text-gray-600'}`}>
+                                        Avulso
+                                    </button>
+                                </div>
                             ) : (
-                                <select required value={requestForm.itemName} onChange={handleProductSelectChange} className="w-full rounded-xl border-transparent bg-white dark:bg-gray-700/50 p-3 text-sm font-bold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/20 shadow-sm">
-                                    <option value="">Selecione um produto do catálogo...</option>
-                                    {items.map(item => (<option key={item.id} value={item.name}>{item.name}</option>))}
-                                </select>
+                                <div className="mb-2 flex justify-between items-center">
+                                    <span className="text-[10px] font-bold text-indigo-600 tracking-tight px-1">
+                                        {isManualItem ? 'Item avulso (Fora do estoque)' : 'Catálogo orner'}
+                                    </span>
+                                    {requestToEdit && (
+                                        <span className={`px-2 py-0.5 rounded text-[10px] font-black ${getStatusInfo(requestToEdit.status).color}`}>
+                                            Status: {getStatusInfo(requestToEdit.status).label}
+                                        </span>
+                                    )}
+                                </div>
                             )}
-                        </div>
+                            
+                            <div className="space-y-3">
+                                <div className="animate-fade-in">
+                                    <label className={labelSentenceClass}>{isManualItem ? 'Descrição do item' : 'Selecionar do catálogo'}</label>
+                                    {isManualItem ? (
+                                        <input required disabled={!!requestToEdit} autoFocus placeholder="Nome do componente ou material..." value={requestForm.itemName} onChange={e => setRequestForm({...requestForm, itemName: e.target.value})} className={editableFieldClass + " py-2 disabled:opacity-60 disabled:bg-gray-50"} />
+                                    ) : (
+                                        <select required disabled={!!requestToEdit} value={requestForm.itemName} onChange={e => { const p = items.find(i => i.name === e.target.value); setRequestForm({...requestForm, itemName: e.target.value, unit: p?.unit || 'un'}); }} className={editableFieldClass + " py-2 disabled:opacity-60 disabled:bg-gray-50"}>
+                                            <option value="">Escolher material cadastrado...</option>
+                                            {items.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
+                                        </select>
+                                    )}
+                                </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Quantidade</label>
-                                <input type="number" step="0.01" required value={requestForm.quantity} onChange={e => setRequestForm({...requestForm, quantity: parseFloat(e.target.value) || 0})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700/50 p-3 text-sm font-medium text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20" />
+                                <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className={labelSentenceClass}>Quantidade solicitada</label>
+                                        <div className="flex gap-2">
+                                            <input type="number" disabled={!!requestToEdit} required min="1" value={requestForm.quantity} onChange={e => setRequestForm({...requestForm, quantity: parseFloat(e.target.value) || 0})} className={editableFieldClass + " text-center flex-1 py-1.5 disabled:opacity-60 disabled:bg-gray-50"} />
+                                            <select 
+                                                disabled={!!requestToEdit || !isManualItem} 
+                                                required 
+                                                value={requestForm.unit} 
+                                                onChange={e => setRequestForm({...requestForm, unit: e.target.value})} 
+                                                className="w-20 rounded-lg border-2 border-indigo-400 bg-white p-1.5 text-xs font-bold text-center outline-none shadow-sm disabled:opacity-60 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                                            >
+                                                {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className={labelSentenceClass}>Prioridade / urgência</label>
+                                        <div className="flex gap-1.5 h-[38px]">
+                                            {(['Baixa', 'Média', 'Alta'] as const).map(p => (
+                                                <button key={p} type="button" disabled={!!requestToEdit} onClick={() => setRequestForm({...requestForm, priority: p})} className={`flex-1 py-1 text-[10px] font-black rounded-lg border-2 transition-all ${requestForm.priority === p ? (p === 'Alta' ? 'bg-red-600 border-red-600 text-white shadow-md' : p === 'Média' ? 'bg-amber-500 border-amber-500 text-white shadow-md' : 'bg-green-600 border-green-600 text-white shadow-md') : 'bg-white dark:bg-gray-800 text-gray-400 border-gray-200 dark:border-gray-600 hover:border-indigo-400'} ${requestToEdit ? 'cursor-not-allowed' : ''}`}>
+                                                    {p}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            {requestForm.purchaseType === 'Obra' && (
+                                <div className="animate-fade-in">
+                                    <label className={labelSentenceClass}>Identificação da obra / cliente</label>
+                                    <input 
+                                        required 
+                                        disabled={!!requestToEdit}
+                                        type="text" 
+                                        list="approved-clients-list"
+                                        placeholder="Digite o nome ou escolha um cliente aprovado..." 
+                                        value={requestForm.clientName} 
+                                        onChange={e => setRequestForm({...requestForm, clientName: e.target.value})} 
+                                        className={editableFieldClass + " py-2 disabled:opacity-60 disabled:bg-gray-50"} 
+                                    />
+                                    <datalist id="approved-clients-list">
+                                        {approvedClients.map(client => (
+                                            <option key={client} value={client} />
+                                        ))}
+                                    </datalist>
+                                </div>
+                            )}
+
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Unidade</label>
-                                {isManualItem ? (
-                                    <select required value={requestForm.unit} onChange={e => setRequestForm({...requestForm, unit: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700/50 p-3 text-sm font-medium text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20">
-                                        {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                                    </select>
-                                ) : (
-                                    <input disabled value={requestForm.unit} className="w-full rounded-xl border-transparent bg-gray-100 dark:bg-gray-800 p-3 text-sm font-bold text-gray-500 cursor-not-allowed" />
-                                )}
+                                <label className={labelSentenceClass}>Link de compra / referência (opcional)</label>
+                                <div className="relative">
+                                    <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                                    <input type="url" disabled={!!requestToEdit} placeholder="Cole o link do produto aqui..." value={requestForm.purchaseLink} onChange={e => setRequestForm({...requestForm, purchaseLink: e.target.value})} className={editableFieldClass + " pl-10 py-2 text-indigo-600 font-medium disabled:opacity-60 disabled:bg-gray-50"} />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className={labelSentenceClass}>Observações adicionais</label>
+                                <textarea rows={2} disabled={!!requestToEdit} placeholder="Detalhes como marca, cor, urgência ou motivo..." value={requestForm.observation} onChange={e => setRequestForm({...requestForm, observation: e.target.value})} className={editableFieldClass + " min-h-[60px] h-auto resize-none font-medium leading-tight py-2 disabled:opacity-60 disabled:bg-gray-50"} />
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Urgência</label>
-                                <select value={requestForm.priority} onChange={e => setRequestForm({...requestForm, priority: e.target.value as any})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700/50 p-3 text-sm font-medium text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20">
-                                    <option value="Baixa">Baixa (Rotina)</option>
-                                    <option value="Média">Média (Em obra)</option>
-                                    <option value="Alta">Alta (Urgente)</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Data solicitação</label>
-                                <input type="text" disabled value={requestToEdit ? new Date(requestToEdit.date).toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')} className="w-full rounded-xl border-transparent bg-gray-100 dark:bg-gray-800 p-3 text-sm font-bold text-gray-500 cursor-not-allowed" />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Obra / destino</label>
-                            <input placeholder={isManualItem ? "Obrigatório para itens avulsos" : "Ex: Estoque geral / Obra X"} value={requestForm.clientName} onChange={e => setRequestForm({...requestForm, clientName: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700/50 p-3 text-sm font-medium text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20" />
-                        </div>
-
-                        <div className="animate-fade-in">
-                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Observações ou link</label>
-                            <textarea 
-                                placeholder="Link para compra ou detalhes extras..." 
-                                value={requestForm.observation} 
-                                onChange={e => setRequestForm({...requestForm, observation: e.target.value})} 
-                                className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700/50 p-3 text-sm font-medium text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 h-24" 
-                            />
-                        </div>
-
-                        <div className="flex justify-end pt-4 border-t border-gray-100 dark:border-gray-700 gap-3">
-                            <button type="button" onClick={() => { setIsRequestModalOpen(false); setRequestToEdit(null); }} className="px-6 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl font-bold text-sm">Cancelar</button>
-                            <button type="submit" disabled={isSaving} className={`px-6 py-2.5 ${isManualItem ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/20' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'} text-white rounded-xl font-bold text-sm shadow-lg transition-all`}>{isSaving ? 'Gravando...' : 'Salvar pedido'}</button>
+                        <div className="flex gap-3 pt-4 border-t dark:border-gray-700">
+                            {requestToEdit ? (
+                                <>
+                                    {requestToEdit.status === 'Aberto' ? (
+                                        <>
+                                            {isAdmin && <button type="button" onClick={() => triggerStatusConfirmation(requestToEdit, 'Cancelado')} className="flex-1 py-3 bg-red-50 text-red-600 rounded-xl font-bold text-xs hover:bg-red-100 transition-colors">Cancelar pedido</button>}
+                                            {isAdmin && (
+                                                <button type="button" onClick={() => triggerStatusConfirmation(requestToEdit, 'Aprovado')} className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-blue-700 transition-all flex items-center justify-center gap-2">
+                                                    <CheckCircleIcon className="w-4 h-4" /> Aprovar pedido
+                                                </button>
+                                            )}
+                                        </>
+                                    ) : requestToEdit.status === 'Aprovado' ? (
+                                        isAdmin && (
+                                            <button type="button" onClick={() => triggerStatusConfirmation(requestToEdit, 'Comprado')} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-2">
+                                                <ShoppingCartIcon className="w-4 h-4" /> Registrar compra realizada
+                                            </button>
+                                        )
+                                    ) : requestToEdit.status === 'Comprado' ? (
+                                        isAdmin && (
+                                            <button type="button" onClick={() => triggerStatusConfirmation(requestToEdit, 'Em trânsito')} className="flex-1 py-3 bg-purple-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-purple-700 transition-all flex items-center justify-center gap-2">
+                                                <TruckIcon className="w-4 h-4" /> Marcar em trânsito / enviado
+                                            </button>
+                                        )
+                                    ) : requestToEdit.status === 'Em trânsito' ? (
+                                        isAdmin && (
+                                            <button type="button" onClick={() => { setIsRequestModalOpen(false); setIsNFModalOpen(true); setNfForm({ invoiceNumber: '', invoiceKey: '', totalValue: 0, invoiceFile: '', invoiceFileName: '' }); }} className="flex-1 py-3 bg-green-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-green-700 transition-all flex items-center justify-center gap-2">
+                                                <UploadIcon className="w-4 h-4" /> Efetivar entrega (Lançar nota fiscal)
+                                            </button>
+                                        )
+                                    ) : (
+                                        <button type="button" onClick={() => { setIsRequestModalOpen(false); setRequestToEdit(null); }} className="flex-1 py-3 bg-gray-100 text-gray-500 rounded-xl font-bold text-xs">Fechar</button>
+                                    )}
+                                </>
+                            ) : (
+                                <>
+                                    <button type="button" onClick={() => setIsRequestModalOpen(false)} className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 text-gray-500 rounded-xl font-bold text-xs hover:bg-gray-200 transition-colors">Cancelar</button>
+                                    <button type="submit" disabled={isSaving} className="flex-[2] py-3 bg-indigo-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-indigo-700 transition-all active:scale-[0.98]">
+                                        {isSaving ? 'Gravando...' : 'Finalizar solicitação'}
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </form>
                 </Modal>

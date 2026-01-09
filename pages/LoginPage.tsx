@@ -38,18 +38,18 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
     return (
         <div className="min-h-screen bg-gray-100 dark:bg-gray-950 flex items-center justify-center p-4 sm:p-6 lg:p-8 selection:bg-indigo-100">
-            {/* Background Decoration */}
+            {/* Decoração de fundo */}
             <div className="fixed inset-0 overflow-hidden pointer-events-none opacity-20 dark:opacity-10">
                 <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-500 rounded-full blur-[120px]"></div>
                 <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500 rounded-full blur-[120px]"></div>
             </div>
 
             <div className="w-full max-w-md animate-fade-in relative z-10">
-                <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+                <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
                     <div className="p-8 pb-2 flex flex-col items-center">
                         <Logo variant="dark" className="scale-110 mb-6" />
                         <h2 className="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">Bem-vindo</h2>
-                        <p className="text-sm text-gray-500 font-medium mt-1">Acesse a plataforma Orner</p>
+                        <p className="text-sm text-gray-500 font-medium mt-1 text-center">Acesse a plataforma orner energia solar</p>
                     </div>
 
                     <form onSubmit={handleSubmit} className="p-8 space-y-5">
@@ -69,8 +69,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                                         type="email" 
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
-                                        className="w-full bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3 text-sm font-semibold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-gray-300"
-                                        placeholder="seu@email.com.br"
+                                        className="w-full bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-sm font-semibold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-gray-300"
+                                        placeholder="Digite seu e-mail"
                                     />
                                 </div>
                             </div>
@@ -86,7 +86,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                                         type={showPassword ? "text" : "password"}
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
-                                        className="w-full bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3 text-sm font-semibold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                                        placeholder="Digite sua senha"
+                                        className="w-full bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 text-sm font-semibold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                                     />
                                     <button 
                                         type="button"
@@ -102,7 +103,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                         <button 
                             type="submit"
                             disabled={isLoading}
-                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-3.5 font-bold text-sm shadow-lg shadow-indigo-600/20 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 mt-4"
+                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-3.5 font-bold text-sm shadow-lg shadow-indigo-600/20 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 mt-4"
                         >
                             {isLoading ? (
                                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
@@ -116,14 +117,14 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     </form>
 
                     <div className="p-6 bg-gray-50 dark:bg-gray-800/30 border-t border-gray-100 dark:border-gray-800 text-center">
-                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
-                            Orner Tecnologia Solar &copy; {new Date().getFullYear()}
+                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">
+                            Orner tecnologia solar &copy; {new Date().getFullYear()}
                         </p>
                     </div>
                 </div>
                 
                 <p className="text-center mt-8 text-xs text-gray-400 font-medium">
-                    Problemas com o acesso? <a href="#" className="text-indigo-600 font-bold hover:underline">Fale com o suporte TI</a>
+                    Problemas com o acesso? <a href="#" className="text-indigo-600 font-bold hover:underline">Fale com o suporte técnico</a>
                 </p>
             </div>
         </div>

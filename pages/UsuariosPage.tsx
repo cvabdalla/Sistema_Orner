@@ -1,13 +1,13 @@
-
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 /* Added TrashIcon to imports */
-import { AddIcon, EditIcon, UsersIcon, LockClosedIcon, SaveIcon, PhotographIcon, XCircleIcon, ExclamationTriangleIcon, EyeIcon, EyeOffIcon, UploadIcon, CheckCircleIcon, TrashIcon } from '../assets/icons';
+import { AddIcon, EditIcon, UsersIcon, LockClosedIcon, SaveIcon, PhotographIcon, XCircleIcon, ExclamationTriangleIcon, EyeIcon, EyeOffIcon, UploadIcon, CheckCircleIcon, TrashIcon, ClockIcon } from '../assets/icons';
 import type { User, UserProfile, UsuariosPageProps } from '../types';
 import { MENU_ITEMS, MOCK_USERS, MOCK_PROFILES } from '../constants';
 import Modal from '../components/Modal';
 import { dataService } from '../services/dataService';
+import { authService } from '../services/authService';
 
-const UsuariosPage: React.FC<UsuariosPageProps> = ({ view }) => {
+const UsuariosPage: React.FC<UsuariosPageProps> = ({ view, currentUser }) => {
     const [users, setUsers] = useState<User[]>([]);
     const [profiles, setProfiles] = useState<UserProfile[]>([]);
     
@@ -19,10 +19,19 @@ const UsuariosPage: React.FC<UsuariosPageProps> = ({ view }) => {
     const [profileToEdit, setProfileToEdit] = useState<UserProfile | null>(null);
     const [profileToDelete, setProfileToDelete] = useState<UserProfile | null>(null);
 
-    const [userData, setUserData] = useState<Partial<User>>({ name: '', email: '', password: '', profileId: '', active: true, avatar: '' });
+    const [userData, setUserData] = useState<Partial<User>>({ name: '', email: '', password: '', profileId: '', active: true, avatar: '', darkMode: false });
     const [profileData, setProfileData] = useState<Partial<UserProfile>>({ name: '', permissions: [] });
     const [showPassword, setShowPassword] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Verifica se o usuário atual é administrador com base em permissões especiais
+    const isAdmin = useMemo(() => {
+        const adminProfileIds = ['001', '00000000-0000-0000-0000-000000000001'];
+        if (adminProfileIds.includes(String(currentUser.profileId))) return true;
+        
+        const currentProfile = profiles.find(p => String(p.id) === String(currentUser.profileId));
+        return currentProfile?.permissions?.includes('ALL') || false;
+    }, [currentUser, profiles]);
 
     const loadData = async () => {
         try {
@@ -37,6 +46,12 @@ const UsuariosPage: React.FC<UsuariosPageProps> = ({ view }) => {
     };
 
     useEffect(() => { loadData(); }, []);
+
+    // Filtra usuários para exibição na tabela: Admin vê todos, outros vêm apenas a si mesmos
+    const visibleUsers = useMemo(() => {
+        if (isAdmin) return users;
+        return users.filter(u => String(u.id) === String(currentUser.id));
+    }, [users, isAdmin, currentUser]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -71,9 +86,16 @@ const UsuariosPage: React.FC<UsuariosPageProps> = ({ view }) => {
             password: userData.password,
             profileId: String(userData.profileId!), 
             active: userData.active ?? true,
-            avatar: userData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name!)}&background=random`
+            avatar: userData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name!)}&background=random`,
+            darkMode: userData.darkMode ?? false
         };
         await dataService.save('system_users', newUser);
+        
+        // Se for o usuário logado, atualiza a sessão para o tema persistir
+        if (String(newUser.id) === String(currentUser.id)) {
+            authService.saveSession(newUser);
+        }
+
         await loadData();
         setUserModalOpen(false);
         setShowPassword(false);
@@ -83,6 +105,20 @@ const UsuariosPage: React.FC<UsuariosPageProps> = ({ view }) => {
         const updatedUser = { ...user, active: newActiveState };
         await dataService.save('system_users', updatedUser);
         await loadData();
+    };
+
+    const toggleDarkMode = () => {
+        const nextState = !userData.darkMode;
+        setUserData({ ...userData, darkMode: nextState });
+
+        // Se for o usuário atual, atualiza o tema instantaneamente no HTML para feedback real-time
+        if (userToEdit && String(userToEdit.id) === String(currentUser.id)) {
+            if (nextState) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        }
     };
 
     const handleSaveProfile = async (e: React.FormEvent) => {
@@ -144,34 +180,58 @@ const UsuariosPage: React.FC<UsuariosPageProps> = ({ view }) => {
         return (
             <div className="space-y-6">
                 <div className="flex justify-between items-center bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg">
-                    <h2 className="text-2xl font-bold flex items-center gap-3 text-gray-800 dark:text-white"><UsersIcon className="w-8 h-8 text-indigo-600" /> Gestão de usuários</h2>
-                    <button onClick={() => { setUserToEdit(null); setUserData({name:'', email:'', password: '', profileId:'', active:true, avatar: ''}); setShowPassword(false); setUserModalOpen(true); }} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-md font-bold text-sm hover:bg-indigo-700 transition-colors shadow-md"><AddIcon className="w-5 h-5" /> Novo usuário</button>
+                    <h2 className="text-2xl font-bold flex items-center gap-3 text-gray-800 dark:text-white">
+                        <UsersIcon className="w-8 h-8 text-indigo-600" /> 
+                        {isAdmin ? 'Gestão de Usuários' : 'Meu perfil e acesso'}
+                    </h2>
+                    {isAdmin && (
+                        <button onClick={() => { setUserToEdit(null); setUserData({name:'', email:'', password: '', profileId:'', active:true, avatar: '', darkMode: false}); setShowPassword(false); setUserModalOpen(true); }} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-md font-bold text-sm hover:bg-indigo-700 transition-colors shadow-md"><AddIcon className="w-5 h-5" /> Novo usuário</button>
+                    )}
                 </div>
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden border border-gray-100 dark:border-gray-700">
                     <table className="min-w-full text-left text-sm">
                         <thead className="bg-gray-50 dark:bg-gray-700/50 text-xs text-gray-500 font-bold">
-                            <tr><th className="px-6 py-4">Usuário</th><th className="px-6 py-4">E-mail</th><th className="px-6 py-4">Perfil</th><th className="px-6 py-4">Status de Acesso</th><th className="px-6 py-4 text-center">Ações</th></tr>
+                            <tr>
+                                <th className="px-6 py-4">Usuário</th>
+                                <th className="px-6 py-4">E-mail</th>
+                                <th className="px-6 py-4">Perfil</th>
+                                <th className="px-6 py-4">Status de Acesso</th>
+                                <th className="px-6 py-4 text-center">Ações</th>
+                            </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                            {users.map(user => (
+                            {visibleUsers.map(user => (
                                 <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                                     <td className="px-6 py-4 flex items-center gap-3 font-bold text-gray-900 dark:text-white">
                                         <div className="w-10 h-10 rounded-full border dark:border-gray-600 overflow-hidden bg-gray-100 flex-shrink-0">
                                             <img src={user.avatar} className="w-full h-full object-cover" alt="" />
                                         </div>
-                                        {user.name}
+                                        <div>
+                                            <p>{user.name}</p>
+                                            <span className="text-[9px] text-gray-400 font-black">{user.darkMode ? '🌙 Modo noturno' : '☀️ Modo claro'}</span>
+                                        </div>
                                     </td>
                                     <td className="px-6 py-4 text-gray-500 dark:text-gray-400 font-medium">{user.email}</td>
-                                    <td className="px-6 py-4"><span className="px-2 py-1 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 rounded text-[10px] font-bold">{profiles.find(p => String(p.id) === String(user.profileId))?.name || 'N/A'}</span></td>
                                     <td className="px-6 py-4">
-                                        <select 
-                                            value={user.active ? 'liberado' : 'bloqueado'} 
-                                            onChange={(e) => handleStatusToggle(user, e.target.value === 'liberado')}
-                                            className={`text-[10px] font-bold rounded-lg border-transparent px-3 py-1.5 focus:ring-0 outline-none transition-all cursor-pointer shadow-sm ${user.active ? 'bg-green-100 text-green-700 border-green-200' : 'bg-red-100 text-red-700 border-red-200'}`}
-                                        >
-                                            <option value="liberado" className="bg-white text-gray-800">Liberado</option>
-                                            <option value="bloqueado" className="bg-white text-gray-800">Bloqueado</option>
-                                        </select>
+                                        <span className="px-2 py-1 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 rounded text-[10px] font-bold">
+                                            {profiles.find(p => String(p.id) === String(user.profileId))?.name || 'N/A'}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        {isAdmin ? (
+                                            <select 
+                                                value={user.active ? 'liberado' : 'bloqueado'} 
+                                                onChange={(e) => handleStatusToggle(user, e.target.value === 'liberado')}
+                                                className={`text-[10px] font-bold rounded-lg border-transparent px-3 py-1.5 focus:ring-0 outline-none transition-all cursor-pointer shadow-sm ${user.active ? 'bg-green-100 text-green-700 border-green-200' : 'bg-red-100 text-red-700 border-red-200'}`}
+                                            >
+                                                <option value="liberado" className="bg-white text-gray-800">Liberado</option>
+                                                <option value="bloqueado" className="bg-white text-gray-800">Bloqueado</option>
+                                            </select>
+                                        ) : (
+                                            <span className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${user.active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                {user.active ? 'Ativo' : 'Suspenso'}
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="px-6 py-4 text-center">
                                         <button onClick={() => { setUserToEdit(user); setUserData(user); setShowPassword(false); setUserModalOpen(true); }} className="p-2 text-gray-400 hover:text-indigo-600 transition-colors" title="Editar usuário"><EditIcon className="w-5 h-5" /></button>
@@ -235,16 +295,39 @@ const UsuariosPage: React.FC<UsuariosPageProps> = ({ view }) => {
                                     </button>
                                 </div>
                             </div>
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 mb-1">Perfil de acesso</label>
-                                <select required value={userData.profileId} onChange={e => setUserData({...userData, profileId:e.target.value})} className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 p-2.5 text-sm font-semibold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20">
-                                    <option value="">Selecione um perfil...</option>
-                                    {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                </select>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="col-span-2 sm:col-span-1">
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">Perfil de acesso</label>
+                                    <select 
+                                        required 
+                                        disabled={!isAdmin}
+                                        value={userData.profileId} 
+                                        onChange={e => setUserData({...userData, profileId:e.target.value})} 
+                                        className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 p-2.5 text-sm font-semibold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50"
+                                    >
+                                        <option value="">Selecione um perfil...</option>
+                                        {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                    </select>
+                                </div>
+                                <div className="col-span-2 sm:col-span-1 flex flex-col justify-end">
+                                    <div className="bg-gray-50 dark:bg-gray-700/30 p-2.5 rounded-xl border border-gray-100 dark:border-gray-600 flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            {userData.darkMode ? <ClockIcon className="w-4 h-4 text-indigo-500" /> : <PhotographIcon className="w-4 h-4 text-amber-500" />}
+                                            <span className="text-[11px] font-black text-gray-700 dark:text-white tracking-tighter">Modo noturno</span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={toggleDarkMode}
+                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/20 ${userData.darkMode ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-600'}`}
+                                        >
+                                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ease-in-out ${userData.darkMode ? 'translate-x-6' : 'translate-x-1'}`} />
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                             <div className="flex justify-end gap-3 pt-4">
                                 <button type="button" onClick={() => setUserModalOpen(false)} className="px-5 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg font-bold text-xs text-gray-500 dark:text-gray-300 hover:bg-gray-200">Cancelar</button>
-                                <button type="submit" className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold text-xs shadow-lg hover:bg-indigo-700 transition-all">Salvar usuário</button>
+                                <button type="submit" className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold text-xs shadow-lg hover:bg-indigo-700 transition-all">Salvar alterações</button>
                             </div>
                         </form>
                     </Modal>
@@ -257,7 +340,7 @@ const UsuariosPage: React.FC<UsuariosPageProps> = ({ view }) => {
         return (
             <div className="space-y-6">
                 <div className="flex justify-between items-center bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg">
-                    <h2 className="text-2xl font-bold flex items-center gap-3 text-gray-800 dark:text-white"><LockClosedIcon className="w-8 h-8 text-indigo-600" /> Perfis de acesso</h2>
+                    <h2 className="text-2xl font-bold flex items-center gap-3 text-gray-800 dark:text-white"><LockClosedIcon className="w-8 h-8 text-indigo-600" /> Perfis de Acesso</h2>
                     <button onClick={() => { setProfileToEdit(null); setProfileData({name:'', permissions:[]}); setProfileFormOpen(true); }} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-md font-bold text-sm shadow-md hover:bg-indigo-700 transition-colors"><AddIcon className="w-5 h-5" /> Novo perfil</button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

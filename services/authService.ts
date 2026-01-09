@@ -1,26 +1,30 @@
-
 import { dataService } from './dataService';
+import { supabase } from '../supabaseClient';
 import type { User } from '../types';
 
 const SESSION_KEY = 'orner_user_session';
 
 class AuthService {
     /**
-     * Tenta realizar o login comparando email e senha.
-     * Em ambiente real, o Supabase Auth seria o ideal, mas seguindo a estrutura 
-     * de tabela personalizada solicitada:
+     * Tenta realizar o login comparando email e senha no Supabase.
      */
     async login(email: string, password: string): Promise<User | null> {
         try {
-            const users = await dataService.getAll<User>('system_users', undefined, true);
-            
-            // Encontra o usuário por e-mail e senha
-            const user = users.find(u => 
-                u.email.toLowerCase() === email.toLowerCase() && 
-                (u.password === password || (!u.password && password === '123456'))
-            );
+            // Buscamos o usuário na tabela system_users do Supabase
+            const { data, error } = await supabase
+                .from('system_users')
+                .select('*')
+                .eq('email', email.toLowerCase())
+                .single();
 
-            if (user) {
+            if (error || !data) {
+                return null;
+            }
+
+            const user = data as User;
+
+            // Validação simples de senha (melhorar com hash em produção se necessário)
+            if (user.password === password || (!user.password && password === '1234')) {
                 if (!user.active) throw new Error('Seu acesso está suspenso.');
                 this.saveSession(user);
                 return user;
@@ -38,7 +42,12 @@ class AuthService {
 
     getSession(): User | null {
         const session = localStorage.getItem(SESSION_KEY);
-        return session ? JSON.parse(session) : null;
+        if (!session) return null;
+        try {
+            return JSON.parse(session);
+        } catch (e) {
+            return null;
+        }
     }
 
     logout() {

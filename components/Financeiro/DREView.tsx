@@ -1,4 +1,3 @@
-
 import React, { useMemo } from 'react';
 import { PrinterIcon, TableIcon } from '../../assets/icons';
 import type { FinancialTransaction, FinancialCategory } from '../../types';
@@ -8,7 +7,8 @@ interface DREViewProps {
     transactions: FinancialTransaction[]; 
     categories: FinancialCategory[];
     periodType: DrePeriodType;
-    groupCards?: boolean; // Prop opcional para agrupamento
+    isCCGrouped: boolean;
+    isGroupedByManagerial?: boolean;
 }
 
 const formatCurrency = (value: number) => {
@@ -48,12 +48,13 @@ const getColumnsConfig = (type: DrePeriodType) => {
     }
 };
 
-const DREView: React.FC<DREViewProps> = ({ transactions, categories, periodType, groupCards = false }) => {
+const DREView: React.FC<DREViewProps> = ({ transactions, categories, periodType, isCCGrouped, isGroupedByManagerial = false }) => {
     
     const matrixData = useMemo(() => {
         const columns = getColumnsConfig(periodType);
         const getCategoryType = (id: string) => categories.find(c => c.id === id)?.type;
         const getCategoryName = (id: string) => categories.find(c => c.id === id)?.name || 'N/A';
+        const getCategoryGroup = (id: string) => categories.find(c => c.id === id)?.group || 'Outros/Geral';
 
         const columnData = columns.map(() => ({
             receitas: {} as Record<string, number>,
@@ -66,10 +67,10 @@ const DREView: React.FC<DREViewProps> = ({ transactions, categories, periodType,
             totalDespesas: 0
         }));
 
-        const activeReceitaCats = new Set<string>();
-        const activeImpostoCats = new Set<string>();
-        const activeCustoCats = new Set<string>();
-        const activeExpenseCats = new Set<string>();
+        const activeReceitaRows = new Set<string>();
+        const activeImpostoRows = new Set<string>();
+        const activeCustoRows = new Set<string>();
+        const activeExpenseRows = new Set<string>();
 
         transactions.forEach(t => {
             const dateRef = t.paymentDate || t.dueDate;
@@ -79,31 +80,33 @@ const DREView: React.FC<DREViewProps> = ({ transactions, categories, periodType,
             const colIndex = columns.findIndex(col => col.months.includes(monthIndex));
             if (colIndex === -1) return;
 
-            const catType = getCategoryType(t.categoryId);
+            let catType = getCategoryType(t.categoryId);
             let catName = getCategoryName(t.categoryId);
             const amount = t.amount;
 
-            // Lógica de agrupamento de cartões se habilitado
-            if (groupCards && t.description.includes('[Cartão:')) {
-                catName = "Cartão de crédito";
+            if (isCCGrouped && t.id.startsWith('cc-') && t.type === 'despesa') {
+                catName = 'Cartão de crédito';
+                catType = 'despesa';
             }
+
+            const rowLabel = isGroupedByManagerial ? getCategoryGroup(t.categoryId) : catName;
 
             if (catType === 'receita') {
                 columnData[colIndex].receitaBruta += amount;
-                columnData[colIndex].receitas[catName] = (columnData[colIndex].receitas[catName] || 0) + amount;
-                activeReceitaCats.add(catName);
+                columnData[colIndex].receitas[rowLabel] = (columnData[colIndex].receitas[rowLabel] || 0) + amount;
+                activeReceitaRows.add(rowLabel);
             } else if (catName.toLowerCase().includes('imposto')) {
                 columnData[colIndex].impostosTotal += amount;
-                columnData[colIndex].impostosMap[catName] = (columnData[colIndex].impostosMap[catName] || 0) + amount;
-                activeImpostoCats.add(catName);
+                columnData[colIndex].impostosMap[rowLabel] = (columnData[colIndex].impostosMap[rowLabel] || 0) + amount;
+                activeImpostoRows.add(rowLabel);
             } else if (catName.toLowerCase().includes('fornecedor')) {
                 columnData[colIndex].custosTotal += amount;
-                columnData[colIndex].custosMap[catName] = (columnData[colIndex].custosMap[catName] || 0) + amount;
-                activeCustoCats.add(catName);
+                columnData[colIndex].custosMap[rowLabel] = (columnData[colIndex].custosMap[rowLabel] || 0) + amount;
+                activeCustoRows.add(rowLabel);
             } else if (catType === 'despesa') {
                 columnData[colIndex].totalDespesas += amount;
-                columnData[colIndex].despesasOperacionais[catName] = (columnData[colIndex].despesasOperacionais[catName] || 0) + amount;
-                activeExpenseCats.add(catName);
+                columnData[colIndex].despesasOperacionais[rowLabel] = (columnData[colIndex].despesasOperacionais[rowLabel] || 0) + amount;
+                activeExpenseRows.add(rowLabel);
             }
         });
 
@@ -129,21 +132,21 @@ const DREView: React.FC<DREViewProps> = ({ transactions, categories, periodType,
             despesasOperacionais: {} as Record<string, number>
         };
 
-        activeReceitaCats.forEach(cat => totals.receitas[cat] = finalGrid.reduce((acc, col) => acc + (col.receitas[cat] || 0), 0));
-        activeImpostoCats.forEach(cat => totals.impostosMap[cat] = finalGrid.reduce((acc, col) => acc + (col.impostosMap[cat] || 0), 0));
-        activeCustoCats.forEach(cat => totals.custosMap[cat] = finalGrid.reduce((acc, col) => acc + (col.custosMap[cat] || 0), 0));
-        activeExpenseCats.forEach(cat => totals.despesasOperacionais[cat] = finalGrid.reduce((acc, col) => acc + (col.despesasOperacionais[cat] || 0), 0));
+        activeReceitaRows.forEach(row => totals.receitas[row] = finalGrid.reduce((acc, col) => acc + (col.receitas[row] || 0), 0));
+        activeImpostoRows.forEach(row => totals.impostosMap[row] = finalGrid.reduce((acc, col) => acc + (col.impostosMap[row] || 0), 0));
+        activeCustoRows.forEach(row => totals.custosMap[row] = finalGrid.reduce((acc, col) => acc + (col.custosMap[row] || 0), 0));
+        activeExpenseRows.forEach(row => totals.despesasOperacionais[row] = finalGrid.reduce((acc, col) => acc + (col.despesasOperacionais[row] || 0), 0));
 
         return {
             columnsData: finalGrid,
             columnHeaders: columns.map(c => c.label),
-            receitaCategories: Array.from(activeReceitaCats).sort(),
-            impostoCategories: Array.from(activeImpostoCats).sort(),
-            custoCategories: Array.from(activeCustoCats).sort(),
-            expenseCategories: Array.from(activeExpenseCats).sort(),
+            receitaRows: Array.from(activeReceitaRows).sort(),
+            impostoRows: Array.from(activeImpostoRows).sort(),
+            custoRows: Array.from(activeCustoRows).sort(),
+            expenseRows: Array.from(activeExpenseRows).sort(),
             totals: { ...totals, margem: totals.receitaBruta > 0 ? (totals.lucroLiquido / totals.receitaBruta) * 100 : 0 }
         };
-    }, [transactions, categories, periodType, groupCards]);
+    }, [transactions, categories, periodType, isCCGrouped, isGroupedByManagerial]);
 
     const handlePrint = () => window.print();
 
@@ -182,43 +185,51 @@ const DREView: React.FC<DREViewProps> = ({ transactions, categories, periodType,
 
     return (
         <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-lg print:shadow-none print:border-none print:p-0">
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex justify-between items-center mb-6">
                 <div>
                     <h3 className="text-xl font-bold text-gray-900 dark:text-white">DRE - {periodType.charAt(0).toUpperCase() + periodType.slice(1)}</h3>
-                    <p className="text-xs text-gray-500">Valores em R$ (Regime de Caixa) {groupCards && <span className="ml-2 bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded text-[10px] font-bold">Cartões Agrupados</span>}</p>
+                    <div className="flex flex-wrap items-center gap-3 mt-1">
+                        <p className="text-xs text-gray-500 font-medium">Valores em R$ (Regime de Caixa)</p>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded transition-colors ${isCCGrouped ? 'bg-indigo-50 text-indigo-600' : 'bg-gray-100 text-gray-500'}`}>
+                            {isCCGrouped ? 'Cartões Agrupados' : 'Cartões Detalhados'}
+                        </span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded transition-colors ${isGroupedByManagerial ? 'bg-indigo-50 text-indigo-600' : 'bg-gray-100 text-gray-500'}`}>
+                            {isGroupedByManagerial ? 'Visão por Grupo' : 'Visão por Categoria'}
+                        </span>
+                    </div>
                 </div>
                 <div className="flex gap-2 print:hidden">
-                    <button onClick={handlePrint} className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 transition-colors text-sm">
+                    <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-200 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-100 transition-colors text-xs font-bold">
                         <PrinterIcon className="w-4 h-4" /> Imprimir
                     </button>
                 </div>
             </div>
 
-            <div className="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-lg custom-scrollbar">
+            <div className="overflow-x-auto border border-gray-100 dark:border-gray-700 rounded-xl custom-scrollbar shadow-sm">
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                    <thead className="bg-gray-100 dark:bg-gray-900">
+                    <thead className="bg-gray-50 dark:bg-gray-900">
                         <tr>
-                            <th className="px-3 py-3 text-left text-xs font-bold text-gray-500 sticky left-0 z-20 bg-gray-100 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 w-48">Categoria</th>
-                            {matrixData.columnHeaders.map(colLabel => <th key={colLabel} className="px-2 py-3 text-right text-[11px] font-bold text-gray-500 min-w-[80px] border-r border-gray-200 dark:border-gray-800">{colLabel}</th>)}
-                            <th className="px-3 py-3 text-right text-xs font-bold text-gray-900 dark:text-white bg-gray-200 dark:bg-gray-800 min-w-[100px] border-l border-gray-300">Total</th>
+                            <th className="px-3 py-4 text-left text-xs font-bold text-gray-500 sticky left-0 z-20 bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 w-48">Categoria / Grupo</th>
+                            {matrixData.columnHeaders.map(colLabel => <th key={colLabel} className="px-2 py-4 text-right text-[11px] font-bold text-gray-500 min-w-[80px] border-r border-gray-200 dark:border-gray-800">{colLabel}</th>)}
+                            <th className="px-3 py-4 text-right text-xs font-bold text-gray-900 dark:text-white bg-gray-200 dark:bg-gray-800 min-w-[100px] border-l border-gray-300">Total</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100">
                         <TableRow label="(+) Receita Bruta" field="receitaBruta" textColor="text-blue-600" isBold />
-                        {matrixData.receitaCategories.map(cat => <TableRow key={cat} label={cat} field={cat} type="receita" />)}
+                        {matrixData.receitaRows.map(row => <TableRow key={row} label={row} field={row} type="receita" />)}
                         
                         <TableRow label="(-) Impostos sobre Vendas" field="impostosTotal" isNegative isBold bgColor="bg-gray-50/50" />
-                        {matrixData.impostoCategories.map(cat => <TableRow key={cat} label={cat} field={cat} type="imposto" isNegative />)}
+                        {matrixData.impostoRows.map(row => <TableRow key={row} label={row} field={row} type="imposto" isNegative />)}
                         
                         <TableRow label="(=) Receita Líquida" field="receitaLiquida" isBold bgColor="bg-gray-100 dark:bg-gray-700/50" />
                         
                         <TableRow label="(-) Custos (Fornecedores)" field="custosTotal" isNegative isBold bgColor="bg-gray-50/50" />
-                        {matrixData.custoCategories.map(cat => <TableRow key={cat} label={cat} field={cat} type="custo" isNegative />)}
+                        {matrixData.custoRows.map(row => <TableRow key={row} label={row} field={row} type="custo" isNegative />)}
                         
                         <TableRow label="(=) Lucro Bruto" field="lucroBruto" isBold bgColor="bg-indigo-50 dark:bg-indigo-900/20" textColor="text-indigo-700" />
 
                         <tr><td colSpan={matrixData.columnHeaders.length + 2} className="px-3 py-2 bg-gray-50 text-[11px] font-bold text-gray-500 border-y">Despesas operacionais</td></tr>
-                        {matrixData.expenseCategories.map(cat => <TableRow key={cat} label={cat} field={cat} type="despesa" isNegative />)}
+                        {matrixData.expenseRows.map(row => <TableRow key={row} label={row} field={row} type="despesa" isNegative />)}
                         <TableRow label="Total despesas operacionais" field="totalDespesas" isBold isNegative textColor="text-red-600" bgColor="bg-red-50/50" />
 
                         <TableRow label="(=) Lucro Líquido" field="lucroLiquido" isBold bgColor="bg-green-100 dark:bg-green-900/30" textColor="text-green-800" />

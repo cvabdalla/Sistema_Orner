@@ -31,26 +31,21 @@ const Sidebar: React.FC<SidebarProps> = ({
     if (userPermissions.includes('ALL')) return MENU_ITEMS;
 
     return MENU_ITEMS.map(item => {
-      // Se tiver filhos, filtramos os filhos permitidos
       if (item.children) {
         const allowedChildren = item.children.filter(child => 
             userPermissions.includes(child.id as string)
         );
         
-        // Se houver algum filho permitido, retornamos o item com a lista filtrada
         if (allowedChildren.length > 0) {
           return { ...item, children: allowedChildren };
         }
         
-        // Se o próprio pai estiver na lista mas não os filhos (caso raro dependendo da gestão)
         if (userPermissions.includes(item.id as string)) {
             return { ...item, children: [] };
         }
         
         return null;
       }
-      
-      // Se for um item simples sem filhos
       return userPermissions.includes(item.id as string) || item.id === 'DASHBOARD' ? item : null;
     }).filter(item => item !== null) as MenuItem[];
   }, [userPermissions]);
@@ -91,7 +86,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           </a>
         </div>
 
-        <nav className="flex-1 space-y-1">
+        <nav className="flex-1 space-y-1 overflow-y-auto custom-scrollbar">
           {filteredMenuItems.map((item) => (
             item.children && item.children.length > 0 ? (
               <div key={item.id}>
@@ -159,6 +154,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                      <p className="text-[10px] text-gray-500 truncate">{currentUser.email}</p>
                  </div>
              </div>
+
              <button 
                 onClick={onLogout}
                 className="w-full flex items-center gap-2 py-2 px-3 text-[11px] font-black text-red-500 hover:bg-red-500/10 rounded-lg transition-all"

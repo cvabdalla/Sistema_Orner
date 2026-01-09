@@ -1,7 +1,8 @@
-
-import React, { useState, useMemo } from 'react';
-import type { FinancialTransaction, FinancialTransactionStatus, FinancialCategory } from '../../types';
-import { TrashIcon, EditIcon, FilterIcon, ExclamationTriangleIcon, EyeIcon, CreditCardIcon } from '../../assets/icons';
+import React, { useState, useMemo, useEffect } from 'react';
+import type { FinancialTransaction, FinancialTransactionStatus, FinancialCategory, CreditCard } from '../../types';
+import { TrashIcon, EditIcon, FilterIcon, CreditCardIcon, EyeIcon, CheckCircleIcon, XCircleIcon, ExclamationTriangleIcon } from '../../assets/icons';
+import { dataService } from '../../services/dataService';
+import CreditCardDetailModal from './CreditCardDetailModal';
 import Modal from '../Modal';
 
 interface ContasTableProps {
@@ -9,7 +10,7 @@ interface ContasTableProps {
     transactions: FinancialTransaction[];
     categories: FinancialCategory[];
     onEdit: (transaction: FinancialTransaction) => void;
-    onDelete: (id: string) => void;
+    onCancel: (id: string) => void;
     onStatusChange: (id: string, status: FinancialTransactionStatus) => void;
 }
 
@@ -21,288 +22,236 @@ const formatCurrency = (value: number) => {
 
 const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 
-const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categories, onEdit, onDelete, onStatusChange }) => {
+const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categories, onEdit, onCancel, onStatusChange }) => {
     const [statusFilter, setStatusFilter] = useState<FinancialTransactionStatus | 'all'>('all');
-    const [viewingGroupInfo, setViewingGroupInfo] = useState<{ dueDate: string, status: FinancialTransactionStatus } | null>(null);
-    const [batchDetailModalOpen, setBatchDetailModalOpen] = useState(false);
+    const [selectedGroup, setSelectedGroup] = useState<FinancialTransaction[] | null>(null);
+    const [cards, setCards] = useState<CreditCard[]>([]);
     
-    const getCategoryName = (categoryId: string) => {
-        return categories.find(c => c.id === categoryId)?.name || 'Geral';
-    };
+    // Estado para o modal de confirmação de efetivação
+    const [confirmingTx, setConfirmingTx] = useState<{id: string, type: 'receita' | 'despesa', isGroup: boolean, originalItems?: any} | null>(null);
 
+    useEffect(() => {
+        dataService.getAll<CreditCard>('credit_cards').then(setCards);
+    }, []);
+    
     const processedTransactions = useMemo(() => {
-        const result: (FinancialTransaction & { isGroupSummary?: boolean, itemCount?: number, cardCount?: number })[] = [];
-        const dateGroups = new Map<string, FinancialTransaction[]>();
+        const filtered = transactions.filter(t => statusFilter === 'all' || t.status === statusFilter);
+        const ccGroups: Record<string, { items: FinancialTransaction[], dueDate: string }> = {};
+        const normalTransactions: any[] = [];
 
-        const initialFiltered = transactions.filter(t => statusFilter === 'all' || t.status === statusFilter);
-
-        initialFiltered.forEach(t => {
-            const isCard = t.description.includes('[Cartão:');
-            if (isCard) {
-                // BUG FIX: O agrupamento deve considerar a data E o status
-                const key = `${t.dueDate}_${t.status}`;
-                if (!dateGroups.has(key)) dateGroups.set(key, []);
-                dateGroups.get(key)!.push(t);
+        filtered.forEach(t => {
+            if (t.id.startsWith('cc-') && t.type === 'despesa' && t.status !== 'cancelado') {
+                const cardMatch = t.description.match(/\[(.*?)\]/);
+                const cardName = cardMatch ? cardMatch[1] : 'Cartão';
+                const card = cards.find(c => c.name === cardName);
+                const closingDay = card ? card.closingDay : '0';
+                
+                // Removemos o cardName da chave para consolidar múltiplos cartões com mesmo fechamento/vencimento
+                const groupKey = `CC_GROUPED_${t.dueDate}_${closingDay}`;
+                
+                if (!ccGroups[groupKey]) {
+                    ccGroups[groupKey] = { items: [], dueDate: t.dueDate };
+                }
+                ccGroups[groupKey].items.push(t);
             } else {
-                result.push(t);
+                normalTransactions.push({ ...t, displayDescription: t.description });
             }
         });
 
-        dateGroups.forEach((items, key) => {
-            const [dueDate, status] = key.split('_');
-            const totalAmount = items.reduce((sum, item) => sum + item.amount, 0);
-            const cardNames = new Set();
-            items.forEach(item => {
-                const match = item.description.match(/\[Cartão:\s*(.*?)\]/);
-                if (match) cardNames.add(match[1]);
-            });
-
-            result.push({
-                ...items[0], 
-                id: `due_group_${key}`, 
-                description: `Cartão de crédito`,
+        const groupedCC: any[] = Object.entries(ccGroups).map(([key, groupData]) => {
+            const group = groupData.items;
+            const totalAmount = group.reduce((sum, item) => sum + item.amount, 0);
+            const allPaid = group.every(item => item.status === 'pago');
+            
+            return {
+                id: `grouped-${key}`,
+                description: `Cartão de Crédito`,
+                displayDescription: `Cartão de Crédito`,
                 amount: totalAmount,
-                isGroupSummary: true,
-                itemCount: items.length,
-                cardCount: cardNames.size,
-                dueDate: dueDate,
-                status: status as FinancialTransactionStatus
-            });
+                dueDate: groupData.dueDate,
+                status: allPaid ? 'pago' : 'pendente',
+                categoryId: 'cc-group',
+                type: 'despesa',
+                isGrouped: true,
+                originalItems: group
+            };
         });
 
-        return result.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
-    }, [transactions, statusFilter]);
-
-    const getDateStatusInfo = (dueDate: string, status: FinancialTransactionStatus) => {
-        if (status === 'pago') return null;
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const [y, m, d] = dueDate.split('-').map(Number);
-        const due = new Date(y, m - 1, d);
-        const diffTime = due.getTime() - today.getTime();
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-        if (diffDays < 0) {
-            return {
-                type: 'overdue', label: `Vencido há ${Math.abs(diffDays)} dia(s)`,
-                rowClass: 'bg-red-50 dark:bg-red-900/10 border-l-4 border-l-red-500',
-                badgeClass: 'text-red-700 bg-red-100 dark:bg-red-900/30'
-            };
-        } else if (diffDays === 0) {
-            return {
-                type: 'urgent', label: 'Vence hoje',
-                rowClass: 'bg-orange-50 dark:bg-orange-900/10 border-l-4 border-l-orange-500',
-                badgeClass: 'text-orange-700 bg-orange-100 dark:bg-orange-900/30'
-            };
-        } else if (diffDays <= 3) {
-            return {
-                type: 'warning', label: `Vence em ${diffDays} dia(s)`,
-                rowClass: 'bg-yellow-50 dark:bg-yellow-900/10 border-l-4 border-l-yellow-400',
-                badgeClass: 'text-yellow-700 bg-yellow-100 dark:bg-yellow-900/30'
-            };
-        }
-        return {
-            type: 'normal', label: null,
-            rowClass: 'bg-white dark:bg-gray-800 border-l-4 border-l-transparent border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50',
-            badgeClass: ''
-        };
+        return [...normalTransactions, ...groupedCC].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+    }, [transactions, statusFilter, cards]);
+    
+    const getCategoryName = (categoryId: string) => {
+        if (categoryId === 'cc-group') return 'Fatura consolidada';
+        return categories.find(c => c.id === categoryId)?.name || 'N/A';
     };
 
-    const groupTransactionsByCard = useMemo((): Record<string, FinancialTransaction[]> => {
-        if (!viewingGroupInfo) return {};
-        // BUG FIX: Filtrar também pelo status para não mostrar itens pagos em faturas pendentes
-        const items = transactions.filter(t => 
-            t.description.includes('[Cartão:') && 
-            t.dueDate === viewingGroupInfo.dueDate &&
-            t.status === viewingGroupInfo.status
-        );
-        const grouped: Record<string, FinancialTransaction[]> = {};
-        
-        items.forEach(it => {
-            const match = it.description.match(/\[Cartão:\s*(.*?)\]/);
-            const cardName = match ? match[1] : 'Cartão Indefinido';
-            if (!grouped[cardName]) grouped[cardName] = [];
-            grouped[cardName].push(it);
-        });
-        return grouped;
-    }, [viewingGroupInfo, transactions]);
+    const handleConfirmEffectivation = () => {
+        if (!confirmingTx) return;
 
-    const handleOpenDetails = (dueDate: string, status: FinancialTransactionStatus) => {
-        setViewingGroupInfo({ dueDate, status });
-        setBatchDetailModalOpen(true);
+        if (confirmingTx.isGroup) {
+            const newStatus = 'pago'; 
+            confirmingTx.originalItems.forEach((item: FinancialTransaction) => onStatusChange(item.id, newStatus));
+        } else {
+            onStatusChange(confirmingTx.id, 'pago');
+        }
+        setConfirmingTx(null);
+    };
+
+    const handleCancelGroup = (group: any) => {
+        if (confirm(`Deseja realmente cancelar todos os ${group.originalItems.length} lançamentos deste grupo?`)) {
+            group.originalItems.forEach((item: FinancialTransaction) => onCancel(item.id));
+        }
     };
 
     return (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden flex flex-col border border-gray-100 dark:border-gray-700">
-            <div className="p-6 flex justify-between items-center border-b dark:border-gray-700">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">{title}</h3>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden flex flex-col">
+            <div className="p-6 flex justify-between items-center">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white">{title}</h3>
                 <div className="flex items-center gap-2">
-                    <FilterIcon className="text-gray-400 w-4 h-4" />
+                    <FilterIcon className="text-gray-500 dark:text-gray-400 w-4 h-4" />
                     <select
                         value={statusFilter}
                         onChange={(e) => setStatusFilter(e.target.value as any)}
-                        className="bg-gray-50 dark:bg-gray-700 border-none text-gray-600 dark:text-gray-300 text-xs font-bold rounded-lg p-2"
+                        className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-[11px] font-bold rounded-lg block p-2"
                     >
                         <option value="all">Todos os status</option>
                         <option value="pendente">Pendentes</option>
-                        <option value="pago">Pagos</option>
+                        <option value="pago">Liquidados</option>
+                        <option value="cancelado">Cancelados</option>
                     </select>
                 </div>
             </div>
-
             <div className="overflow-x-auto">
                 <table className="min-w-full text-left text-sm">
-                    <thead className="bg-gray-50 dark:bg-gray-700/50 text-[10px] font-bold text-gray-400 border-b">
+                    <thead className="bg-gray-50 dark:bg-gray-700/50 text-[10px] text-gray-500 tracking-widest font-black">
                         <tr>
-                            <th className="px-6 py-4">Descrição do lançamento</th>
-                            <th className="px-6 py-4">Categoria</th>
-                            <th className="px-6 py-4 text-center">Vencimento</th>
-                            <th className="px-6 py-4 text-right">Valor</th>
-                            <th className="px-6 py-4 text-center">Status</th>
-                            <th className="px-6 py-4 text-center">Ações</th>
+                            <th className="px-6 py-3">Descrição</th>
+                            <th className="px-6 py-3">Categoria</th>
+                            <th className="px-6 py-4">Vencimento</th>
+                            <th className="px-6 py-3 text-right">Valor</th>
+                            <th className="px-6 py-3 text-center">Status</th>
+                            <th className="px-6 py-3 text-center">Ações</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                    <tbody>
                         {processedTransactions.map((tx) => {
-                            const dateStatus = getDateStatusInfo(tx.dueDate, tx.status);
-                            const rowClass = tx.isGroupSummary 
-                                ? 'bg-indigo-50/30 dark:bg-indigo-900/10 border-l-4 border-l-indigo-600 hover:bg-indigo-100/50 cursor-pointer' 
-                                : dateStatus?.rowClass || 'bg-white dark:bg-gray-800 border-l-4 border-l-transparent';
-                            
+                            const isPaid = tx.status === 'pago';
+                            const isCancelled = tx.status === 'cancelado';
+                            const statusLabel = isCancelled ? 'Cancelado' : isPaid ? (tx.type === 'receita' ? 'Recebido' : 'Pago') : 'Pendente';
+                            const actionLabel = tx.type === 'receita' ? 'Receber' : 'Pagar';
+
                             return (
                                 <tr 
                                     key={tx.id} 
-                                    className={`${rowClass} transition-colors group`}
-                                    onClick={() => tx.isGroupSummary && handleOpenDetails(tx.dueDate, tx.status)}
+                                    className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-indigo-900/10 transition-colors ${
+                                        isPaid ? 'bg-green-50/30 dark:bg-green-900/5' : 
+                                        isCancelled ? 'bg-red-50/20 opacity-70 grayscale-[0.5]' : ''
+                                    }`}
                                 >
-                                    <td className="py-4 px-6">
-                                        <div className="flex items-center gap-3">
-                                            {tx.isGroupSummary ? (
-                                                <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-sm">
-                                                    <CreditCardIcon className="w-4 h-4" />
-                                                </div>
-                                            ) : (
-                                                <div className="w-1.5 h-1.5 rounded-full bg-gray-300" />
-                                            )}
-                                            <div className="flex flex-col">
-                                                <span className={`font-bold text-sm ${tx.isGroupSummary ? 'text-indigo-700 dark:text-indigo-400' : 'text-gray-800 dark:text-white'}`}>
-                                                    {tx.description}
+                                    <td className={`py-4 px-6 font-bold ${isPaid || isCancelled ? 'text-gray-500' : 'text-gray-900 dark:text-white'}`}>
+                                        <div className="flex items-center gap-2">
+                                            {tx.isGrouped ? <CreditCardIcon className="w-4 h-4 text-indigo-500" /> : null}
+                                            <span className={isCancelled ? 'line-through decoration-red-400' : ''}>
+                                                {tx.displayDescription}
+                                            </span>
+                                            {tx.isGrouped && (
+                                                <span className="text-[9px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black">
+                                                    {tx.originalItems.length} itens
                                                 </span>
-                                                {tx.isGroupSummary && (
-                                                    <span className="text-[10px] font-bold text-gray-400 tracking-tight">
-                                                        Consolidado: {tx.itemCount} itens de {tx.cardCount} cartão(ões)
-                                                    </span>
-                                                )}
-                                            </div>
+                                            )}
+                                            {isCancelled && tx.cancelReason && (
+                                                <div className="group relative ml-2">
+                                                    <ExclamationTriangleIcon className="w-4 h-4 text-red-500 cursor-help" />
+                                                    <div className="absolute left-0 top-6 hidden group-hover:block z-50 w-64 p-3 bg-red-600 text-white text-[10px] font-bold rounded-lg shadow-xl animate-fade-in">
+                                                        Motivo: {tx.cancelReason}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     </td>
-                                    <td className="py-4 px-6 text-xs text-gray-500 font-bold">
-                                        {tx.isGroupSummary ? 'Cartão de crédito' : getCategoryName(tx.categoryId)}
-                                    </td>
+                                    <td className="py-4 px-6 text-gray-500 dark:text-gray-400 text-xs font-medium">{getCategoryName(tx.categoryId)}</td>
+                                    <td className={`py-4 px-6 font-bold ${isPaid || isCancelled ? 'text-gray-400' : 'text-gray-600 dark:text-gray-300'}`}>{formatDate(tx.dueDate)}</td>
+                                    <td className={`py-4 px-6 font-black text-right ${isPaid || isCancelled ? 'text-gray-400' : tx.type === 'receita' ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(tx.amount)}</td>
                                     <td className="py-4 px-6 text-center">
-                                        <span className="font-bold text-gray-700 dark:text-gray-300 text-xs">{formatDate(tx.dueDate)}</span>
-                                        {dateStatus?.label && (
-                                            <div className={`text-[9px] font-black px-1.5 py-0.5 rounded mt-1 mx-auto w-fit ${dateStatus.badgeClass}`}>
-                                                {dateStatus.label}
-                                            </div>
-                                        )}
-                                    </td>
-                                    <td className={`py-4 px-6 font-bold text-right text-sm ${tx.isGroupSummary ? 'text-indigo-700 dark:text-indigo-400' : 'text-gray-900 dark:text-white'}`}>
-                                        {formatCurrency(tx.amount)}
-                                    </td>
-                                    <td className="py-4 px-6 text-center">
-                                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold shadow-sm ${tx.status === 'pago' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                                            {tx.status === 'pago' ? 'Pago' : 'Pendente'}
+                                        <span className={`px-2.5 py-1 text-[10px] font-black rounded-full ${isCancelled ? 'bg-red-100 text-red-700' : isPaid ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                            {statusLabel}
                                         </span>
                                     </td>
-                                    <td className="py-4 px-6 text-center" onClick={(e) => e.stopPropagation()}>
-                                        <div className="flex justify-center gap-2">
-                                            {tx.status === 'pendente' && (
-                                                <button 
-                                                    onClick={() => onStatusChange(tx.id, 'pago')} 
-                                                    className={`px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition-all ${
-                                                        tx.isGroupSummary ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-green-600 text-white hover:bg-green-700'
-                                                    }`}
-                                                >
-                                                    {tx.isGroupSummary ? 'Quitar fatura' : 'Pagar'}
-                                                </button>
-                                            )}
-                                            {tx.isGroupSummary ? (
-                                                <button onClick={() => handleOpenDetails(tx.dueDate, tx.status)} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100" title="Ver detalhado">
-                                                    <EyeIcon className="w-4 h-4"/>
-                                                </button>
+                                    <td className="py-4 px-6 text-center">
+                                        <div className="flex justify-center gap-1">
+                                            {isCancelled ? (
+                                                <span className="text-[10px] font-bold text-gray-400 italic">Sem ações</span>
+                                            ) : tx.isGrouped ? (
+                                                <>
+                                                    <button onClick={() => setSelectedGroup(tx.originalItems)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg" title="Ver detalhes">
+                                                        <EyeIcon className="w-5 h-5" />
+                                                    </button>
+                                                    {!isPaid && (
+                                                        <button onClick={() => setConfirmingTx({id: tx.id, type: tx.type, isGroup: true, originalItems: tx.originalItems})} className="text-[10px] font-black text-green-600 hover:underline px-2">
+                                                            Pagar fatura
+                                                        </button>
+                                                    )}
+                                                    <button onClick={() => handleCancelGroup(tx)} className="p-2 text-gray-400 hover:text-red-600" title="Cancelar grupo"><XCircleIcon className="w-5 h-5" /></button>
+                                                </>
                                             ) : (
-                                                <button onClick={() => onEdit(tx)} className="p-1.5 text-gray-400 hover:text-indigo-600 rounded-lg"><EditIcon className="w-4 h-4"/></button>
+                                                <>
+                                                    {tx.status === 'pendente' && (
+                                                        <button onClick={() => setConfirmingTx({id: tx.id, type: tx.type, isGroup: false})} className="text-green-600 font-bold text-[10px] hover:underline px-2">{actionLabel}</button>
+                                                    )}
+                                                    <button onClick={() => onEdit(tx)} className="p-2 text-gray-400 hover:text-indigo-600" title="Editar"><EditIcon className="w-5 h-5" /></button>
+                                                    <button onClick={() => onCancel(tx.id)} className="p-2 text-gray-400 hover:text-red-600" title="Cancelar"><XCircleIcon className="w-5 h-5" /></button>
+                                                </>
                                             )}
-                                            <button onClick={() => onDelete(tx.id)} className="p-1.5 text-gray-300 hover:text-red-600 rounded-lg"><TrashIcon className="w-4 h-4"/></button>
                                         </div>
                                     </td>
                                 </tr>
                             );
                         })}
+                        {processedTransactions.length === 0 && (
+                            <tr>
+                                <td colSpan={6} className="py-12 text-center text-gray-400 italic font-bold text-sm">
+                                    Nenhum registro encontrado para este filtro.
+                                </td>
+                            </tr>
+                        )}
                     </tbody>
                 </table>
             </div>
 
-            {batchDetailModalOpen && viewingGroupInfo && (
-                <Modal title="Detalhamento das faturas" onClose={() => setBatchDetailModalOpen(false)} maxWidth="max-w-3xl">
-                    <div className="space-y-6">
-                        <div className={`p-5 rounded-2xl border flex justify-between items-center ${viewingGroupInfo.status === 'pago' ? 'bg-green-50 border-green-100 dark:bg-green-900/20' : 'bg-indigo-50 dark:bg-indigo-900/30 border-indigo-100'}`}>
-                            <div>
-                                <h4 className={`text-[10px] font-bold tracking-tight mb-1 ${viewingGroupInfo.status === 'pago' ? 'text-green-500' : 'text-indigo-500'}`}>
-                                    Total {viewingGroupInfo.status === 'pago' ? 'pago' : 'vencimento'} em {formatDate(viewingGroupInfo.dueDate)}
-                                </h4>
-                                <p className={`text-3xl font-black ${viewingGroupInfo.status === 'pago' ? 'text-green-700 dark:text-green-300' : 'text-indigo-700 dark:text-indigo-300'}`}>
-                                    {formatCurrency((Object.values(groupTransactionsByCard).flat() as FinancialTransaction[]).reduce((acc, curr) => acc + curr.amount, 0))}
-                                </p>
-                            </div>
-                            <CreditCardIcon className={`w-10 h-10 ${viewingGroupInfo.status === 'pago' ? 'text-green-200' : 'text-indigo-200'}`} />
+            {confirmingTx && (
+                <Modal title="Confirmar operação" onClose={() => setConfirmingTx(null)}>
+                    <div className="p-4 text-center space-y-6">
+                        <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 text-green-600">
+                            <CheckCircleIcon className="w-10 h-10" />
                         </div>
-
-                        <div className="space-y-4">
-                            {Object.entries(groupTransactionsByCard).map(([cardName, items]) => {
-                                const typedItems = items as FinancialTransaction[];
-                                return (
-                                    <div key={cardName} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden shadow-sm">
-                                        <div className="bg-gray-50 dark:bg-gray-700/50 px-4 py-2 border-b flex justify-between items-center">
-                                            <h5 className="text-xs font-bold text-gray-700 dark:text-gray-200 flex items-center gap-2">
-                                                <div className={`w-1.5 h-1.5 rounded-full ${viewingGroupInfo.status === 'pago' ? 'bg-green-500' : 'bg-indigo-500'}`} /> {cardName}
-                                            </h5>
-                                            <span className={`text-[10px] font-bold ${viewingGroupInfo.status === 'pago' ? 'text-green-600' : 'text-indigo-600'}`}>
-                                                Subtotal: {formatCurrency(typedItems.reduce((a, b) => a + b.amount, 0))}
-                                            </span>
-                                        </div>
-                                        <table className="min-w-full text-left text-xs">
-                                            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                                {typedItems.map(it => (
-                                                    <tr key={it.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                                        <td className="px-4 py-2.5 text-gray-400 font-medium">{it.launchDate ? formatDate(it.launchDate) : '---'}</td>
-                                                        <td className="px-4 py-2.5 font-bold text-gray-700 dark:text-gray-200">{it.description.replace(/\[Cartão:.*?\]\s*/, '')}</td>
-                                                        <td className={`px-4 py-2.5 text-right font-bold ${viewingGroupInfo.status === 'pago' ? 'text-green-600' : 'text-gray-900 dark:text-white'}`}>
-                                                            {formatCurrency(it.amount)}
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                        
-                        <div className="flex justify-end gap-3 pt-2">
-                            <button onClick={() => setBatchDetailModalOpen(false)} className="px-6 py-2 bg-gray-100 dark:bg-gray-700 text-gray-500 rounded-lg font-bold text-xs">Fechar</button>
-                            {viewingGroupInfo.status === 'pendente' && (
-                                <button 
-                                    onClick={() => { onStatusChange(`due_group_${viewingGroupInfo.dueDate}_pendente`, 'pago'); setBatchDetailModalOpen(false); }} 
-                                    className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold text-xs shadow-lg hover:bg-indigo-700 transition-all"
-                                >
-                                    Quitar todas agora
-                                </button>
-                            )}
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">Deseja efetivar a operação?</h3>
+                        <div className="flex gap-4">
+                            <button 
+                                onClick={() => setConfirmingTx(null)} 
+                                className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl font-bold text-sm"
+                            >
+                                Não
+                            </button>
+                            <button 
+                                onClick={handleConfirmEffectivation} 
+                                className="flex-1 py-3 bg-green-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-green-600/20"
+                            >
+                                Sim
+                            </button>
                         </div>
                     </div>
                 </Modal>
+            )}
+
+            {selectedGroup && (
+                <CreditCardDetailModal 
+                    isOpen={!!selectedGroup} 
+                    onClose={() => setSelectedGroup(null)} 
+                    items={selectedGroup} 
+                    categories={categories}
+                    onUpdateStatus={onStatusChange}
+                    onDeleteItem={onCancel}
+                />
             )}
         </div>
     );

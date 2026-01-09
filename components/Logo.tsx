@@ -41,13 +41,13 @@ const Logo: React.FC<LogoProps> = ({ className = "", variant = 'light' }) => {
         <path d="M32 44V58M22 44L24 58M42 44L40 58" stroke="white" strokeWidth="1" strokeOpacity="0.3" />
       </svg>
 
-      {/* Text */}
+      {/* Text - Updated to Sentence Case */}
       <div className="flex flex-col justify-center">
-        <span className={`text-xl font-extrabold tracking-widest leading-none ${textColor}`} style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-          ORNER
+        <span className={`text-xl font-extrabold tracking-tight leading-none ${textColor}`} style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+          Orner
         </span>
-        <span className={`text-[0.6rem] font-bold tracking-[0.25em] uppercase ${subTextColor} mt-0.5`}>
-          Energia Solar
+        <span className={`text-[0.6rem] font-bold tracking-tight text-gray-400 mt-0.5`}>
+          Energia solar
         </span>
       </div>
     </div>
