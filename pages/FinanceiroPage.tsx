@@ -309,7 +309,7 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
             setCategoryToDeleteId(null);
             setDeleteCategoryModalOpen(false);
         }
-    }
+    };
 
     const TabButton: React.FC<{tabId: FinanceiroTab, label: string}> = ({ tabId, label }) => (
         <button
@@ -524,7 +524,7 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
                             <button 
                                 onClick={confirmCancelTransaction} 
                                 disabled={!cancelReason.trim()}
-                                className="flex-1 py-3 bg-red-600 text-white rounded-xl text-xs font-bold shadow-lg shadow-red-600/20 disabled:opacity-50"
+                                className="flex-1 py-3 bg-red-600 text-white rounded-xl font-bold text-xs shadow-lg shadow-red-600/20 disabled:opacity-50"
                             >
                                 Confirmar cancelamento
                             </button>
@@ -540,8 +540,8 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
                         <p className="text-xs font-bold text-gray-600 dark:text-gray-400">Não é possível excluir esta categoria pois existem transações vinculadas a ela.</p>
                         <button onClick={() => setCategoryInUseModalOpen(false)} className="mt-4 px-8 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold">Entendido</button>
                     </div>
-                )}
-            </div>
+                </Modal>
+            )}
         </div>
     );
 };

@@ -31,10 +31,12 @@ const toSentenceCase = (str: string) => {
     return clean.charAt(0).toUpperCase() + clean.slice(1);
 };
 
-const SectionHeader: React.FC<{ icon: React.ReactElement; title: string; color?: string; rightElement?: React.ReactNode }> = ({ icon, title, color = "bg-indigo-600", rightElement }) => (
+// Fix: Specifying React.ReactElement<any> for the icon prop to allow className property in React.cloneElement
+const SectionHeader: React.FC<{ icon: React.ReactElement<any>; title: string; color?: string; rightElement?: React.ReactNode }> = ({ icon, title, color = "bg-indigo-600", rightElement }) => (
     <div className="flex items-center justify-between mb-3 pb-1 border-b border-gray-100 dark:border-gray-700/50">
         <div className="flex items-center gap-2">
             <div className={`p-1 rounded-lg text-white ${color}`}>
+                {/* Fix: Using any generic for icon to resolve TS error with className prop */}
                 {React.cloneElement(icon, { className: "w-3 h-3" })}
             </div>
             <h4 className="text-[10px] font-black text-gray-500 dark:text-gray-400 tracking-widest">{title}</h4>
@@ -611,7 +613,7 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ view, currentUser }) 
 
                         {/* Seção 5: Técnica (Condicional) */}
                         {!isPersonal && (
-                            <div className="bg-white dark:bg-gray-800 p-3.5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+                            <div className="bg-white dark:bg-gray-800 p-3.5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
                                 <SectionHeader icon={<BoltIcon />} title="Especificações técnicas" color="bg-gray-500" />
                                 {isInstalacao ? (
                                     <div className="space-y-3">
@@ -640,7 +642,7 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ view, currentUser }) 
                         )}
 
                         {/* Seção 6: Observações */}
-                        <div className="bg-white dark:bg-gray-800 p-3.5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+                        <div className="bg-white dark:bg-gray-800 p-3.5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
                             <SectionHeader icon={<ClipboardListIcon />} title="Notas e observações" color="bg-gray-400" />
                             <textarea rows={2} value={apptForm.observations} onChange={e => setApptForm({...apptForm, observations: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2.5 text-[10px] font-semibold text-gray-700 dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/5 transition-all" placeholder="Informações relevantes para a equipe..." />
                         </div>

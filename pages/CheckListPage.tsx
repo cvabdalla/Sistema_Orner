@@ -165,10 +165,12 @@ const CheckboxList: React.FC<{ options: string[]; value: string[]; onChange: (v:
     </div>
 );
 
-const SectionHeader: React.FC<{ icon: React.ReactElement; title: string; color?: string; rightElement?: React.ReactNode }> = ({ icon, title, color = "bg-indigo-600", rightElement }) => (
+// Fix: Specifying React.ReactElement<any> for the icon prop to allow className property in React.cloneElement
+const SectionHeader: React.FC<{ icon: React.ReactElement<any>; title: string; color?: string; rightElement?: React.ReactNode }> = ({ icon, title, color = "bg-indigo-600", rightElement }) => (
     <div className="flex items-center justify-between mb-3 pb-1 border-b border-gray-100 dark:border-gray-700/50">
         <div className="flex items-center gap-2">
             <div className={`p-1 rounded-lg text-white ${color}`}>
+                {/* Fix: Using any generic for icon to resolve TS error with className prop */}
                 {React.cloneElement(icon, { className: "w-3 h-3" })}
             </div>
             <h4 className="text-[10px] font-black text-gray-500 dark:text-gray-400 tracking-widest">{title}</h4>
