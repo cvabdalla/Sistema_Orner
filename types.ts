@@ -23,7 +23,7 @@ export type Page =
   | 'USUARIOS_GESTAO'
   | 'USUARIOS_PERFIL'
   | 'INSTALACOES_CALENDARIO'
-  | 'INSTALACOES_ATIVIDADES';
+  | 'INSTALACOES_CADASTRO';
 
 export interface MenuItem {
   id: Page | string;
@@ -231,7 +231,6 @@ export interface FinanceiroPageProps {
 }
 
 export interface InstalacoesPageProps {
-    view: 'calendario' | 'atividades';
     currentUser: User;
 }
 

@@ -2,20 +2,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
     CalendarIcon, ClipboardListIcon, PlusIcon, TrashIcon, 
     ArrowLeftIcon, ChevronDownIcon, CheckCircleIcon, 
-    EditIcon, MapIcon, BoltIcon, CogIcon, ClockIcon, HomeIcon, UsersIcon, XCircleIcon, ExclamationTriangleIcon
+    EditIcon, MapIcon, BoltIcon, ClockIcon, UsersIcon, XCircleIcon, ExclamationTriangleIcon
 } from '../assets/icons';
 import Modal from '../components/Modal';
 import { dataService } from '../services/dataService';
 import type { InstalacoesPageProps, ActivityCatalogEntry, ActivityAppointment, SavedOrcamento, PainelConfig, User, AppointmentLogEntry } from '../types';
-
-const PRESET_COLORS = [
-    { name: 'Indigo', hex: '#6366f1' },
-    { name: 'Esmeralda', hex: '#10b981' },
-    { name: 'Âmbar', hex: '#f59e0b' },
-    { name: 'Rosa', hex: '#f43f5e' },
-    { name: 'Céu', hex: '#0ea5e9' },
-    { name: 'Violeta', hex: '#8b5cf6' }
-];
 
 const TIME_OPTIONS = Array.from({ length: 33 }, (_, i) => {
     const hour = Math.floor(i / 2) + 7; // Começa às 07:00
@@ -31,12 +22,10 @@ const toSentenceCase = (str: string) => {
     return clean.charAt(0).toUpperCase() + clean.slice(1);
 };
 
-// Fix: Specifying React.ReactElement<any> for the icon prop to allow className property in React.cloneElement
 const SectionHeader: React.FC<{ icon: React.ReactElement<any>; title: string; color?: string; rightElement?: React.ReactNode }> = ({ icon, title, color = "bg-indigo-600", rightElement }) => (
     <div className="flex items-center justify-between mb-3 pb-1 border-b border-gray-100 dark:border-gray-700/50">
         <div className="flex items-center gap-2">
             <div className={`p-1 rounded-lg text-white ${color}`}>
-                {/* Fix: Using any generic for icon to resolve TS error with className prop */}
                 {React.cloneElement(icon, { className: "w-3 h-3" })}
             </div>
             <h4 className="text-[10px] font-black text-gray-500 dark:text-gray-400 tracking-widest">{title}</h4>
@@ -45,7 +34,7 @@ const SectionHeader: React.FC<{ icon: React.ReactElement<any>; title: string; co
     </div>
 );
 
-const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ view, currentUser }) => {
+const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
     const [catalog, setCatalog] = useState<ActivityCatalogEntry[]>([]);
     const [appointments, setAppointments] = useState<ActivityAppointment[]>([]);
     const [orcamentos, setOrcamentos] = useState<SavedOrcamento[]>([]);
@@ -58,7 +47,6 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ view, currentUser }) 
     const [calendarViewMode, setCalendarViewMode] = useState<'mensal' | 'semanal' | 'cancelados'>('mensal');
     const [currentDate, setCurrentDate] = useState(new Date());
 
-    const [isCatalogModalOpen, setIsCatalogModalOpen] = useState(false);
     const [isApptModalOpen, setIsApptModalOpen] = useState(false);
     const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
     const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
@@ -70,10 +58,8 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ view, currentUser }) 
     const [selectedLogEntry, setSelectedLogEntry] = useState<AppointmentLogEntry | null>(null);
     const [cancelReasonText, setCancelReasonText] = useState('');
     
-    const [editingItem, setEditingItem] = useState<ActivityCatalogEntry | null>(null);
     const [editingAppt, setEditingAppt] = useState<ActivityAppointment | null>(null);
 
-    const [catalogForm, setCatalogForm] = useState({ title: '', color: PRESET_COLORS[0].hex, personalSchedule: false });
     const [apptForm, setApptForm] = useState<Partial<ActivityAppointment>>({
         activityId: '', clientName: '', startDate: new Date().toISOString().split('T')[0],
         endDate: new Date().toISOString().split('T')[0], startTime: '08:00', endTime: '12:00', isAllDay: false,
@@ -124,31 +110,6 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ view, currentUser }) 
             fetchCep();
         }
     }, [apptForm.cep]);
-
-    const handleSaveCatalog = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setIsSaving(true);
-        try {
-            const data: ActivityCatalogEntry = {
-                id: editingItem ? editingItem.id : `cat-${Date.now()}`,
-                owner_id: currentUser.id,
-                title: catalogForm.title,
-                color: catalogForm.color,
-                personalSchedule: catalogForm.personalSchedule
-            };
-            await dataService.save('activity_catalog', data);
-            setCatalogForm({ title: '', color: PRESET_COLORS[0].hex, personalSchedule: false });
-            setEditingItem(null);
-            setIsCatalogModalOpen(false);
-            await loadData();
-        } finally { setIsSaving(false); }
-    };
-
-    const handleOpenCatalogEdit = (item: ActivityCatalogEntry) => {
-        setEditingItem(item);
-        setCatalogForm({ title: item.title, color: item.color, personalSchedule: !!item.personalSchedule });
-        setIsCatalogModalOpen(true);
-    };
 
     const checkConflicts = (data: ActivityAppointment): User[] => {
         if (!data.participantIds || data.participantIds.length === 0) return [];
@@ -315,37 +276,6 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ view, currentUser }) 
             return v.formState?.nomeCliente;
         }).filter(Boolean);
     }, [orcamentos]);
-
-    const renderAtividades = () => (
-        <div className="space-y-6 animate-fade-in">
-            <header className="flex justify-between items-center bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
-                <div>
-                    <h2 className="text-xl font-bold text-gray-800 dark:text-white">Cadastro de atividades</h2>
-                    <p className="text-xs text-gray-500 font-medium">Gerencie o seu catálogo de tipos de serviços</p>
-                </div>
-                <button onClick={() => { setEditingItem(null); setCatalogForm({ title: '', color: PRESET_COLORS[0].hex, personalSchedule: false }); setIsCatalogModalOpen(true); }} className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs shadow-lg hover:bg-indigo-700 transition-all active:scale-95">
-                    <PlusIcon className="w-4 h-4" /> Nova atividade
-                </button>
-            </header>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {catalog.map(item => (
-                    <div key={item.id} className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col gap-3 hover:border-indigo-200 transition-all">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <div className="w-4 h-4 rounded-full shadow-sm" style={{ backgroundColor: item.color }} />
-                                <span className="text-sm font-bold text-gray-700 dark:text-gray-200">{item.title}</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                                <button onClick={() => handleOpenCatalogEdit(item)} className="p-1.5 text-gray-300 hover:text-indigo-600 transition-colors"><EditIcon className="w-4 h-4" /></button>
-                                <button onClick={async () => { if(confirm('Deseja excluir esta atividade?')) { await dataService.delete('activity_catalog', item.id); loadData(); } }} className="p-1.5 text-gray-300 hover:text-red-500 transition-colors"><TrashIcon className="w-4 h-4" /></button>
-                            </div>
-                        </div>
-                        {item.personalSchedule && (<span className="text-[9px] font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-900/40 w-fit px-2 py-0.5 rounded-full tracking-tight">Agenda pessoal</span>)}
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
 
     const renderCancelados = () => (
         <div className="space-y-4 animate-fade-in">
@@ -825,7 +755,7 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ view, currentUser }) 
 
     return (
         <div className="max-w-7xl mx-auto pb-10">
-            {view === 'atividades' ? renderAtividades() : renderCalendario()}
+            {renderCalendario()}
         </div>
     );
 };

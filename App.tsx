@@ -13,6 +13,7 @@ import CheckListPage from './pages/CheckListPage';
 import UsuariosPage from './pages/UsuariosPage';
 import LoginPage from './pages/LoginPage';
 import InstalacoesPage from './pages/InstalacoesPage';
+import InstalacoesCadastroPage from './pages/InstalacoesCadastroPage';
 import { LockClosedIcon, ExclamationTriangleIcon } from './assets/icons';
 import type { Page, SavedOrcamento, ExpenseReport, User, UserProfile } from './types';
 import { dataService } from './services/dataService';
@@ -224,9 +225,9 @@ const App: React.FC = () => {
       case 'RELATORIOS_CONFIG':
         return <RelatoriosPage view="config" currentUser={currentUser} />;
       case 'INSTALACOES_CALENDARIO':
-        return <InstalacoesPage view="calendario" currentUser={currentUser} />;
-      case 'INSTALACOES_ATIVIDADES':
-        return <InstalacoesPage view="atividades" currentUser={currentUser} />;
+        return <InstalacoesPage currentUser={currentUser} />;
+      case 'INSTALACOES_CADASTRO':
+        return <InstalacoesCadastroPage currentUser={currentUser} />;
       case 'USUARIOS_GESTAO':
         return <UsuariosPage view="gestao" currentUser={currentUser} />;
       case 'USUARIOS_PERFIL':
@@ -262,7 +263,7 @@ const App: React.FC = () => {
       RELATORIOS_HISTORICO: 'Histórico de Reembolso',
       RELATORIOS_CONFIG: 'Configurações Gerais',
       INSTALACOES_CALENDARIO: 'Calendário de Instalações',
-      INSTALACOES_ATIVIDADES: 'Catálogo de Atividades',
+      INSTALACOES_CADASTRO: 'Cadastro de Atividades',
       USUARIOS_GESTAO: 'Gestão de Usuários',
       USUARIOS_PERFIL: 'Perfis de Acesso'
     };
