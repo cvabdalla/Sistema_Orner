@@ -13,6 +13,15 @@ const formatCurrency = (value: number) => {
 
 const roundUp = (value: number) => Math.ceil(value * 100) / 100;
 
+// Helper to safely parse string values to numbers, supporting commas and dots
+const parseNumber = (val: any): number => {
+    if (typeof val === 'number') return val;
+    if (!val) return 0;
+    const clean = String(val).replace(',', '.');
+    const parsed = parseFloat(clean);
+    return isNaN(parsed) ? 0 : parsed;
+};
+
 const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcamento, currentUser }: NovoOrcamentoPageProps): React.ReactElement => {
     const [isModalOpen, setModalOpen] = useState(false);
     const [desiredMargin, setDesiredMargin] = useState('');
@@ -56,7 +65,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         { id: '1', name: 'Opção 1', isPrincipal: true, formState: initialFormState, calculated: {} }
     ]);
     const [activeVariantId, setActiveVariantId] = useState<string>('1');
-    const [formState, setFormState] = useState(initialFormState);
+    const [formState, setFormState] = useState<any>(initialFormState);
     const [calculated, setCalculated] = useState<any>({});
 
     useEffect(() => {
@@ -64,7 +73,6 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
             const items = await dataService.getAll<StockItem>('stock_items');
             setAllStockItems(items);
             
-            // Populando itens fixos iniciais se for um novo orçamento
             if (!orcamentoToEdit) {
                 const initialFixedData: Record<string, any> = {};
                 items.filter(i => i.isFixedInBudget).forEach(i => {
@@ -78,39 +86,32 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         loadStock();
     }, [orcamentoToEdit]);
 
-    // Itens que aparecerão na tabela de materiais
     const selectedStockTableItems = useMemo(() => {
         const currentDataIds = Object.keys(formState.fixedItemsData || {});
         return allStockItems.filter(i => currentDataIds.includes(String(i.id)));
     }, [allStockItems, formState.fixedItemsData]);
 
-    // Itens disponíveis para adicionar
     const availableStockToAdd = useMemo(() => {
         const currentDataIds = Object.keys(formState.fixedItemsData || {});
         return allStockItems.filter(i => !currentDataIds.includes(String(i.id)));
     }, [allStockItems, formState.fixedItemsData]);
 
-    // Carregamento inicial do orçamento para edição
     useEffect(() => {
         const today = new Date().toISOString().split('T')[0];
-
         if (orcamentoToEdit) {
             let loadedVariants: OrcamentoVariant[] = [];
-            
             if (orcamentoToEdit.variants && orcamentoToEdit.variants.length > 0) {
                 loadedVariants = orcamentoToEdit.variants.map(v => ({
                     ...v,
                     formState: {
                         ...initialFormState,
                         ...v.formState,
-                        // Mapeamento robusto de campos de identidade (Compatibilidade Legada + Multi-Opção)
                         nomeCliente: v.formState.nomeCliente || orcamentoToEdit.formState?.nomeCliente || '',
                         fornecedor: v.formState.fornecedor || orcamentoToEdit.formState?.fornecedor || '',
                         dataOrcamento: v.formState.dataOrcamento || orcamentoToEdit.formState?.dataOrcamento || today
                     }
                 }));
             } else if (orcamentoToEdit.formState) {
-                // Caso legado sem variantes
                 loadedVariants = [{
                     id: '1',
                     name: 'Opção 1',
@@ -126,7 +127,6 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                     calculated: orcamentoToEdit.calculated || {}
                 }];
             }
-            
             if (loadedVariants.length > 0) {
                 setVariants(loadedVariants);
                 const active = loadedVariants.find(v => v.isPrincipal) || loadedVariants[0];
@@ -137,7 +137,6 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         }
     }, [orcamentoToEdit]);
 
-    // Sincroniza o estado do formulário UI ao trocar de variante ou carregar dados
     useEffect(() => {
         const activeVariant = variants.find(v => v.id === activeVariantId);
         if (activeVariant) {
@@ -146,7 +145,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                  setCalculated(activeVariant.calculated);
              }
         }
-    }, [activeVariantId, variants]); // Monitorar variants garante que após o load do banco a UI atualize
+    }, [activeVariantId, variants]);
 
     const updateVariantsWithFormState = (newState: any) => {
         if (isReadOnly) return;
@@ -157,8 +156,6 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
             : { ...v, 
                 formState: { 
                     ...v.formState, 
-                    // Sincroniza apenas dados GLOBAIS do projeto entre as opções
-                    // O FORNECEDOR não entra aqui, ficando independente por opção
                     dataOrcamento: newState.dataOrcamento,
                     nomeCliente: newState.nomeCliente
                 } 
@@ -169,13 +166,12 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         if (isReadOnly) return;
         const { name, value } = e.target;
-        const isNumberInput = e.target.tagName === 'INPUT' && (e.target as HTMLInputElement).type === 'number';
-        const newVal = isNumberInput ? parseFloat(value) || 0 : value;
-        const updatedFormState = { ...formState, [name]: newVal };
+        // Storing the raw value to allow intermediate typing states on mobile
+        const updatedFormState = { ...formState, [name]: value };
         updateVariantsWithFormState(updatedFormState);
     };
 
-    const handleStockItemDataChange = (itemId: string, field: 'qty' | 'cost' | 'markup', value: number) => {
+    const handleStockItemDataChange = (itemId: string, field: 'qty' | 'cost' | 'markup', value: any) => {
         if (isReadOnly) return;
         const currentData = formState.fixedItemsData || {};
         const stockItem = allStockItems.find(i => String(i.id) === itemId);
@@ -195,7 +191,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         updateVariantsWithFormState(updatedFormState);
     };
 
-    const handleOffStockItemChange = (offId: string, field: 'qty' | 'cost' | 'markup', value: number) => {
+    const handleOffStockItemChange = (offId: string, field: 'qty' | 'cost' | 'markup', value: any) => {
         if (isReadOnly) return;
         const updatedOffStockItems = (formState.offStockItems || []).map(item => {
             if (item.id === offId) {
@@ -227,18 +223,13 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         if (isReadOnly) return;
         const currentData = { ...(formState.fixedItemsData || {}) };
         delete currentData[itemId];
-
-        const updatedFormState = {
-            ...formState,
-            fixedItemsData: currentData
-        };
+        const updatedFormState = { ...formState, fixedItemsData: currentData };
         updateVariantsWithFormState(updatedFormState);
     };
 
     const handleAddOffStockItem = (e: React.FormEvent) => {
         e.preventDefault();
         if (!manualItemForm.name.trim()) return;
-
         const newItem = {
             id: `off-${Date.now()}`,
             name: manualItemForm.name,
@@ -246,7 +237,6 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
             qty: 1,
             markup: 0
         };
-
         const updatedFormState = {
             ...formState,
             offStockItems: [...(formState.offStockItems || []), newItem]
@@ -264,10 +254,23 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
     };
     
     useEffect(() => {
-        const instalacaoCusto = formState.terceiroInstalacaoQtd * formState.terceiroInstalacaoCusto;
-        const valorVendaSistema = formState.custoSistema;
-        const valorVendaMaoDeObra = formState.maoDeObraGeral;
-        const totalInstalacao = formState.visitaTecnicaCusto + formState.projetoHomologacaoCusto + instalacaoCusto + formState.custoViagem + formState.adequacaoLocalCusto;
+        // Safe conversion of state values to numbers for arithmetic
+        const n_terceiroInstalacaoQtd = parseNumber(formState.terceiroInstalacaoQtd);
+        const n_terceiroInstalacaoCusto = parseNumber(formState.terceiroInstalacaoCusto);
+        const n_visitaTecnicaCusto = parseNumber(formState.visitaTecnicaCusto);
+        const n_projetoHomologacaoCusto = parseNumber(formState.projetoHomologacaoCusto);
+        const n_custoViagem = parseNumber(formState.custoViagem);
+        const n_adequacaoLocalCusto = parseNumber(formState.adequacaoLocalCusto);
+        const n_custoSistema = parseNumber(formState.custoSistema);
+        const n_maoDeObraGeral = parseNumber(formState.maoDeObraGeral);
+        const n_nfServicoPerc = parseNumber(formState.nfServicoPerc);
+        const n_comissaoVendasPerc = parseNumber(formState.comissaoVendasPerc);
+        const n_descontoAplicadoPerc = parseNumber(formState.descontoAplicadoPerc);
+
+        const instalacaoCusto = n_terceiroInstalacaoQtd * n_terceiroInstalacaoCusto;
+        const valorVendaSistema = n_custoSistema;
+        const valorVendaMaoDeObra = n_maoDeObraGeral;
+        const totalInstalacao = n_visitaTecnicaCusto + n_projetoHomologacaoCusto + instalacaoCusto + n_custoViagem + n_adequacaoLocalCusto;
 
         const totalStockStructure = selectedStockTableItems.reduce((acc, item) => {
             const itemId = String(item.id);
@@ -276,30 +279,35 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                 cost: item.averagePrice || 0,
                 markup: 0 
             };
-            const effectiveUnitCost = data.cost * (1 + (data.markup / 100));
-            return acc + (data.qty * effectiveUnitCost);
+            const n_qty = parseNumber(data.qty);
+            const n_cost = parseNumber(data.cost);
+            const n_markup = parseNumber(data.markup);
+            const effectiveUnitCost = n_cost * (1 + (n_markup / 100));
+            return acc + (n_qty * effectiveUnitCost);
         }, 0);
 
         const totalOffStockStructure = (formState.offStockItems || []).reduce((acc, item) => {
-            const effectiveUnitCost = item.cost * (1 + (item.markup / 100));
-            return acc + (item.qty * effectiveUnitCost);
+            const n_qty = parseNumber(item.qty);
+            const n_cost = parseNumber(item.cost);
+            const n_markup = parseNumber(item.markup);
+            const effectiveUnitCost = n_cost * (1 + (n_markup / 100));
+            return acc + (n_qty * effectiveUnitCost);
         }, 0);
 
         const totalEstrutura = totalStockStructure + totalOffStockStructure;
-        const custoMO = formState.maoDeObraGeral + totalInstalacao + totalEstrutura;
+        const custoMO = n_maoDeObraGeral + totalInstalacao + totalEstrutura;
         const precoVendaFinal = valorVendaSistema + custoMO;
         const despesasNotaCF = custoMO; 
-        const nfServicoPerc = formState.nfServicoPerc;
-        const nfServicoValor = roundUp(despesasNotaCF * (nfServicoPerc / 100));
-        const comissaoVendasValor = formState.comissaoVendasOpcao === 'Sim' ? roundUp(precoVendaFinal * (formState.comissaoVendasPerc / 100)) : 0;
-        const totalCustoTerceiro = formState.visitaTecnicaCusto + formState.projetoHomologacaoCusto + totalEstrutura + instalacaoCusto + formState.custoViagem + formState.adequacaoLocalCusto;
+        const nfServicoValor = roundUp(despesasNotaCF * (n_nfServicoPerc / 100));
+        const comissaoVendasValor = formState.comissaoVendasOpcao === 'Sim' ? roundUp(precoVendaFinal * (n_comissaoVendasPerc / 100)) : 0;
+        const totalCustoTerceiro = n_visitaTecnicaCusto + n_projetoHomologacaoCusto + totalEstrutura + instalacaoCusto + n_custoViagem + n_adequacaoLocalCusto;
 
         const valorFinalServico = custoMO;
         const impostos = nfServicoValor;
         const custosTotaisServico = totalCustoTerceiro; 
         const comissoes = comissaoVendasValor;
         const lucroLiquidoServicoSDesc = valorFinalServico - impostos - custosTotaisServico - comissoes;
-        const descontoAplicadoValor = roundUp(precoVendaFinal * (formState.descontoAplicadoPerc / 100));
+        const descontoAplicadoValor = roundUp(precoVendaFinal * (n_descontoAplicadoPerc / 100));
         const lucroLiquidoServicoCDesc = lucroLiquidoServicoSDesc - descontoAplicadoValor;
         const lucroLiquido = lucroLiquidoServicoCDesc;
         const margemLiquida = precoVendaFinal > 0 ? (lucroLiquido / precoVendaFinal) * 100 : 0;
@@ -336,37 +344,53 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         };
 
         setCalculated(newCalculated);
-        // Atualiza a variante ativa com os novos cálculos
         setVariants(prev => prev.map(v => v.id === activeVariantId ? { ...v, calculated: newCalculated } : v));
     }, [formState, selectedStockTableItems, activeVariantId]);
     
     const handleMarginCalculation = () => {
         if (isReadOnly) return;
-        const targetMargin = parseFloat(desiredMargin) / 100;
+        const targetMargin = parseNumber(desiredMargin) / 100;
         if (isNaN(targetMargin)) return;
 
-        const instalacaoCusto = formState.terceiroInstalacaoQtd * formState.terceiroInstalacaoCusto;
-        const totalInstalacaoParcial = formState.visitaTecnicaCusto + formState.projetoHomologacaoCusto + instalacaoCusto + formState.custoViagem + formState.adequacaoLocalCusto;
+        const n_terceiroInstalacaoQtd = parseNumber(formState.terceiroInstalacaoQtd);
+        const n_terceiroInstalacaoCusto = parseNumber(formState.terceiroInstalacaoCusto);
+        const n_visitaTecnicaCusto = parseNumber(formState.visitaTecnicaCusto);
+        const n_projetoHomologacaoCusto = parseNumber(formState.projetoHomologacaoCusto);
+        const n_custoViagem = parseNumber(formState.custoViagem);
+        const n_adequacaoLocalCusto = parseNumber(formState.adequacaoLocalCusto);
+        const n_custoSistema = parseNumber(formState.custoSistema);
+        const n_nfServicoPerc = parseNumber(formState.nfServicoPerc);
+        const n_comissaoVendasPerc = parseNumber(formState.comissaoVendasPerc);
+        const n_descontoAplicadoPerc = parseNumber(formState.descontoAplicadoPerc);
+
+        const instalacaoCusto = n_terceiroInstalacaoQtd * n_terceiroInstalacaoCusto;
+        const totalInstalacaoParcial = n_visitaTecnicaCusto + n_projetoHomologacaoCusto + instalacaoCusto + n_custoViagem + n_adequacaoLocalCusto;
         
         const totalStockStructure = selectedStockTableItems.reduce((acc, item) => {
             const data = (formState.fixedItemsData || {})[String(item.id)] || { qty: 0, cost: item.averagePrice || 0, markup: 0 };
-            const effectiveUnitCost = data.cost * (1 + (data.markup / 100));
-            return acc + (data.qty * effectiveUnitCost);
+            const n_qty = parseNumber(data.qty);
+            const n_cost = parseNumber(data.cost);
+            const n_markup = parseNumber(data.markup);
+            const effectiveUnitCost = n_cost * (1 + (n_markup / 100));
+            return acc + (n_qty * effectiveUnitCost);
         }, 0);
 
         const totalOffStockStructure = (formState.offStockItems || []).reduce((acc, item) => {
-            const effectiveUnitCost = item.cost * (1 + (item.markup / 100));
-            return acc + (item.qty * effectiveUnitCost);
+            const n_qty = parseNumber(item.qty);
+            const n_cost = parseNumber(item.cost);
+            const n_markup = parseNumber(item.markup);
+            const effectiveUnitCost = n_cost * (1 + (n_markup / 100));
+            return acc + (n_qty * effectiveUnitCost);
         }, 0);
 
         const totalEstrutura = totalStockStructure + totalOffStockStructure;
 
         const C1 = totalInstalacaoParcial + totalEstrutura;
-        const C2 = formState.visitaTecnicaCusto + formState.projetoHomologacaoCusto + totalEstrutura + instalacaoCusto + formState.custoViagem + formState.adequacaoLocalCusto;
-        const VVS = formState.custoSistema;
-        const nfPerc = formState.nfServicoPerc / 100;
-        const comPerc = formState.comissaoVendasOpcao === 'Sim' ? formState.comissaoVendasPerc / 100 : 0;
-        const descPerc = formState.descontoAplicadoPerc / 100;
+        const C2 = n_visitaTecnicaCusto + n_projetoHomologacaoCusto + totalEstrutura + instalacaoCusto + n_custoViagem + n_adequacaoLocalCusto;
+        const VVS = n_custoSistema;
+        const nfPerc = n_nfServicoPerc / 100;
+        const comPerc = formState.comissaoVendasOpcao === 'Sim' ? n_comissaoVendasPerc / 100 : 0;
+        const descPerc = n_descontoAplicadoPerc / 100;
         const M_desejada = targetMargin;
 
         const numerador = C1 * (1 - M_desejada - nfPerc - comPerc - descPerc) - C2 - VVS * (comPerc + descPerc);
@@ -505,8 +529,8 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
                             <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Fornecedor do kit</label><input type="text" name="fornecedor" value={formState.fornecedor} onChange={handleInputChange} disabled={isReadOnly} className={`w-full rounded-lg border-gray-300 dark:border-gray-600 ${isReadOnly ? 'bg-gray-50 cursor-not-allowed' : 'bg-indigo-50 dark:bg-indigo-900/30'} p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 dark:text-white font-bold transition-all`} placeholder="Ex: Aldo Solar" /></div>
-                            <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Custo do sistema (kit)</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">R$</span><input type="number" name="custoSistema" value={formState.custoSistema} onChange={handleInputChange} disabled={isReadOnly} className={`w-full pl-8 rounded-lg border-gray-300 dark:border-gray-600 ${isReadOnly ? 'bg-gray-50 cursor-not-allowed' : 'bg-yellow-100 dark:bg-yellow-900/30'} font-bold text-gray-900 dark:text-white p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none`} /></div></div>
-                            <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Mão de obra geral</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">R$</span><input type="number" name="maoDeObraGeral" value={formState.maoDeObraGeral} onChange={handleInputChange} disabled={isReadOnly} className={`w-full pl-8 rounded-lg border-gray-300 dark:border-gray-600 ${isReadOnly ? 'bg-gray-50 cursor-not-allowed' : 'bg-yellow-100 dark:bg-yellow-900/30'} font-bold text-gray-900 dark:text-white p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none`} /></div></div>
+                            <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Custo do sistema (kit)</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">R$</span><input type="text" inputMode="decimal" name="custoSistema" value={formState.custoSistema} onChange={handleInputChange} disabled={isReadOnly} className={`w-full pl-8 rounded-lg border-gray-300 dark:border-gray-600 ${isReadOnly ? 'bg-gray-50 cursor-not-allowed' : 'bg-yellow-100 dark:bg-yellow-900/30'} font-bold text-gray-900 dark:text-white p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none`} /></div></div>
+                            <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Mão de obra geral</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">R$</span><input type="text" inputMode="decimal" name="maoDeObraGeral" value={formState.maoDeObraGeral} onChange={handleInputChange} disabled={isReadOnly} className={`w-full pl-8 rounded-lg border-gray-300 dark:border-gray-600 ${isReadOnly ? 'bg-gray-50 cursor-not-allowed' : 'bg-yellow-100 dark:bg-yellow-900/30'} font-bold text-gray-900 dark:text-white p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none`} /></div></div>
                         </div>
                     </div>
 
@@ -521,10 +545,23 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                             </span>
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            {[{ label: "Visita técnica", name: "visitaTecnicaCusto" }, { label: "Projeto / homologação", name: "projetoHomologacaoCusto" }, { label: "Custo de viagem", name: "custoViagem" }, { label: "Adequação local", name: "adequacaoLocalCusto" }].map(field => (<div key={field.name}><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{field.label}</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">R$</span><input type="number" name={field.name} value={(formState as any)[field.name]} onChange={handleInputChange} disabled={isReadOnly} className={`w-full pl-8 rounded-lg border-gray-300 dark:border-gray-600 ${isReadOnly ? 'bg-gray-50 cursor-not-allowed' : 'bg-yellow-100 dark:bg-yellow-900/30'} font-bold text-gray-900 dark:text-white p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none`} /></div></div>))}
+                            {[
+                                { label: "Visita técnica", name: "visitaTecnicaCusto" }, 
+                                { label: "Projeto / homologação", name: "projetoHomologacaoCusto" }, 
+                                { label: "Custo de viagem", name: "custoViagem" }, 
+                                { label: "Adequação local", name: "adequacaoLocalCusto" }
+                            ].map(field => (
+                                <div key={field.name}>
+                                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{field.label}</label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">R$</span>
+                                        <input type="text" inputMode="decimal" name={field.name} value={(formState as any)[field.name]} onChange={handleInputChange} disabled={isReadOnly} className={`w-full pl-8 rounded-lg border-gray-300 dark:border-gray-600 ${isReadOnly ? 'bg-gray-50 cursor-not-allowed' : 'bg-yellow-100 dark:bg-yellow-900/30'} font-bold text-gray-900 dark:text-white p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none`} />
+                                    </div>
+                                </div>
+                            ))}
                             <div>
-                                <div className="flex justify-between items-center mb-1"><label className="block text-xs font-medium text-gray-500 dark:text-gray-400">Instalação - placas</label><span className="text-[10px] font-bold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">Subtotal: {formatCurrency(formState.terceiroInstalacaoQtd * formState.terceiroInstalacaoCusto)}</span></div>
-                                <div className="flex items-center gap-2"><div className="relative w-20"><input type="number" name="terceiroInstalacaoQtd" value={formState.terceiroInstalacaoQtd} onChange={handleInputChange} disabled={isReadOnly} className={`w-full rounded-lg border-gray-300 dark:border-gray-600 ${isReadOnly ? 'bg-gray-50 cursor-not-allowed' : 'bg-yellow-100 dark:bg-yellow-900/30'} font-bold text-gray-900 dark:text-white p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-center`} placeholder="Qtd" /></div><span className="text-gray-400 text-xs">x</span><div className="relative flex-1"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs font-bold">R$</span><input type="number" name="terceiroInstalacaoCusto" value={formState.terceiroInstalacaoCusto} onChange={handleInputChange} disabled={isReadOnly} className={`w-full pl-8 rounded-lg border-gray-300 dark:border-gray-600 ${isReadOnly ? 'bg-gray-50 cursor-not-allowed' : 'bg-yellow-100 dark:bg-yellow-900/30'} font-bold text-gray-900 dark:text-white p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none`} placeholder="Unitário" /></div></div>
+                                <div className="flex justify-between items-center mb-1"><label className="block text-xs font-medium text-gray-500 dark:text-gray-400">Instalação - placas</label><span className="text-[10px] font-bold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">Subtotal: {formatCurrency(parseNumber(formState.terceiroInstalacaoQtd) * parseNumber(formState.terceiroInstalacaoCusto))}</span></div>
+                                <div className="flex items-center gap-2"><div className="relative w-20"><input type="text" inputMode="numeric" name="terceiroInstalacaoQtd" value={formState.terceiroInstalacaoQtd} onChange={handleInputChange} disabled={isReadOnly} className={`w-full rounded-lg border-gray-300 dark:border-gray-600 ${isReadOnly ? 'bg-gray-50 cursor-not-allowed' : 'bg-yellow-100 dark:bg-yellow-900/30'} font-bold text-gray-900 dark:text-white p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-center`} placeholder="Qtd" /></div><span className="text-gray-400 text-xs">x</span><div className="relative flex-1"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs font-bold">R$</span><input type="text" inputMode="decimal" name="terceiroInstalacaoCusto" value={formState.terceiroInstalacaoCusto} onChange={handleInputChange} disabled={isReadOnly} className={`w-full pl-8 rounded-lg border-gray-300 dark:border-gray-600 ${isReadOnly ? 'bg-gray-50 cursor-not-allowed' : 'bg-yellow-100 dark:bg-yellow-900/30'} font-bold text-gray-900 dark:text-white p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none`} placeholder="Unitário" /></div></div>
                             </div>
                         </div>
                     </div>
@@ -568,8 +605,11 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                             cost: item.averagePrice || 0,
                                             markup: 0 
                                         };
-                                        const effectiveUnitCost = data.cost * (1 + (data.markup / 100));
-                                        const totalItemValue = data.qty * effectiveUnitCost;
+                                        const n_qty = parseNumber(data.qty);
+                                        const n_cost = parseNumber(data.cost);
+                                        const n_markup = parseNumber(data.markup);
+                                        const effectiveUnitCost = n_cost * (1 + (n_markup / 100));
+                                        const totalItemValue = n_qty * effectiveUnitCost;
 
                                         return (
                                             <tr key={`stock-${itemId}`} className="hover:bg-indigo-50 dark:hover:bg-indigo-900/10 transition-colors">
@@ -581,22 +621,24 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                                 </td>
                                                 <td className="px-6 py-2">
                                                     <input 
-                                                        type="number" 
+                                                        type="text" 
+                                                        inputMode="decimal"
                                                         value={data.qty} 
-                                                        onChange={(e) => handleStockItemDataChange(itemId, 'qty', parseFloat(e.target.value) || 0)} 
+                                                        onChange={(e) => handleStockItemDataChange(itemId, 'qty', e.target.value)} 
                                                         disabled={isReadOnly} 
                                                         className="w-full text-center bg-transparent border-b border-gray-300 focus:border-indigo-600 outline-none py-1 font-semibold" 
                                                     />
                                                 </td>
                                                 <td className="px-6 py-2 text-right text-gray-500 font-medium">
-                                                    {formatCurrency(data.cost)}
+                                                    {formatCurrency(n_cost)}
                                                 </td>
                                                 <td className="px-6 py-2">
                                                     <div className="flex items-center justify-center gap-1">
                                                         <input 
-                                                            type="number" 
+                                                            type="text" 
+                                                            inputMode="decimal"
                                                             value={data.markup} 
-                                                            onChange={(e) => handleStockItemDataChange(itemId, 'markup', parseFloat(e.target.value) || 0)} 
+                                                            onChange={(e) => handleStockItemDataChange(itemId, 'markup', e.target.value)} 
                                                             disabled={isReadOnly} 
                                                             className="w-12 text-center bg-transparent border-b border-indigo-300 focus:border-indigo-600 outline-none py-1 font-bold text-indigo-600" 
                                                         />
@@ -623,8 +665,11 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                     })}
 
                                     {(formState.offStockItems || []).map((item) => {
-                                        const effectiveUnitCost = item.cost * (1 + (item.markup / 100));
-                                        const totalItemValue = item.qty * effectiveUnitCost;
+                                        const n_qty = parseNumber(item.qty);
+                                        const n_cost = parseNumber(item.cost);
+                                        const n_markup = parseNumber(item.markup);
+                                        const effectiveUnitCost = n_cost * (1 + (n_markup / 100));
+                                        const totalItemValue = n_qty * effectiveUnitCost;
 
                                         return (
                                             <tr key={item.id} className="bg-amber-50/50 dark:bg-amber-900/10 hover:bg-amber-100/50 transition-colors border-l-4 border-l-amber-400">
@@ -636,18 +681,20 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                                 </td>
                                                 <td className="px-6 py-2">
                                                     <input 
-                                                        type="number" 
+                                                        type="text" 
+                                                        inputMode="decimal"
                                                         value={item.qty} 
-                                                        onChange={(e) => handleOffStockItemChange(item.id, 'qty', parseFloat(e.target.value) || 0)} 
+                                                        onChange={(e) => handleOffStockItemChange(item.id, 'qty', e.target.value)} 
                                                         disabled={isReadOnly} 
                                                         className="w-full text-center bg-transparent border-b border-amber-300 focus:border-amber-600 outline-none py-1 font-semibold" 
                                                     />
                                                 </td>
                                                 <td className="px-6 py-2 text-right text-amber-600 font-medium">
                                                     <input 
-                                                        type="number" 
+                                                        type="text" 
+                                                        inputMode="decimal"
                                                         value={item.cost} 
-                                                        onChange={(e) => handleOffStockItemChange(item.id, 'cost', parseFloat(e.target.value) || 0)} 
+                                                        onChange={(e) => handleOffStockItemChange(item.id, 'cost', e.target.value)} 
                                                         disabled={isReadOnly} 
                                                         className="w-full text-right bg-transparent border-none focus:ring-0 p-1 text-[10px]" 
                                                     />
@@ -655,9 +702,10 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                                 <td className="px-6 py-2">
                                                     <div className="flex items-center justify-center gap-1">
                                                         <input 
-                                                            type="number" 
+                                                            type="text" 
+                                                            inputMode="decimal"
                                                             value={item.markup} 
-                                                            onChange={(e) => handleOffStockItemChange(item.id, 'markup', parseFloat(e.target.value) || 0)} 
+                                                            onChange={(e) => handleOffStockItemChange(item.id, 'markup', e.target.value)} 
                                                             disabled={isReadOnly} 
                                                             className="w-12 text-center bg-transparent border-b border-amber-300 focus:border-amber-600 outline-none py-1 font-bold text-amber-700" 
                                                         />
@@ -708,9 +756,31 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                             </div>
                             <div className="bg-gray-50 dark:bg-gray-900/50 p-6 border-t border-gray-200 dark:border-gray-700 space-y-4">
                                 <h4 className="text-xs font-bold text-gray-500 tracking-wide mb-3">Impostos e comissões</h4>
-                                <div className="flex items-center justify-between"><label className="text-sm text-gray-600 dark:text-gray-400">nf serviço (%)</label><div className="flex items-center gap-2"><input type="number" name="nfServicoPerc" value={formState.nfServicoPerc} onChange={handleInputChange} disabled={isReadOnly} className={`w-16 text-right rounded border-gray-300 p-1 text-sm ${isReadOnly ? 'bg-gray-100' : 'bg-white'}`} /><span className="text-sm font-medium w-20 text-right">{formatCurrency(calculated.nfServicoValor)}</span></div></div>
-                                <div className="flex items-center justify-between"><label className="text-sm text-gray-600 dark:text-gray-400">Comissão venda</label><div className="flex items-center gap-2"><select name="comissaoVendasOpcao" value={formState.comissaoVendasOpcao} onChange={handleInputChange} disabled={isReadOnly} className={`rounded border-gray-300 p-1 text-xs ${isReadOnly ? 'bg-gray-100' : 'bg-white'}`}><option value="Não">Não</option><option value="Sim">Sim</option></select>{formState.comissaoVendasOpcao === 'Sim' && <input type="number" name="comissaoVendasPerc" value={formState.comissaoVendasPerc} onChange={handleInputChange} disabled={isReadOnly} className={`w-12 text-right rounded border-gray-300 p-1 text-sm ${isReadOnly ? 'bg-gray-100' : 'bg-white'}`} />}<span className="text-sm font-medium w-20 text-right">{formatCurrency(calculated.comissaoVendasValor)}</span></div></div>
-                                <div className="flex items-center justify-between"><label className="text-sm text-gray-600 dark:text-gray-400">Desconto (%)</label><div className="flex items-center gap-2"><input type="number" name="descontoAplicadoPerc" value={formState.descontoAplicadoPerc} onChange={handleInputChange} disabled={isReadOnly} className={`w-16 text-right rounded border-gray-300 p-1 text-sm ${isReadOnly ? 'bg-gray-100' : 'bg-white'}`} /><span className="text-sm font-medium w-20 text-right text-red-500">-{formatCurrency(calculated.descontoAplicadoValor)}</span></div></div>
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm text-gray-600 dark:text-gray-400">nf serviço (%)</label>
+                                    <div className="flex items-center gap-2">
+                                        <input type="text" inputMode="decimal" name="nfServicoPerc" value={formState.nfServicoPerc} onChange={handleInputChange} disabled={isReadOnly} className={`w-16 text-right rounded border-gray-300 p-1 text-sm ${isReadOnly ? 'bg-gray-100' : 'bg-white'}`} />
+                                        <span className="text-sm font-medium w-20 text-right">{formatCurrency(calculated.nfServicoValor)}</span>
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm text-gray-600 dark:text-gray-400">Comissão venda</label>
+                                    <div className="flex items-center gap-2">
+                                        <select name="comissaoVendasOpcao" value={formState.comissaoVendasOpcao} onChange={handleInputChange} disabled={isReadOnly} className={`rounded border-gray-300 p-1 text-xs ${isReadOnly ? 'bg-gray-100' : 'bg-white'}`}>
+                                            <option value="Não">Não</option>
+                                            <option value="Sim">Sim</option>
+                                        </select>
+                                        {formState.comissaoVendasOpcao === 'Sim' && <input type="text" inputMode="decimal" name="comissaoVendasPerc" value={formState.comissaoVendasPerc} onChange={handleInputChange} disabled={isReadOnly} className={`w-12 text-right rounded border-gray-300 p-1 text-sm ${isReadOnly ? 'bg-gray-100' : 'bg-white'}`} />}
+                                        <span className="text-sm font-medium w-20 text-right">{formatCurrency(calculated.comissaoVendasValor)}</span>
+                                    </div>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm text-gray-600 dark:text-gray-400">Desconto (%)</label>
+                                    <div className="flex items-center gap-2">
+                                        <input type="text" inputMode="decimal" name="descontoAplicadoPerc" value={formState.descontoAplicadoPerc} onChange={handleInputChange} disabled={isReadOnly} className={`w-16 text-right rounded border-gray-300 p-1 text-sm ${isReadOnly ? 'bg-gray-100' : 'bg-white'}`} />
+                                        <span className="text-sm font-medium w-20 text-right text-red-500">-{formatCurrency(calculated.descontoAplicadoValor)}</span>
+                                    </div>
+                                </div>
                             </div>
                             <div className="bg-green-50 dark:bg-green-900/20 p-4 border-t border-green-100 dark:border-green-800 text-center"><p className="text-xs text-green-600 dark:text-green-400 font-bold tracking-wide mb-1">Lucro líquido real</p><p className="text-2xl font-bold text-green-700 dark:text-green-300">{formatCurrency(calculated.lucroLiquido)}</p></div>
                         </div>
@@ -792,10 +862,10 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                             <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 ml-1">Custo unitário base (R$)</label>
                                             <input 
                                                 required 
-                                                type="number" 
-                                                step="0.01"
+                                                type="text" 
+                                                inputMode="decimal"
                                                 value={manualItemForm.cost || ''}
-                                                onChange={e => setManualItemForm({...manualItemForm, cost: parseFloat(e.target.value) || 0})}
+                                                onChange={e => setManualItemForm({...manualItemForm, cost: parseNumber(e.target.value)})}
                                                 className="w-full rounded-xl border-transparent bg-white dark:bg-gray-800 p-3 text-sm font-semibold text-amber-600 dark:text-amber-400 outline-none focus:ring-2 focus:ring-amber-500/20 shadow-sm"
                                                 placeholder="0,00"
                                             />
@@ -848,7 +918,8 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                             
                             <div className="relative inline-block">
                                 <input 
-                                    type="number" 
+                                    type="text" 
+                                    inputMode="decimal"
                                     id="desiredMargin" 
                                     autoFocus
                                     value={desiredMargin} 
@@ -876,7 +947,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                         <div className="flex flex-col gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
                             <button 
                                 onClick={handleMarginCalculation} 
-                                disabled={!desiredMargin || parseFloat(desiredMargin) <= 0}
+                                disabled={!desiredMargin || parseNumber(desiredMargin) <= 0}
                                 className="w-full py-3.5 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-600/30 hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 disabled:grayscale"
                             >
                                 Aplicar novo cálculo
