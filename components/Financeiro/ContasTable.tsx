@@ -46,7 +46,6 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                 const card = cards.find(c => c.name === cardName);
                 const closingDay = card ? card.closingDay : '0';
                 
-                // Removemos o cardName da chave para consolidar múltiplos cartões com mesmo fechamento/vencimento
                 const groupKey = `CC_GROUPED_${t.dueDate}_${closingDay}`;
                 
                 if (!ccGroups[groupKey]) {
@@ -77,7 +76,18 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
             };
         });
 
-        return [...normalTransactions, ...groupedCC].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+        return [...normalTransactions, ...groupedCC].sort((a, b) => {
+            // Prioridade de Status: Pendente primeiro
+            const priorityA = String(a.status).toLowerCase() === 'pendente' ? 0 : 1;
+            const priorityB = String(b.status).toLowerCase() === 'pendente' ? 0 : 1;
+
+            if (priorityA !== priorityB) {
+                return priorityA - priorityB;
+            }
+
+            // Desempate por data
+            return String(a.dueDate).localeCompare(String(b.dueDate));
+        });
     }, [transactions, statusFilter, cards]);
     
     const getCategoryName = (categoryId: string) => {

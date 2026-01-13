@@ -66,7 +66,6 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, bankAccounts, onO
                 const cardName = cardMatch ? cardMatch[1] : '';
                 const card = cards.find(c => c.name === cardName);
                 const closingDay = card ? card.closingDay : '0';
-                // Chave de agrupamento global para cartões
                 const groupKey = `ALL_CC_${t.dueDate}_${closingDay}`;
 
                 if (!ccGroups[groupKey]) ccGroups[groupKey] = [];
@@ -80,11 +79,14 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, bankAccounts, onO
             const keyParts = key.split('_');
             const dueDate = keyParts[keyParts.length - 2];
             const allPaid = items.every(i => i.status === 'pago');
+            const maxPaymentDate = allPaid ? items.reduce((max, cur) => cur.paymentDate && cur.paymentDate > max ? cur.paymentDate : max, items[0].paymentDate || items[0].dueDate) : undefined;
+            
             return {
                 id: `vg-grouped-cc-${key}`,
                 displayDescription: 'Cartão de Crédito',
                 amount: items.reduce((sum, i) => sum + i.amount, 0),
                 dueDate: dueDate,
+                paymentDate: maxPaymentDate,
                 status: allPaid ? 'pago' : 'pendente',
                 type: 'despesa',
                 isCC: true,
@@ -94,12 +96,24 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, bankAccounts, onO
         });
 
         return [...normals, ...groupedCC].sort((a, b) => {
-            if (a.status !== b.status) return a.status === 'pendente' ? -1 : 1;
-            return a.dueDate.localeCompare(b.dueDate);
-        }).slice(0, 8);
+            // REGRA DE OURO: Aberto sempre primeiro
+            // Compara status convertendo para minúsculo para evitar falhas de tipagem
+            const priorityA = String(a.status).toLowerCase() === 'pendente' ? 0 : 1;
+            const priorityB = String(b.status).toLowerCase() === 'pendente' ? 0 : 1;
+            
+            if (priorityA !== priorityB) {
+                return priorityA - priorityB;
+            }
+            
+            // Critério de desempate: Data (Mais antigo primeiro para pendentes)
+            const dateA = a.status === 'pago' ? (a.paymentDate || a.dueDate) : a.dueDate;
+            const dateB = b.status === 'pago' ? (b.paymentDate || b.dueDate) : b.dueDate;
+            
+            return String(dateA).localeCompare(String(dateB));
+        }).slice(0, 12);
     };
 
-    const receitasList = useMemo(() => processList('receita'), [transactions]);
+    const receitasList = useMemo(() => processList('receita'), [transactions, cards]);
     const despesasList = useMemo(() => processList('despesa'), [transactions, cards]);
 
     const RenderItem: React.FC<{ t: any }> = ({ t }) => {
@@ -127,7 +141,7 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, bankAccounts, onO
                         </p>
                         <p className="text-[9px] text-gray-400 font-bold mt-0.5">
                             {isPaid ? (t.type === 'receita' ? 'Recebido em: ' : 'Pago em: ') : 'Vence em: '}
-                            {new Date(t.dueDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
+                            {new Date(isPaid ? (t.paymentDate || t.dueDate) : t.dueDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
                         </p>
                     </div>
                 </div>
