@@ -1,13 +1,11 @@
-
 import React, { ChangeEvent } from 'react';
 
-// Helper to format numbers as BRL currency with rounding up
+// Helper to format numbers as BRL currency
 const formatCurrency = (value: number | string | undefined) => {
   if (value === undefined || value === null || value === '') return 'R$ 0,00';
   const num = typeof value === 'string' ? parseFloat(value) : value;
   if (isNaN(num)) return 'R$ 0,00';
-  const rounded = Math.ceil(num * 100) / 100;
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 }).format(rounded);
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 }).format(num);
 };
 
 interface FormFieldProps {

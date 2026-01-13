@@ -11,12 +11,13 @@ interface VisaoGeralProps {
     bankAccounts: BankAccount[];
     onOpenImport: () => void;
     onOpenCreditCard: () => void;
+    onEditTransaction?: (transaction: FinancialTransaction) => void;
+    onCancelTransaction?: (id: string) => void;
 }
 
 const formatCurrency = (value: number) => {
-    if (isNaN(value)) return 'R$ 0,00';
-    const rounded = Math.ceil(value * 100) / 100;
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 }).format(rounded);
+    if (value === undefined || value === null || isNaN(value)) return 'R$ 0,00';
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 }).format(value);
 };
 
 const toSentenceCase = (str: string) => {
@@ -25,7 +26,7 @@ const toSentenceCase = (str: string) => {
     return clean.charAt(0).toUpperCase() + clean.slice(1);
 };
 
-const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, bankAccounts, onOpenImport, onOpenCreditCard }) => {
+const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, bankAccounts, onOpenImport, onOpenCreditCard, onEditTransaction, onCancelTransaction }) => {
     const [cards, setCards] = useState<CreditCard[]>([]);
     const [categories, setCategories] = useState<FinancialCategory[]>([]);
     const [selectedGroup, setSelectedGroup] = useState<FinancialTransaction[] | null>(null);
@@ -79,7 +80,10 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, bankAccounts, onO
             const keyParts = key.split('_');
             const dueDate = keyParts[keyParts.length - 2];
             const allPaid = items.every(i => i.status === 'pago');
-            const maxPaymentDate = allPaid ? items.reduce((max, cur) => cur.paymentDate && cur.paymentDate > max ? cur.paymentDate : max, items[0].paymentDate || items[0].dueDate) : undefined;
+            const maxPaymentDate = allPaid ? items.reduce((max, cur) => {
+                const curDate = cur.paymentDate || cur.dueDate;
+                return curDate > max ? curDate : max;
+            }, items[0].paymentDate || items[0].dueDate) : undefined;
             
             return {
                 id: `vg-grouped-cc-${key}`,
@@ -96,8 +100,7 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, bankAccounts, onO
         });
 
         return [...normals, ...groupedCC].sort((a, b) => {
-            // REGRA DE OURO: Aberto sempre primeiro
-            // Compara status convertendo para minúsculo para evitar falhas de tipagem
+            // REGRA 1: Pendentes (abertos) sempre primeiro
             const priorityA = String(a.status).toLowerCase() === 'pendente' ? 0 : 1;
             const priorityB = String(b.status).toLowerCase() === 'pendente' ? 0 : 1;
             
@@ -105,11 +108,16 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, bankAccounts, onO
                 return priorityA - priorityB;
             }
             
-            // Critério de desempate: Data (Mais antigo primeiro para pendentes)
-            const dateA = a.status === 'pago' ? (a.paymentDate || a.dueDate) : a.dueDate;
-            const dateB = b.status === 'pago' ? (b.paymentDate || b.dueDate) : b.dueDate;
-            
-            return String(dateA).localeCompare(String(dateB));
+            // REGRA 2: Ordenação por data dentro do mesmo status
+            if (String(a.status).toLowerCase() === 'pendente') {
+                // Pendentes: Vencimento mais próximo primeiro (ASC)
+                return String(a.dueDate).localeCompare(String(b.dueDate));
+            } else {
+                // Pagos: Pagamento mais recente primeiro (DESC) para histórico
+                const dateA = a.paymentDate || a.dueDate;
+                const dateB = b.paymentDate || b.dueDate;
+                return String(dateB).localeCompare(String(dateA));
+            }
         }).slice(0, 12);
     };
 
@@ -219,7 +227,8 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, bankAccounts, onO
                     items={selectedGroup} 
                     categories={categories}
                     onUpdateStatus={() => {}} 
-                    onDeleteItem={() => {}}
+                    onDeleteItem={onCancelTransaction || (() => {})}
+                    onEditItem={onEditTransaction}
                 />
             )}
         </div>

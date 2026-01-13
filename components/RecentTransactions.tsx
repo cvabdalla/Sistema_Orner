@@ -6,12 +6,13 @@ import CreditCardDetailModal from './Financeiro/CreditCardDetailModal';
 
 interface RecentTransactionsProps {
     transactions: FinancialTransaction[];
+    onEdit?: (transaction: FinancialTransaction) => void;
+    onDelete?: (id: string) => void;
 }
 
 const formatCurrency = (value: number) => {
-    if (isNaN(value)) return 'R$ 0,00';
-    const rounded = Math.ceil(value * 100) / 100;
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 }).format(rounded);
+    if (value === undefined || value === null || isNaN(value)) return 'R$ 0,00';
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 }).format(value);
 };
 
 const toSentenceCase = (str: string) => {
@@ -62,7 +63,7 @@ const TransactionRow: React.FC<{ transaction: any, categoryName: string, onViewD
   );
 };
 
-const RecentTransactions: React.FC<RecentTransactionsProps> = ({ transactions }) => {
+const RecentTransactions: React.FC<RecentTransactionsProps> = ({ transactions, onEdit, onDelete }) => {
   const [categories, setCategories] = useState<FinancialCategory[]>([]);
   const [cards, setCards] = useState<CreditCard[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<FinancialTransaction[] | null>(null);
@@ -151,11 +152,16 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({ transactions })
             categories={categories}
             onUpdateStatus={async (id, status) => {
                 const tx = transactions.find(t => t.id === id);
-                if (tx) await dataService.save('financial_transactions', { ...tx, status });
+                if (tx) {
+                    await dataService.save('financial_transactions', { ...tx, status });
+                }
             }}
             onDeleteItem={async (id) => {
-                await dataService.delete('financial_transactions', id);
+                if (onDelete) {
+                    onDelete(id);
+                }
             }}
+            onEditItem={onEdit}
           />
       )}
     </div>

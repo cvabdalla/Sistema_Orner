@@ -33,7 +33,7 @@ class SupabaseDataService implements IDataService {
         const { data, error } = await query;
         
         if (error) {
-            console.error(`[SUPABASE] Erro ao buscar em ${collection}:`, error);
+            console.error(`[SUPABASE] Erro ao buscar em ${collection}:`, error.message || error);
             return [];
         }
 
@@ -53,7 +53,7 @@ class SupabaseDataService implements IDataService {
             .single();
 
         if (error) {
-            console.error(`[SUPABASE] Erro ao salvar em ${collection}:`, error);
+            console.error(`[SUPABASE] Erro ao salvar em ${collection}:`, error.message || error);
             throw error;
         }
 
@@ -67,7 +67,7 @@ class SupabaseDataService implements IDataService {
             .select();
 
         if (error) {
-            console.error(`[SUPABASE] Erro ao salvar lote em ${collection}:`, error);
+            console.error(`[SUPABASE] Erro ao salvar lote em ${collection}:`, error.message || error);
             throw error;
         }
 
@@ -81,7 +81,7 @@ class SupabaseDataService implements IDataService {
             .eq('id', id);
 
         if (error) {
-            console.error(`[SUPABASE] Erro ao deletar em ${collection}:`, error);
+            console.error(`[SUPABASE] Erro ao deletar em ${collection}:`, error.message || error);
             return false;
         }
 

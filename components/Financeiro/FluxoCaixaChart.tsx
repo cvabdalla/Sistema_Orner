@@ -1,4 +1,3 @@
-
 import React, { useMemo } from 'react';
 import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Line } from 'recharts';
 import type { FinancialTransaction } from '../../types';
@@ -8,14 +7,12 @@ interface FluxoCaixaChartProps {
 }
 
 const formatCurrency = (value: number) => {
-    if (isNaN(value)) return 'R$ 0,00';
-    const rounded = Math.ceil(value * 100) / 100;
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 }).format(rounded);
+    if (value === undefined || value === null || isNaN(value)) return 'R$ 0,00';
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 }).format(value);
 };
 
 const formatCompact = (value: number) => {
-    const rounded = Math.ceil(value * 100) / 100;
-    return new Intl.NumberFormat('pt-BR', { notation: 'compact', compactDisplay: 'short', maximumFractionDigits: 2 }).format(rounded);
+    return new Intl.NumberFormat('pt-BR', { notation: 'compact', compactDisplay: 'short', maximumFractionDigits: 2 }).format(value);
 }
 
 const FluxoCaixaChart: React.FC<FluxoCaixaChartProps> = ({ transactions }) => {

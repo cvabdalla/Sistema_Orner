@@ -5,7 +5,7 @@ import type { SalesSummaryItem, User } from '../types';
 import { dataService } from '../services/dataService';
 
 const formatCurrency = (value: number) => {
-    if (isNaN(value) || value === 0) return 'R$ -';
+    if (value === undefined || value === null || isNaN(value) || value === 0) return 'R$ -';
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 }).format(value);
 };
 

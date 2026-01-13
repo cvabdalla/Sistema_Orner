@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import type { FinancialTransaction, FinancialTransactionStatus, FinancialCategory, CreditCard } from '../../types';
-import { TrashIcon, EditIcon, FilterIcon, CreditCardIcon, EyeIcon, CheckCircleIcon, XCircleIcon, ExclamationTriangleIcon } from '../../assets/icons';
+import { TrashIcon, EditIcon, FilterIcon, CreditCardIcon, EyeIcon, CheckCircleIcon, XCircleIcon, ExclamationTriangleIcon, DollarIcon } from '../../assets/icons';
 import { dataService } from '../../services/dataService';
 import CreditCardDetailModal from './CreditCardDetailModal';
 import Modal from '../Modal';
@@ -15,9 +15,8 @@ interface ContasTableProps {
 }
 
 const formatCurrency = (value: number) => {
-    if (isNaN(value)) return 'R$ 0,00';
-    const rounded = Math.ceil(value * 100) / 100;
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 }).format(rounded);
+    if (value === undefined || value === null || isNaN(value)) return 'R$ 0,00';
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 }).format(value);
 };
 
 const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
@@ -77,7 +76,7 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
         });
 
         return [...normalTransactions, ...groupedCC].sort((a, b) => {
-            // Prioridade de Status: Pendente primeiro
+            // Prioridade de Status: Pendente primeiro (Peso 0) vs Outros (Peso 1)
             const priorityA = String(a.status).toLowerCase() === 'pendente' ? 0 : 1;
             const priorityB = String(b.status).toLowerCase() === 'pendente' ? 0 : 1;
 
@@ -86,9 +85,20 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
             }
 
             // Desempate por data
-            return String(a.dueDate).localeCompare(String(b.dueDate));
+            if (String(a.status).toLowerCase() === 'pendente') {
+                return String(a.dueDate).localeCompare(String(b.dueDate));
+            } else {
+                const dateA = a.paymentDate || a.dueDate;
+                const dateB = b.paymentDate || b.dueDate;
+                return String(dateB).localeCompare(String(dateA)); // Recentes primeiro no histórico
+            }
         });
     }, [transactions, statusFilter, cards]);
+
+    // Cálculo do total dinâmico com base no que está visível
+    const totalExibido = useMemo(() => {
+        return processedTransactions.reduce((acc, curr) => acc + curr.amount, 0);
+    }, [processedTransactions]);
     
     const getCategoryName = (categoryId: string) => {
         if (categoryId === 'cc-group') return 'Fatura consolidada';
@@ -115,8 +125,21 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
 
     return (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden flex flex-col">
-            <div className="p-6 flex justify-between items-center">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white">{title}</h3>
+            <div className="p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-50 dark:border-gray-700">
+                <div className="flex items-center gap-4">
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">{title}</h3>
+                    {/* Badge de Total */}
+                    <div className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/30 px-4 py-2 rounded-xl border border-indigo-100 dark:border-indigo-800 shadow-sm">
+                        <DollarIcon className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                        <div className="flex flex-col">
+                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none mb-0.5">Total exibido</span>
+                            <span className="text-sm font-black text-indigo-700 dark:text-indigo-300 leading-none">
+                                {formatCurrency(totalExibido)}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                
                 <div className="flex items-center gap-2">
                     <FilterIcon className="text-gray-500 dark:text-gray-400 w-4 h-4" />
                     <select
@@ -131,6 +154,7 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                     </select>
                 </div>
             </div>
+            
             <div className="overflow-x-auto">
                 <table className="min-w-full text-left text-sm">
                     <thead className="bg-gray-50 dark:bg-gray-700/50 text-[10px] text-gray-500 tracking-widest font-black">
@@ -261,6 +285,7 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                     categories={categories}
                     onUpdateStatus={onStatusChange}
                     onDeleteItem={onCancel}
+                    onEditItem={onEdit}
                 />
             )}
         </div>

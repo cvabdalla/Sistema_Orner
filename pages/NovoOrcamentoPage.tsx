@@ -4,14 +4,14 @@ import { CalculatorIcon, SaveIcon, AddIcon, TrashIcon, EditIcon, CheckCircleIcon
 import type { NovoOrcamentoPageProps, OrcamentoVariant, SavedOrcamento, StockItem } from '../types';
 import { dataService } from '../services/dataService';
 
-// Helper to format numbers as BRL currency with rounding up
+// Helper to format numbers as BRL currency
 const formatCurrency = (value: number) => {
-    if (isNaN(value) || value === 0) return 'R$ 0,00';
-    const rounded = Math.ceil(value * 100) / 100;
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 }).format(rounded);
+    if (value === undefined || value === null || isNaN(value) || value === 0) return 'R$ 0,00';
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 }).format(value);
 };
 
-const roundUp = (value: number) => Math.ceil(value * 100) / 100;
+// Standard rounding to 2 decimals
+const roundToCents = (value: number) => Math.round(value * 100) / 100;
 
 // Helper to safely parse string values to numbers, supporting commas and dots
 const parseNumber = (val: any): number => {
@@ -298,8 +298,8 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         const custoMO = n_maoDeObraGeral + totalInstalacao + totalEstrutura;
         const precoVendaFinal = valorVendaSistema + custoMO;
         const despesasNotaCF = custoMO; 
-        const nfServicoValor = roundUp(despesasNotaCF * (n_nfServicoPerc / 100));
-        const comissaoVendasValor = formState.comissaoVendasOpcao === 'Sim' ? roundUp(precoVendaFinal * (n_comissaoVendasPerc / 100)) : 0;
+        const nfServicoValor = roundToCents(despesasNotaCF * (n_nfServicoPerc / 100));
+        const comissaoVendasValor = formState.comissaoVendasOpcao === 'Sim' ? roundToCents(precoVendaFinal * (n_comissaoVendasPerc / 100)) : 0;
         const totalCustoTerceiro = n_visitaTecnicaCusto + n_projetoHomologacaoCusto + totalEstrutura + instalacaoCusto + n_custoViagem + n_adequacaoLocalCusto;
 
         const valorFinalServico = custoMO;
@@ -307,7 +307,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         const custosTotaisServico = totalCustoTerceiro; 
         const comissoes = comissaoVendasValor;
         const lucroLiquidoServicoSDesc = valorFinalServico - impostos - custosTotaisServico - comissoes;
-        const descontoAplicadoValor = roundUp(precoVendaFinal * (n_descontoAplicadoPerc / 100));
+        const descontoAplicadoValor = roundToCents(precoVendaFinal * (n_descontoAplicadoPerc / 100));
         const lucroLiquidoServicoCDesc = lucroLiquidoServicoSDesc - descontoAplicadoValor;
         const lucroLiquido = lucroLiquidoServicoCDesc;
         const margemLiquida = precoVendaFinal > 0 ? (lucroLiquido / precoVendaFinal) * 100 : 0;
@@ -318,28 +318,28 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         const margemLiquidaServico = valorFinalServico > 0 ? (lucroLiquidoServicoCDesc / valorFinalServico) * 100 : 0;
 
         const newCalculated = {
-            valorVendaSistema: roundUp(valorVendaSistema),
-            valorVendaMaoDeObra: roundUp(valorVendaMaoDeObra),
-            totalInstalacao: roundUp(totalInstalacao),
-            totalEstrutura: roundUp(totalEstrutura),
-            custoMO: roundUp(custoMO),
-            precoVendaFinal: roundUp(precoVendaFinal),
-            despesasNotaCF: roundUp(despesasNotaCF),
+            valorVendaSistema: roundToCents(valorVendaSistema),
+            valorVendaMaoDeObra: roundToCents(valorVendaMaoDeObra),
+            totalInstalacao: roundToCents(totalInstalacao),
+            totalEstrutura: roundToCents(totalEstrutura),
+            custoMO: roundToCents(custoMO),
+            precoVendaFinal: roundToCents(precoVendaFinal),
+            despesasNotaCF: roundToCents(despesasNotaCF),
             nfServicoValor: nfServicoValor,
             comissaoVendasValor: comissaoVendasValor,
-            totalCustoTerceiro: roundUp(totalCustoTerceiro),
-            lucroLiquido: roundUp(lucroLiquido),
+            totalCustoTerceiro: roundToCents(totalCustoTerceiro),
+            lucroLiquido: roundToCents(lucroLiquido),
             margemLiquida,
-            valorFinalSistema: roundUp(valorFinalSistema),
-            lucroLiquidoVenda: roundUp(lucroLiquidoVenda),
+            valorFinalSistema: roundToCents(valorFinalSistema),
+            lucroLiquidoVenda: roundToCents(lucroLiquidoVenda),
             margemFinal,
-            totalDivisaoLucro: roundUp(totalDivisaoLucro),
-            valorFinalServico: roundUp(valorFinalSistema),
+            totalDivisaoLucro: roundToCents(totalDivisaoLucro),
+            valorFinalServico: roundToCents(valorFinalSistema),
             impostos: impostos,
-            custosTotaisServico: roundUp(custosTotaisServico),
-            lucroLiquidoServicoSDesc: roundUp(lucroLiquidoServicoSDesc),
+            custosTotaisServico: roundToCents(custosTotaisServico),
+            lucroLiquidoServicoSDesc: roundToCents(lucroLiquidoServicoSDesc),
             descontoAplicadoValor: descontoAplicadoValor,
-            lucroLiquidoServicoCDesc: roundUp(lucroLiquidoServicoCDesc),
+            lucroLiquidoServicoCDesc: roundToCents(lucroLiquidoServicoCDesc),
             margemLiquidaServico,
         };
 
@@ -401,7 +401,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
             return;
         }
 
-        let newMOG = Math.ceil((numerador / denominador) * 100) / 100;
+        let newMOG = roundToCents(numerador / denominador);
         updateVariantsWithFormState({ ...formState, maoDeObraGeral: newMOG });
         setModalOpen(false);
         setDesiredMargin('');

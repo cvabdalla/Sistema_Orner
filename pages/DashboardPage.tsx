@@ -2,12 +2,13 @@ import React, { useEffect, useState, useMemo } from 'react';
 import DashboardCard from '../components/DashboardCard';
 import ChartComponent from '../components/ChartComponent';
 import RecentTransactions from '../components/RecentTransactions';
+import TransactionModal from '../components/Financeiro/TransactionModal';
 import { 
     DollarIcon, UsersIcon, TrendUpIcon, DocumentReportIcon, 
     OrcamentoIcon, FinanceiroIcon, ExclamationTriangleIcon, 
     ShoppingCartIcon, CubeIcon, ClockIcon 
 } from '../assets/icons';
-import type { FinancialTransaction, SavedOrcamento, StockItem, PurchaseRequest, ExpenseReport } from '../types';
+import type { FinancialTransaction, SavedOrcamento, StockItem, PurchaseRequest, ExpenseReport, FinancialCategory, BankAccount } from '../types';
 import { dataService } from '../services/dataService';
 
 const DashboardPage: React.FC = () => {
@@ -16,30 +17,40 @@ const DashboardPage: React.FC = () => {
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
   const [purchaseRequests, setPurchaseRequests] = useState<PurchaseRequest[]>([]);
   const [expenseReports, setExpenseReports] = useState<ExpenseReport[]>([]);
+  const [categories, setCategories] = useState<FinancialCategory[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Estados para edição
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<FinancialTransaction | null>(null);
+
+  const loadData = async () => {
+      try {
+          const [txs, orcs, items, reqs, reports, cats, banks] = await Promise.all([
+              dataService.getAll<FinancialTransaction>('financial_transactions'),
+              dataService.getAll<SavedOrcamento>('orcamentos'),
+              dataService.getAll<StockItem>('stock_items'),
+              dataService.getAll<PurchaseRequest>('purchase_requests'),
+              dataService.getAll<ExpenseReport>('expense_reports'),
+              dataService.getAll<FinancialCategory>('financial_categories'),
+              dataService.getAll<BankAccount>('bank_accounts')
+          ]);
+          setTransactions(txs || []);
+          setOrcamentos(orcs || []);
+          setStockItems(items || []);
+          setPurchaseRequests(reqs || []);
+          setExpenseReports(reports || []);
+          setCategories(cats || []);
+          setBankAccounts(banks || []);
+      } catch (error) {
+          console.error("Erro ao carregar dados do dashboard:", error);
+      } finally {
+          setIsLoading(false);
+      }
+  };
+
   useEffect(() => {
-      const loadData = async () => {
-          setIsLoading(true);
-          try {
-              const [txs, orcs, items, reqs, reports] = await Promise.all([
-                  dataService.getAll<FinancialTransaction>('financial_transactions'),
-                  dataService.getAll<SavedOrcamento>('orcamentos'),
-                  dataService.getAll<StockItem>('stock_items'),
-                  dataService.getAll<PurchaseRequest>('purchase_requests'),
-                  dataService.getAll<ExpenseReport>('expense_reports')
-              ]);
-              setTransactions(txs || []);
-              setOrcamentos(orcs || []);
-              setStockItems(items || []);
-              setPurchaseRequests(reqs || []);
-              setExpenseReports(reports || []);
-          } catch (error) {
-              console.error("Erro ao carregar dados do dashboard:", error);
-          } finally {
-              setIsLoading(false);
-          }
-      };
       loadData();
   }, []);
 
@@ -50,7 +61,6 @@ const DashboardPage: React.FC = () => {
       const orcamentosAprovados = orcamentos.filter(o => o.status === 'Aprovado').length;
       const orcamentosTotal = orcamentos.length;
 
-      // Novas métricas de alerta
       const openPurchaseRequests = purchaseRequests.filter(r => r.status === 'Aberto').length;
       const lowStockItems = stockItems.filter(i => i.quantity <= i.minQuantity).length;
       
@@ -97,13 +107,40 @@ const DashboardPage: React.FC = () => {
       return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
   };
 
+  const handleEditTransaction = (tx: FinancialTransaction) => {
+      setEditingTransaction(tx);
+      setIsEditModalOpen(true);
+  };
+
+  const handleSaveEdit = async (tx: FinancialTransaction) => {
+      try {
+          await dataService.save('financial_transactions', tx);
+          setIsEditModalOpen(false);
+          loadData();
+      } catch (e) {
+          console.error(e);
+          alert("Erro ao salvar transação.");
+      }
+  };
+
+  const handleDeleteTransaction = async (id: string) => {
+      if (confirm('Deseja realmente excluir este lançamento?')) {
+          try {
+              await dataService.delete('financial_transactions', id);
+              await loadData();
+          } catch (e) {
+              console.error(e);
+              alert("Erro ao excluir lançamento.");
+          }
+      }
+  };
+
   if (isLoading) return <div className="flex items-center justify-center h-96"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
 
   const totalReports = metrics.transferidos + metrics.envPagamento;
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Seção de Métricas Principais */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <DashboardCard title="Receita (Realizada)" value={formatCurrency(metrics.receitaTotal)} icon={FinanceiroIcon} color="bg-green-500" />
         <DashboardCard title="Despesa (Realizada)" value={formatCurrency(metrics.despesaTotal)} icon={TrendUpIcon} color="bg-red-500" />
@@ -111,7 +148,6 @@ const DashboardPage: React.FC = () => {
         <DashboardCard title="Total de Orçamentos" value={metrics.orcamentosTotal.toString()} icon={UsersIcon} color="bg-indigo-500" />
       </div>
 
-      {/* Seção de Alertas e Pendências */}
       <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-orange-100 dark:border-orange-900/30">
         <div className="flex items-center gap-3 mb-6">
             <div className="p-2 bg-orange-100 dark:bg-orange-900/30 text-orange-600 rounded-lg">
@@ -173,9 +209,24 @@ const DashboardPage: React.FC = () => {
             <ChartComponent data={chartData} />
         </div>
         <div className="lg:col-span-1">
-            <RecentTransactions transactions={transactions.filter(t => t.status !== 'cancelado')} />
+            <RecentTransactions 
+                transactions={transactions.filter(t => t.status !== 'cancelado')} 
+                onEdit={handleEditTransaction}
+                onDelete={handleDeleteTransaction}
+            />
         </div>
       </div>
+
+      {isEditModalOpen && (
+          <TransactionModal 
+            isOpen={isEditModalOpen} 
+            onClose={() => setIsEditModalOpen(false)} 
+            onSave={handleSaveEdit} 
+            transaction={editingTransaction} 
+            categories={categories} 
+            bankAccounts={bankAccounts} 
+          />
+      )}
     </div>
   );
 };

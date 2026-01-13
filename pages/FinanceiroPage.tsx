@@ -438,9 +438,9 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
 
                             <div className="flex items-center gap-2 bg-white dark:bg-gray-800 p-1 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
                                 <CalendarIcon className="w-4 h-4 ml-2 text-gray-400" />
-                                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-transparent border-none text-[11px] font-bold text-gray-600 dark:text-gray-200 focus:ring-0 p-1 cursor-pointer" />
-                                <span className="text-gray-300">-</span>
-                                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-transparent border-none text-[11px] font-bold text-gray-600 dark:text-gray-200 focus:ring-0 p-1 cursor-pointer" />
+                                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-transparent border-none text-sm text-gray-700 dark:text-gray-200 focus:ring-0 p-1 cursor-pointer w-full sm:w-auto" />
+                                <span className="text-gray-400">-</span>
+                                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-transparent border-none text-sm text-gray-700 dark:text-gray-200 focus:ring-0 p-1 cursor-pointer w-full sm:w-auto" />
                             </div>
                             <button onClick={() => handleOpenModal(undefined, activeTab === 'aReceber' ? 'receita' : activeTab === 'aPagar' ? 'despesa' : undefined)} className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 font-bold text-xs transition-all active:scale-95"><AddIcon className="w-5 h-5" /><span className="hidden sm:inline">Nova transação</span></button>
                         </div>
@@ -469,6 +469,8 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
                                 bankAccounts={bankAccounts}
                                 onOpenImport={() => setImportModalOpen(true)} 
                                 onOpenCreditCard={() => setCreditCardModalOpen(true)}
+                                onEditTransaction={(tx) => handleOpenModal(tx)}
+                                onCancelTransaction={handleCancelRequest}
                             />
                         ) : (
                             <ContasTable
@@ -488,7 +490,7 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
 
             {isModalOpen && <TransactionModal isOpen={isModalOpen} onClose={handleCloseModal} onSave={handleSaveTransaction} transaction={editingTransaction} initialType={forcedModalType} categories={categories} bankAccounts={bankAccounts} />}
             {isImportModalOpen && <OFXImportModal isOpen={isImportModalOpen} onClose={() => setImportModalOpen(false)} onImport={handleBatchSaveTransactions} categories={categories} />}
-            {isCreditCardModalOpen && <CreditCardModal isOpen={isCreditCardModalOpen} onClose={() => setCreditCardModalOpen(false)} onSave={handleBatchSaveTransactions} categories={categories} bankAccounts={bankAccounts} />}
+            {isCreditCardModalOpen && <CreditCardModal isOpen={isCreditCardModalOpen} onClose={() => setCreditCardModalOpen(false)} onSave={handleBatchSaveTransactions} categories={categories} bankAccounts={bankAccounts} currentUser={currentUser} />}
             
             {isCancelModalOpen && (
                 <Modal title="Cancelar transação" onClose={() => setIsCancelModalOpen(false)}>

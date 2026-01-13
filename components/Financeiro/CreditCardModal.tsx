@@ -5,7 +5,7 @@ import {
     EditIcon, CheckCircleIcon, XCircleIcon, CalendarIcon,
     DollarIcon, ExclamationTriangleIcon, TableIcon
 } from '../../assets/icons';
-import type { FinancialCategory, FinancialTransaction, CreditCard, BankAccount } from '../../types';
+import type { FinancialCategory, FinancialTransaction, CreditCard, BankAccount, User } from '../../types';
 import { dataService } from '../../services/dataService';
 
 interface CreditCardItem {
@@ -15,7 +15,7 @@ interface CreditCardItem {
     categoryId: string;
     billingType: 'À vista (Único)' | 'Parcelado' | 'Recorrente (Fixo)';
     count: number; 
-    amount: number;
+    amount: string | number; // Alterado para aceitar string durante a digitação
     calculatedDueDate: string;
     errors?: { [key: string]: boolean };
 }
@@ -26,21 +26,20 @@ interface CreditCardModalProps {
     onSave: (transactions: FinancialTransaction[]) => void;
     categories: FinancialCategory[];
     bankAccounts: BankAccount[];
+    currentUser: User;
 }
 
-const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSave, categories, bankAccounts }) => {
+const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSave, categories, bankAccounts, currentUser }) => {
     const [activeTab, setActiveTab] = useState<'lancar' | 'config'>('lancar');
     const [cards, setCards] = useState<CreditCard[]>([]);
     const [selectedCardId, setSelectedCardId] = useState('');
     const [selectedBankId, setSelectedBankId] = useState('');
     const [isSavingLocal, setIsSavingLocal] = useState(false);
 
-    // Form de lançamento
     const [items, setItems] = useState<CreditCardItem[]>([
-        { id: '1', date: new Date().toISOString().split('T')[0], description: '', categoryId: '', billingType: 'À vista (Único)', count: 1, amount: 0, calculatedDueDate: '' }
+        { id: '1', date: new Date().toISOString().split('T')[0], description: '', categoryId: '', billingType: 'À vista (Único)', count: 1, amount: '', calculatedDueDate: '' }
     ]);
 
-    // Form de cadastro de cartão
     const [cardForm, setCardForm] = useState<Partial<CreditCard>>({
         name: '', lastDigits: '', closingDay: 1, dueDay: 10, active: true
     });
@@ -75,12 +74,8 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
         const [year, month, day] = expenseDate.split('-').map(Number);
         let dueMonth = month - 1;
         let dueYear = year;
-        
-        // Regra de fechamento
         if (day > card.closingDay) dueMonth++;
         dueMonth++; 
-        
-        // Forçar 12:00 para evitar desvios de fuso horário ISO
         const finalDueDate = new Date(dueYear, dueMonth, card.dueDay, 12, 0, 0);
         return finalDueDate.toISOString().split('T')[0];
     };
@@ -109,13 +104,27 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
             categoryId: '', 
             billingType: 'À vista (Único)', 
             count: 1,
-            amount: 0, 
+            amount: '', 
             calculatedDueDate: calculateDueDate(lastDate, selectedCard) 
         }]);
     };
 
     const handleRemoveItem = (id: string) => {
-        if (items.length > 1) setItems(items.filter(item => item.id !== id));
+        if (items.length > 1) {
+            setItems(prev => prev.filter(item => item.id !== id));
+        } else {
+            // Se for o último item, apenas limpa os campos em vez de remover
+            setItems([{ 
+                id: Math.random().toString(36).substr(2, 9), 
+                date: new Date().toISOString().split('T')[0], 
+                description: '', 
+                categoryId: '', 
+                billingType: 'À vista (Único)', 
+                count: 1, 
+                amount: '', 
+                calculatedDueDate: calculateDueDate(new Date().toISOString().split('T')[0], selectedCard) 
+            }]);
+        }
     };
 
     const handleUpdateItem = (id: string, field: keyof CreditCardItem, value: any) => {
@@ -130,28 +139,25 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
         }));
     };
 
-    const totalFatura = useMemo(() => items.reduce((sum, item) => sum + (item.amount || 0), 0), [items]);
+    const totalFatura = useMemo(() => items.reduce((sum, item) => {
+        const val = typeof item.amount === 'string' ? parseFloat(item.amount.replace(',', '.')) : item.amount;
+        return sum + (isNaN(val) ? 0 : val);
+    }, 0), [items]);
 
     const handleSaveTransactions = async (e: React.MouseEvent) => {
         e.preventDefault();
         if (isSavingLocal) return;
 
-        if (!selectedCard) {
-            alert('Por favor, selecione um cartão de crédito ativo.');
-            return;
-        }
-
-        if (!selectedBankId) {
-            alert('Por favor, selecione a conta bancária para o débito da fatura.');
-            return;
-        }
+        if (!selectedCard) { alert('Por favor, selecione um cartão de crédito ativo.'); return; }
+        if (!selectedBankId) { alert('Por favor, selecione a conta bancária para o débito da fatura.'); return; }
 
         let hasErrors = false;
         const validatedItems = items.map(item => {
             const errors: any = {};
+            const numAmount = typeof item.amount === 'string' ? parseFloat(item.amount.replace(',', '.')) : item.amount;
             if (!item.description.trim()) { errors.description = true; hasErrors = true; }
             if (!item.categoryId) { errors.categoryId = true; hasErrors = true; }
-            if (item.amount <= 0) { errors.amount = true; hasErrors = true; }
+            if (isNaN(numAmount) || numAmount === 0) { errors.amount = true; hasErrors = true; }
             return { ...item, errors };
         });
 
@@ -166,18 +172,20 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
         const timestamp = Date.now();
 
         items.forEach((item, idx) => {
+            const numAmount = typeof item.amount === 'string' ? parseFloat(item.amount.replace(',', '.')) : item.amount;
             const iterations = item.billingType === 'À vista (Único)' ? 1 : Math.max(1, item.count);
+            
             for (let i = 0; i < iterations; i++) {
                 const isInstallment = item.billingType === 'Parcelado';
-                const effectiveAmount = isInstallment ? (item.amount / iterations) : item.amount;
+                const effectiveAmount = isInstallment ? (numAmount / iterations) : numAmount;
                 const suffix = iterations > 1 ? ` (${i + 1}/${iterations})` : '';
                 const dueDate = addMonths(item.calculatedDueDate, i);
 
                 allTransactions.push({
-                    id: `cc-${timestamp}-${idx}-${i}`,
-                    owner_id: '', 
-                    description: `[${selectedCard.name}] ${item.description}${suffix}`,
-                    amount: Math.ceil(effectiveAmount * 100) / 100,
+                    id: `cc-${timestamp}-${idx}-${i}-${Math.random().toString(36).substr(2, 5)}`,
+                    owner_id: currentUser.id, 
+                    description: `[${selectedCard.name} (**** ${selectedCard.lastDigits})] ${item.description}${suffix}`,
+                    amount: Number(effectiveAmount.toFixed(2)),
                     type: 'despesa',
                     dueDate: dueDate,
                     bankId: selectedBankId, 
@@ -190,7 +198,7 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
 
         try {
             await onSave(allTransactions);
-            setItems([{ id: '1', date: new Date().toISOString().split('T')[0], description: '', categoryId: '', billingType: 'À vista (Único)', count: 1, amount: 0, calculatedDueDate: '' }]);
+            setItems([{ id: '1', date: new Date().toISOString().split('T')[0], description: '', categoryId: '', billingType: 'À vista (Único)', count: 1, amount: '', calculatedDueDate: '' }]);
         } catch (error) {
             console.error(error);
             alert("Erro ao processar salvamento da fatura.");
@@ -204,17 +212,22 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
         if (!cardForm.name) return;
         const newCard: CreditCard = {
             id: editingCardId || Date.now().toString(),
-            owner_id: '',
+            owner_id: currentUser.id,
             name: cardForm.name!,
             lastDigits: cardForm.lastDigits || '****',
             closingDay: Number(cardForm.closingDay),
             dueDay: Number(cardForm.dueDay),
             active: cardForm.active ?? true
         };
-        await dataService.save('credit_cards', newCard);
-        setCardForm({ name: '', lastDigits: '', closingDay: 1, dueDay: 10, active: true });
-        setEditingCardId(null);
-        loadCards();
+        try {
+            await dataService.save('credit_cards', newCard);
+            setCardForm({ name: '', lastDigits: '', closingDay: 1, dueDay: 10, active: true });
+            setEditingCardId(null);
+            loadCards();
+        } catch (error) {
+            console.error(error);
+            alert("Erro ao salvar dados do cartão no banco.");
+        }
     };
 
     const editCard = (card: CreditCard) => {
@@ -240,12 +253,14 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
             <div className="space-y-4">
                 <div className="flex bg-gray-50 dark:bg-gray-700/30 p-1 rounded-xl border border-gray-100 dark:border-gray-600 w-fit">
                     <button 
+                        type="button"
                         onClick={() => setActiveTab('lancar')}
                         className={`flex items-center gap-2 px-5 py-1.5 text-[10px] font-bold rounded-lg transition-all ${activeTab === 'lancar' ? 'bg-white dark:bg-gray-800 text-indigo-600 shadow-sm border border-gray-100 dark:border-gray-700' : 'text-gray-400 hover:text-gray-600'}`}
                     >
                         <PlusIcon className="w-3 h-3" /> Lançar gastos
                     </button>
                     <button 
+                        type="button"
                         onClick={() => setActiveTab('config')}
                         className={`flex items-center gap-2 px-5 py-1.5 text-[10px] font-bold rounded-lg transition-all ${activeTab === 'config' ? 'bg-white dark:bg-gray-800 text-indigo-600 shadow-sm border border-gray-100 dark:border-gray-700' : 'text-gray-400 hover:text-gray-600'}`}
                     >
@@ -304,6 +319,7 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
                             <div className="flex justify-between items-center px-1">
                                 <h4 className="text-[10px] font-black text-gray-400 tracking-widest uppercase">Detalhamento dos gastos</h4>
                                 <button 
+                                    type="button"
                                     onClick={handleAddItem} 
                                     className="flex items-center gap-1 text-[10px] font-black text-indigo-500 hover:text-indigo-600 transition-colors"
                                 >
@@ -311,98 +327,105 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
                                 </button>
                             </div>
 
-                            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden shadow-sm">
-                                <table className="w-full text-left">
-                                    <thead className="bg-gray-50/50 dark:bg-gray-900/40 border-b border-gray-100 dark:border-gray-700">
-                                        <tr className="text-[9px] font-black text-gray-400 tracking-tighter">
-                                            <th className="py-2.5 pl-4">Data</th>
-                                            <th className="py-2.5">Descrição</th>
-                                            <th className="py-2.5">Categoria</th>
-                                            <th className="py-2.5">Cobrança</th>
-                                            <th className="py-2.5 text-center">Parcelas</th>
-                                            <th className="py-2.5 text-right">Valor total</th>
-                                            <th className="py-2.5 text-center">Vencimento</th>
-                                            <th className="py-2.5 pr-4"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
-                                        {items.map(item => (
-                                            <tr key={item.id} className="hover:bg-indigo-50/10 dark:hover:bg-indigo-900/5 transition-colors">
-                                                <td className="py-2 pl-4 w-32">
-                                                    <input 
-                                                        type="date" 
-                                                        value={item.date} 
-                                                        onChange={(e) => handleUpdateItem(item.id, 'date', e.target.value)} 
-                                                        className="w-full bg-transparent border-none p-1 text-[11px] font-bold text-gray-600 dark:text-gray-300 outline-none" 
-                                                    />
-                                                </td>
-                                                <td className="py-2">
-                                                    <input 
-                                                        type="text" 
-                                                        value={item.description} 
-                                                        onChange={(e) => handleUpdateItem(item.id, 'description', e.target.value)} 
-                                                        placeholder="Ex: Almoço..." 
-                                                        className={`w-full rounded-lg px-2 py-1 text-[11px] font-bold outline-none transition-all ${item.errors?.description ? 'bg-red-50 text-red-600' : 'bg-transparent text-gray-700 dark:text-white focus:bg-gray-50 dark:focus:bg-gray-700'}`} 
-                                                    />
-                                                </td>
-                                                <td className="py-2 w-40">
-                                                    <select 
-                                                        value={item.categoryId} 
-                                                        onChange={(e) => handleUpdateItem(item.id, 'categoryId', e.target.value)} 
-                                                        className={`w-full bg-transparent border-none px-1 py-1 text-[11px] font-bold outline-none ${item.errors?.categoryId ? 'text-red-500' : 'text-gray-500 dark:text-gray-400'}`}
-                                                    >
-                                                        <option value="">Selecione...</option>
-                                                        {expenseCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                                    </select>
-                                                </td>
-                                                <td className="py-2 w-32">
-                                                    <select 
-                                                        value={item.billingType} 
-                                                        onChange={(e) => handleUpdateItem(item.id, 'billingType', e.target.value)} 
-                                                        className="w-full bg-transparent border-none px-1 py-1 text-[11px] font-bold text-gray-500 dark:text-gray-400 outline-none"
-                                                    >
-                                                        <option value="À vista (Único)">À vista</option>
-                                                        <option value="Parcelado">Parcelado</option>
-                                                        <option value="Recorrente (Fixo)">Recorrente</option>
-                                                    </select>
-                                                </td>
-                                                <td className="py-2 w-20 text-center">
-                                                    {item.billingType !== 'À vista (Único)' ? (
-                                                        <input 
-                                                            type="number" 
-                                                            min="2" 
-                                                            value={item.count} 
-                                                            onChange={(e) => handleUpdateItem(item.id, 'count', parseInt(e.target.value) || 1)} 
-                                                            className="w-10 text-center bg-indigo-50 dark:bg-indigo-900/30 rounded p-0.5 text-[11px] font-black text-indigo-600 outline-none" 
-                                                        />
-                                                    ) : (
-                                                        <span className="text-gray-300 text-[10px] font-bold">---</span>
-                                                    )}
-                                                </td>
-                                                <td className="py-2 w-28">
-                                                    <input 
-                                                        type="number" 
-                                                        step="0.01" 
-                                                        value={item.amount || ''} 
-                                                        onChange={(e) => handleUpdateItem(item.id, 'amount', parseFloat(e.target.value) || 0)} 
-                                                        className={`w-full text-right bg-transparent border-none px-1 py-1 text-[11px] font-black outline-none ${item.errors?.amount ? 'text-red-500' : 'text-gray-800 dark:text-white'}`} 
-                                                        placeholder="0,00"
-                                                    />
-                                                </td>
-                                                <td className="py-2 w-28 text-center">
-                                                    <span className="text-[9px] font-black text-gray-500 bg-gray-50 dark:bg-gray-700 px-2 py-0.5 rounded-lg border border-gray-100 dark:border-gray-600 shadow-sm">
-                                                        {item.calculatedDueDate ? new Date(item.calculatedDueDate).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : '--/--/--'}
-                                                    </span>
-                                                </td>
-                                                <td className="py-2 pr-4 text-right w-8">
-                                                    <button onClick={() => handleRemoveItem(item.id)} className="p-1 text-gray-300 hover:text-red-500 transition-colors">
-                                                        <TrashIcon className="w-4 h-4" />
-                                                    </button>
-                                                </td>
+                            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
+                                <div className="max-h-[350px] overflow-y-auto custom-scrollbar">
+                                    <table className="w-full text-left table-auto">
+                                        <thead className="bg-gray-50/50 dark:bg-gray-900/40 border-b border-gray-100 dark:border-gray-700 sticky top-0 z-10 backdrop-blur-sm">
+                                            <tr className="text-[9px] font-black text-gray-400 tracking-tighter">
+                                                <th className="py-2.5 pl-4 w-32">Data</th>
+                                                <th className="py-2.5">Descrição</th>
+                                                <th className="py-2.5 w-40">Categoria</th>
+                                                <th className="py-2.5 w-32">Cobrança</th>
+                                                <th className="py-2.5 w-20 text-center">Parcelas</th>
+                                                <th className="py-2.5 w-28 text-right">Valor total</th>
+                                                <th className="py-2.5 w-28 text-center">Vencimento</th>
+                                                <th className="py-2.5 pr-4 w-10"></th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
+                                            {items.map(item => (
+                                                <tr key={item.id} className="hover:bg-indigo-50/10 dark:hover:bg-indigo-900/5 transition-colors">
+                                                    <td className="py-2 pl-4">
+                                                        <input 
+                                                            type="date" 
+                                                            value={item.date} 
+                                                            onChange={(e) => handleUpdateItem(item.id, 'date', e.target.value)} 
+                                                            className="w-full bg-transparent border-none p-1 text-[11px] font-bold text-gray-600 dark:text-gray-300 outline-none" 
+                                                        />
+                                                    </td>
+                                                    <td className="py-2">
+                                                        <input 
+                                                            type="text" 
+                                                            value={item.description} 
+                                                            onChange={(e) => handleUpdateItem(item.id, 'description', e.target.value)} 
+                                                            placeholder="Ex: Almoço..." 
+                                                            className={`w-full rounded-lg px-2 py-1 text-[11px] font-bold outline-none transition-all ${item.errors?.description ? 'bg-red-50 text-red-600' : 'bg-transparent text-gray-700 dark:text-white focus:bg-gray-50 dark:focus:bg-gray-700'}`} 
+                                                        />
+                                                    </td>
+                                                    <td className="py-2">
+                                                        <select 
+                                                            value={item.categoryId} 
+                                                            onChange={(e) => handleUpdateItem(item.id, 'categoryId', e.target.value)} 
+                                                            className={`w-full bg-transparent border-none px-1 py-1 text-[11px] font-bold outline-none ${item.errors?.categoryId ? 'text-red-500' : 'text-gray-500 dark:text-gray-400'}`}
+                                                        >
+                                                            <option value="">Selecione...</option>
+                                                            {expenseCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                                        </select>
+                                                    </td>
+                                                    <td className="py-2">
+                                                        <select 
+                                                            value={item.billingType} 
+                                                            onChange={(e) => handleUpdateItem(item.id, 'billingType', e.target.value)} 
+                                                            className="w-full bg-transparent border-none px-1 py-1 text-[11px] font-bold text-gray-500 dark:text-gray-400 outline-none"
+                                                        >
+                                                            <option value="À vista (Único)">À vista</option>
+                                                            <option value="Parcelado">Parcelado</option>
+                                                            <option value="Recorrente (Fixo)">Recorrente</option>
+                                                        </select>
+                                                    </td>
+                                                    <td className="py-2 text-center">
+                                                        {item.billingType !== 'À vista (Único)' ? (
+                                                            <input 
+                                                                type="number" 
+                                                                min="2" 
+                                                                value={item.count} 
+                                                                onChange={(e) => handleUpdateItem(item.id, 'count', parseInt(e.target.value) || 1)} 
+                                                                className="w-10 text-center bg-indigo-50 dark:bg-indigo-900/30 rounded p-0.5 text-[11px] font-black text-indigo-600 outline-none" 
+                                                            />
+                                                        ) : (
+                                                            <span className="text-gray-300 text-[10px] font-bold">---</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="py-2">
+                                                        <input 
+                                                            type="text" 
+                                                            inputMode="decimal"
+                                                            value={item.amount} 
+                                                            onChange={(e) => handleUpdateItem(item.id, 'amount', e.target.value)} 
+                                                            className={`w-full text-right bg-transparent border-none px-1 py-1 text-[11px] font-black outline-none ${item.errors?.amount ? 'text-red-500' : (parseFloat(String(item.amount).replace(',','.')) < 0) ? 'text-green-600' : 'text-gray-800 dark:text-white'}`} 
+                                                            placeholder="0,00"
+                                                        />
+                                                    </td>
+                                                    <td className="py-2 text-center">
+                                                        <span className="text-[9px] font-black text-gray-500 bg-gray-50 dark:bg-gray-700 px-2 py-0.5 rounded-lg border border-gray-100 dark:border-gray-600 shadow-sm">
+                                                            {item.calculatedDueDate ? new Date(item.calculatedDueDate).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : '--/--/--'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="py-2 pr-4 text-right">
+                                                        <button 
+                                                            type="button"
+                                                            onClick={(e) => { e.preventDefault(); handleRemoveItem(item.id); }} 
+                                                            className="p-1.5 text-gray-300 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"
+                                                            title="Remover este item"
+                                                        >
+                                                            <TrashIcon className="w-4 h-4" />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
 
@@ -413,14 +436,15 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
                                 </div>
                                 <div>
                                     <p className="text-[9px] font-black text-gray-400 tracking-widest">Total dos lançamentos</p>
-                                    <p className="text-xl font-black text-gray-800 dark:text-white leading-none mt-1">
+                                    <p className={`text-xl font-black leading-none mt-1 ${totalFatura < 0 ? 'text-green-600' : 'text-gray-800 dark:text-white'}`}>
                                         {totalFatura.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                     </p>
                                 </div>
                             </div>
                             <div className="flex gap-2 w-full md:w-auto">
-                                <button onClick={onClose} className="flex-1 md:flex-none px-6 py-2.5 text-xs font-bold text-gray-400 hover:text-gray-600 transition-colors">Cancelar</button>
+                                <button type="button" onClick={onClose} className="flex-1 md:flex-none px-6 py-2.5 text-xs font-bold text-gray-400 hover:text-gray-600 transition-colors">Cancelar</button>
                                 <button 
+                                    type="button"
                                     onClick={handleSaveTransactions}
                                     disabled={isSavingLocal}
                                     className="flex-1 md:flex-none px-10 py-2.5 bg-indigo-600 text-white font-bold rounded-xl text-xs shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50"
@@ -479,7 +503,7 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
                                         <th className="px-6 py-4 text-right">Ações</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
+                                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                                     {cards.length > 0 ? cards.map(card => (
                                         <tr key={card.id} className="hover:bg-gray-50 dark:hover:bg-indigo-900/5 transition-colors">
                                             <td className="px-6 py-3 font-black text-gray-700 dark:text-gray-200 text-xs">{card.name}</td>
@@ -492,6 +516,7 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
                                             </td>
                                             <td className="px-6 py-3 text-center">
                                                 <button 
+                                                    type="button"
                                                     onClick={() => toggleCardStatus(card)}
                                                     className={`px-3 py-0.5 rounded-full text-[9px] font-black border transition-all ${card.active ? 'bg-green-50 text-green-600 border-green-100 hover:bg-green-100' : 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100'}`}
                                                 >
@@ -500,8 +525,8 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
                                             </td>
                                             <td className="px-6 py-3 text-right">
                                                 <div className="flex justify-end gap-1">
-                                                    <button onClick={() => editCard(card)} className="p-1.5 text-gray-400 hover:text-indigo-500 transition-colors"><EditIcon className="w-4 h-4" /></button>
-                                                    <button onClick={async () => { if(confirm('Remover cartão?')) { await dataService.delete('credit_cards', card.id); loadCards(); } }} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"><TrashIcon className="w-4 h-4" /></button>
+                                                    <button type="button" onClick={() => editCard(card)} className="p-1.5 text-gray-400 hover:text-indigo-500 transition-colors"><EditIcon className="w-4 h-4" /></button>
+                                                    <button type="button" onClick={async () => { if(confirm('Remover cartão?')) { await dataService.delete('credit_cards', card.id); loadCards(); } }} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"><TrashIcon className="w-4 h-4" /></button>
                                                 </div>
                                             </td>
                                         </tr>
