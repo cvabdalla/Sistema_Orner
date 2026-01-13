@@ -269,7 +269,9 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
             name: data.name,
             type: data.type,
             classification: data.classification || (data.type === 'receita' ? 'RECEITA_VENDA' : 'DESPESA_OPERACIONAL'),
-            group: data.group
+            group: data.group,
+            showInDre: data.showInDre ?? true,
+            active: data.active ?? true
         };
         await dataService.save('financial_categories', newCategory);
         setCategories(prev => [...prev, newCategory]);
@@ -511,7 +513,7 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
                         </div>
 
                         <div className="flex justify-center gap-4">
-                            <button onClick={() => setIsCancelModalOpen(false)} className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 rounded-xl text-xs font-bold text-gray-500">Voltar</button>
+                            <button onClick={() => setIsCancelModalOpen(false)} className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl font-bold text-sm text-gray-500">Voltar</button>
                             <button 
                                 onClick={confirmCancelTransaction} 
                                 disabled={!cancelReason.trim()}

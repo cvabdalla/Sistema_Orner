@@ -54,7 +54,7 @@ const CategoriasView: React.FC<CategoriasViewProps> = ({
     const filteredCategories = useMemo(() => {
         return categories
             .filter(c => c.type === activeTab)
-            .sort((a, b) => (a.code || '').localeCompare(b.code || '', undefined, { numeric: true }));
+            .sort((a, b) => a.name.localeCompare(b.name));
     }, [categories, activeTab]);
 
     const activeTabGroups = useMemo(() => {

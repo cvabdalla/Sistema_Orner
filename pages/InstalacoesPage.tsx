@@ -335,7 +335,7 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
 
     const renderCalendario = () => {
         const selectedActivity = catalog.find(c => c.id === apptForm.activityId);
-        const isPersonal = !!selectedActivity?.personalSchedule;
+        const isPersonalForm = !!selectedActivity?.personalSchedule;
         const isCanceledView = calendarViewMode === 'cancelados';
         const isInstalacao = selectedActivity?.title.toLowerCase().includes('instalação');
         const isLavagem = selectedActivity?.title.toLowerCase().includes('lavagem');
@@ -525,7 +525,7 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                         </div>
 
                         {/* Seção 4: Local (Condicional) */}
-                        {!isPersonal && (
+                        {!isPersonalForm && (
                             <div className="bg-white dark:bg-gray-800 p-3.5 rounded-2xl border border-gray-100 dark:border-gray-700 space-y-3 shadow-sm">
                                 <SectionHeader icon={<MapIcon />} title="Localização do serviço" color="bg-teal-600" />
                                 <div><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Cliente</label><input required list="client-list" type="text" value={apptForm.clientName} onChange={e => setApptForm({...apptForm, clientName: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2.5 text-xs font-black shadow-sm" placeholder="Nome do cliente..." /><datalist id="client-list">{approvedClients.map(c => <option key={c} value={c} />)}</datalist></div>
@@ -542,7 +542,7 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                         )}
 
                         {/* Seção 5: Técnica (Condicional) */}
-                        {!isPersonal && (
+                        {!isPersonalForm && (
                             <div className="bg-white dark:bg-gray-800 p-3.5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
                                 <SectionHeader icon={<BoltIcon />} title="Especificações técnicas" color="bg-gray-500" />
                                 {isInstalacao ? (
@@ -598,7 +598,7 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                     <div className="space-y-5 animate-fade-in">
                         {(() => {
                             const cat = catalog.find(c => c.id === editingAppt.activityId);
-                            const isPersonal = !!cat?.personalSchedule;
+                            const isPersonalSummary = !!cat?.personalSchedule;
                             return (
                                 <>
                                     <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-700/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-600 shadow-sm">
@@ -613,7 +613,7 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                                         {/* Período */}
                                         <div className="p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm">
                                             <p className="text-[10px] font-bold text-gray-400 mb-1.5 tracking-tight">Período do serviço</p>
-                                            <div className="flex items-center gap-3"><div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 rounded-lg"><ClockIcon className="w-4 h-4" /></div><div><p className="text-xs font-bold text-gray-700 dark:text-gray-200">{new Date(editingAppt.startDate).toLocaleDateString('pt-BR')} até {new Date(editingAppt.endDate).toLocaleDateString('pt-BR')}</p><p className="text-[10px] font-bold text-gray-500">{editingAppt.isAllDay ? 'Dia todo (Integral)' : `${editingAppt.startTime} às ${editingAppt.endTime}`}</p></div></div>
+                                            <div className="flex items-center gap-3"><div className="p-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 rounded-lg"><ClockIcon className="w-4 h-4" /></div><div><p className="text-xs font-bold text-gray-700 dark:text-gray-200">{new Date(editingAppt.startDate).toLocaleDateString('pt-BR', {timeZone:'UTC'})} até {new Date(editingAppt.endDate).toLocaleDateString('pt-BR', {timeZone:'UTC'})}</p><p className="text-[10px] font-bold text-gray-500">{editingAppt.isAllDay ? 'Dia todo (Integral)' : `${editingAppt.startTime} às ${editingAppt.endTime}`}</p></div></div>
                                         </div>
 
                                         {/* Equipe de Trabalho */}
@@ -641,7 +641,7 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                                         </div>
 
                                         {/* Localização (Oculto se pessoal) */}
-                                        {!isPersonal && editingAppt.address && (
+                                        {!isPersonalSummary && editingAppt.address && (
                                             <div className="p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm">
                                                 <p className="text-[10px] font-bold text-gray-400 mb-1.5 tracking-tight">Localização</p>
                                                 <div className="flex items-start gap-3">
@@ -656,33 +656,31 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                                         )}
 
                                         {/* Especificações Técnicas (Oculto se pessoal) */}
-                                        {!isPersonal && (editingAppt.platesCount > 0 || editingAppt.arrangement || editingAppt.panelsConfig?.length) && (
+                                        {!isPersonalSummary && (
                                             <div className="p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm">
-                                                <p className="text-[10px] font-bold text-gray-400 mb-1.5 tracking-tight">Especificações técnicas</p>
-                                                <div className="flex items-start gap-3">
-                                                    <div className="p-2 bg-orange-50 dark:bg-orange-900/20 text-orange-600 rounded-lg mt-0.5"><BoltIcon className="w-4 h-4" /></div>
-                                                    <div className="flex-1 space-y-2">
-                                                        <div className="flex justify-between">
-                                                            <span className="text-[10px] font-bold text-gray-500">Qtd. placas</span>
-                                                            <span className="text-xs font-black text-gray-800 dark:text-white">{editingAppt.platesCount} un</span>
-                                                        </div>
-                                                        {editingAppt.arrangement && (
-                                                            <div className="flex justify-between">
-                                                                <span className="text-[10px] font-bold text-gray-500">Arranjo</span>
-                                                                <span className="text-xs font-black text-gray-800 dark:text-white">{editingAppt.arrangement}</span>
-                                                            </div>
-                                                        )}
-                                                        {editingAppt.panelsConfig && editingAppt.panelsConfig.length > 0 && (
-                                                            <div className="pt-2 mt-2 border-t dark:border-gray-700 space-y-1">
-                                                                {editingAppt.panelsConfig.map((p, idx) => (
-                                                                    <div key={p.id} className="text-[9px] font-bold text-gray-400 flex justify-between">
-                                                                        <span>Fileira {idx+1}: {p.linhas}L x {p.modulos}M</span>
-                                                                        <span className="text-indigo-500">({p.orientacao})</span>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        )}
+                                                <SectionHeader icon={<BoltIcon />} title="Especificações técnicas" color="bg-orange-500" />
+                                                <div className="space-y-3">
+                                                    <div className="flex justify-between items-center bg-gray-50 dark:bg-gray-900/40 p-2 rounded-lg">
+                                                        <span className="text-[10px] font-bold text-gray-500">Quantidade de placas</span>
+                                                        <span className="text-xs font-black text-indigo-600">{editingAppt.platesCount || 0} un</span>
                                                     </div>
+                                                    {editingAppt.arrangement && (
+                                                        <div className="flex justify-between items-center bg-gray-50 dark:bg-gray-900/40 p-2 rounded-lg">
+                                                            <span className="text-[10px] font-bold text-gray-500">Arranjo sugerido</span>
+                                                            <span className="text-xs font-black text-gray-700 dark:text-gray-200">{editingAppt.arrangement}</span>
+                                                        </div>
+                                                    )}
+                                                    {editingAppt.panelsConfig && editingAppt.panelsConfig.length > 0 && (
+                                                        <div className="pt-2 mt-1 space-y-1">
+                                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Configuração de fileiras</p>
+                                                            {editingAppt.panelsConfig.map((p, idx) => (
+                                                                <div key={p.id} className="text-[10px] font-bold text-gray-600 dark:text-gray-300 flex justify-between bg-white dark:bg-gray-700 p-1.5 rounded border border-gray-100 dark:border-gray-600">
+                                                                    <span>Fileira {idx+1}: {p.linhas}L x {p.modulos}M</span>
+                                                                    <span className="text-indigo-500">({p.orientacao})</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         )}
@@ -743,7 +741,7 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                         <div className="bg-red-50 dark:bg-red-900/20 p-5 rounded-2xl border border-red-100 dark:border-red-900/50 shadow-sm"><div className="flex items-center gap-3 mb-4"><div className="p-2 bg-red-600 text-white rounded-lg shadow-lg"><XCircleIcon className="w-5 h-5" /></div><div><p className="text-[10px] font-black text-red-400 uppercase tracking-widest leading-none mb-1">Motivo informado</p><h4 className="text-sm font-black text-gray-800 dark:text-white">{selectedLogEntry.cancelReason || 'Não informado'}</h4></div></div></div>
                         <div className="space-y-4">
                             <div className="p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm"><p className="text-[10px] font-bold text-gray-400 mb-1.5 tracking-tight">Registro de remoção</p><div className="flex items-center justify-between"><div className="flex items-center gap-2"><div className="w-6 h-6 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-[9px] border border-indigo-100">{selectedLogEntry.deletedBy.substring(0, 1).toUpperCase()}</div><span className="text-xs font-bold text-gray-700 dark:text-gray-200">{toSentenceCase(selectedLogEntry.deletedBy)}</span></div><p className="text-[10px] font-bold text-red-500">{new Date(selectedLogEntry.deletedAt).toLocaleString('pt-BR')}</p></div></div>
-                            <div className="p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm"><p className="text-[10px] font-bold text-gray-400 mb-1.5 tracking-tight">Agendamento original</p><div className="space-y-1"><p className="text-xs font-bold">{selectedLogEntry.originalAppointment.clientName}</p><p className="text-[10px] text-gray-500 font-medium">{new Date(selectedLogEntry.originalAppointment.startDate).toLocaleDateString('pt-BR')} {selectedLogEntry.originalAppointment.startTime || ''}</p></div></div>
+                            <div className="p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm"><p className="text-[10px] font-bold text-gray-400 mb-1.5 tracking-tight">Agendamento original</p><div className="space-y-1"><p className="text-xs font-bold">{selectedLogEntry.originalAppointment.clientName}</p><p className="text-[10px] text-gray-500 font-medium">{new Date(selectedLogEntry.originalAppointment.startDate).toLocaleDateString('pt-BR', {timeZone:'UTC'})} {selectedLogEntry.originalAppointment.startTime || ''}</p></div></div>
                         </div>
                         <button onClick={() => { setIsLogDetailModalOpen(false); setSelectedLogEntry(null); }} className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-xs hover:bg-black transition-all">Fechar</button>
                     </div>
