@@ -165,12 +165,10 @@ const CheckboxList: React.FC<{ options: string[]; value: string[]; onChange: (v:
     </div>
 );
 
-// Fix: Specifying React.ReactElement<any> for the icon prop to allow className property in React.cloneElement
 const SectionHeader: React.FC<{ icon: React.ReactElement<any>; title: string; color?: string; rightElement?: React.ReactNode }> = ({ icon, title, color = "bg-indigo-600", rightElement }) => (
     <div className="flex items-center justify-between mb-3 pb-1 border-b border-gray-100 dark:border-gray-700/50">
         <div className="flex items-center gap-2">
             <div className={`p-1 rounded-lg text-white ${color}`}>
-                {/* Fix: Using any generic for icon to resolve TS error with className prop */}
                 {React.cloneElement(icon, { className: "w-3 h-3" })}
             </div>
             <h4 className="text-[10px] font-black text-gray-500 dark:text-gray-400 tracking-widest">{title}</h4>
@@ -459,7 +457,8 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
         setIsSaving(true);
         try {
             const currentTable = getTableName(statusTargetEntry.type);
-            const updated = { ...statusTargetEntry, status };
+            // Removemos 'type' para o salvamento, pois a tabela destino já define o tipo no esquema do DB
+            const { type, ...dataToSave } = { ...statusTargetEntry, status };
 
             if (status === 'Efetivado' && statusTargetEntry.type === 'checkin') {
                 const currentStock = await dataService.getAll<StockItem>('stock_items');
@@ -484,7 +483,10 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                     status: 'Aberto', 
                     details: { ...INITIAL_CHECKOUT, nomeCliente: statusTargetEntry.project, componentesEstoque: [...(statusTargetEntry.details.componentesEstoque || [])], originalCheckinId: statusTargetEntry.id } 
                 };
-                await dataService.save('checklist_checkout', autoCheckout);
+                
+                // Salvando checkout automático (removendo type)
+                const { type: checkoutType, ...checkoutDataToSave } = autoCheckout;
+                await dataService.save('checklist_checkout', checkoutDataToSave as any);
                 alert(`Venda confirmada! Materiais reservados.`);
             }
 
@@ -494,7 +496,10 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                 if (statusTargetEntry.type === 'checkout') {
                     const allCheckinsData = await dataService.getAll<ChecklistEntry>('checklist_checkin');
                     const originalCheckin = allCheckinsData.find(c => String(c.id) === String(statusTargetEntry.id));
-                    if (originalCheckin) await dataService.save('checklist_checkin', { ...originalCheckin, status: 'Finalizado' });
+                    if (originalCheckin) {
+                        const { type: chkinType, ...chkinDataToSave } = { ...originalCheckin, status: 'Finalizado' as const };
+                        await dataService.save('checklist_checkin', chkinDataToSave as any);
+                    }
 
                     const allOrcamentosData = await dataService.getAll<SavedOrcamento>('orcamentos');
                     const targetOrcamento = allOrcamentosData.find(o => {
@@ -505,7 +510,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                 }
             }
 
-            await dataService.save(currentTable, updated);
+            await dataService.save(currentTable, dataToSave as any);
             setStatusModalOpen(false);
             await loadData();
         } catch (e: any) { alert(e.message); } finally { setIsSaving(false); }
@@ -539,7 +544,10 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
             if (targetStatus === 'Finalizado') {
                 await processStockDeduction(newEntry);
             }
-            await dataService.save(currentTable, newEntry);
+            // Removemos 'type' para o salvamento, pois a tabela destino já define o tipo no esquema do DB
+            const { type, ...dataToSave } = newEntry;
+            await dataService.save(currentTable, dataToSave as any);
+            
             await loadData();
             setModalOpen(false);
             setEditingEntryId(null);
@@ -601,7 +609,24 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                                     alt="" 
                                     onClick={() => setHdPhoto(url)}
                                 />
-                                {!isViewOnly && <button onClick={() => setForm((p:any)=>({...p, [field]: p[field].filter((_:any, i:any)=>i!==idx)}))} className="absolute top-0.5 right-0.5 bg-red-600 text-white rounded-full p-0.5 shadow-sm hover:bg-red-700 transition-all z-10"><XCircleIcon className="w-3 h-3" /></button>}
+                                {/* Explicit state update logic to avoid potential TypeScript misinterpretation of nested type annotations on line 461 */}
+                                {!isViewOnly && (
+                                    <button 
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setForm((prev: any) => {
+                                                const currentList = Array.isArray(prev[field]) ? prev[field] : [];
+                                                return {
+                                                    ...prev,
+                                                    [field]: currentList.filter((_: any, i: number) => i !== idx)
+                                                };
+                                            });
+                                        }} 
+                                        className="absolute top-0.5 right-0.5 bg-red-600 text-white rounded-full p-0.5 shadow-sm hover:bg-red-700 transition-all z-10"
+                                    >
+                                        <XCircleIcon className="w-3 h-3" />
+                                    </button>
+                                )}
                                 <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity" onClick={() => setHdPhoto(url)}>
                                     <EyeIcon className="w-4 h-4 text-white drop-shadow-md" />
                                 </div>
@@ -953,7 +978,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                                     <div className="space-y-4">
                                                         <div><FormLabel>Potência do transformador (kva)</FormLabel><SelectButton options={["Sim", "Não"]} value={form.possuiTransformador} onChange={v=>setForm({...form, possuiTransformador: v})} disabled={isViewOnly} />{form.possuiTransformador === 'Sim' && <div className="mt-3"><FormLabel>Potência em kva</FormLabel><StandardInput type="number" placeholder="Ex: 75" value={form.transformadorKVA} onChange={(e:any)=>setForm({...form, transformadorKVA: e.target.value})} disabled={isViewOnly} /></div>}</div>
-                                                        <div><FormLabel>Local de conexão do inversor</FormLabel><SelectButton cols="grid-cols-1" options={["Quadro de distribuição central", "Caixa de passagem (não existente)", "Caixa de passagem (existente)", "Outro"]} value={form.localConexaoRede} onChange={v=>setForm({...form, localConexaoRede: v})} disabled={isViewOnly} />{form.localConexaoRede === 'Outro' && <StandardInput placeholder="Especifique o local" className="mt-2" value={form.localConexaoRedeOutro} onChange={(e:any)=>setForm({...form, localConexaoRedeOutro: e.target.value})} disabled={isViewOnly} />}</div>
+                                                        <div><FormLabel>Local de conexão do inversor</FormLabel><SelectButton cols="grid-cols-1" options={["Quadro de distribution central", "Caixa de passagem (não existente)", "Caixa de passagem (existente)", "Outro"]} value={form.localConexaoRede} onChange={v=>setForm({...form, localConexaoRede: v})} disabled={isViewOnly} />{form.localConexaoRede === 'Outro' && <StandardInput placeholder="Especifique o local" className="mt-2" value={form.localConexaoRedeOutro} onChange={(e:any)=>setForm({...form, localConexaoRedeOutro: e.target.value})} disabled={isViewOnly} />}</div>
                                                     </div>
                                                     <div className="space-y-4">
                                                         <div><FormLabel>Tubulação</FormLabel><CheckboxList options={["Conduíte embutido já existente", "Eletroduto pvc antichamas", "Eletroduto galvanizado", "Eletrocalha galvanizada", "Outro"]} value={form.tipoTubulacao} onChange={v=>setForm({...form, tipoTubulacao: v})} disabled={isViewOnly} /></div>
@@ -1017,7 +1042,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                                         <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
                                             {renderGalleryItem('fotosPlacas', 'Fotos Placas Instaladas')}
                                             {renderGalleryItem('fotosInversores', 'Fotos dos Micros Inversores / Inversor')}
-                                            {renderGalleryItem('fotosAterramento', 'Fotos de instalação do aterramento das Placas Solares')}
+                                            {renderGalleryItem('fotosAterramento', 'Fotos de installation do aterramento das Placas Solares')}
                                         </div>
                                     )}
                                     {activeStep === 3 && (
@@ -1033,7 +1058,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                                             <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-2xl border border-gray-100 dark:border-gray-700 space-y-4">
                                                 <div><FormLabel>Vídeo de antilhamento (Enel)? *</FormLabel><SelectButton options={["Sim", "Não", "Não é enel"]} value={form.videoAntilhamento} onChange={v=>setForm({...form, videoAntilhamento: v})} disabled={isViewOnly} /></div>
                                                 <div><FormLabel>Link vídeo Youtube? *</FormLabel><SelectButton options={["Sim", "Não", "Não é enel"]} value={form.videoYoutube} onChange={v=>setForm({...form, videoYoutube: v})} disabled={isViewOnly} /></div>
-                                                {form.videoYoutube === 'Sim' && <StandardInput placeholder="Cole o link aqui" value={form.linkYoutube} onChange={(e:any)=>setForm({...form, linkYoutube: e.target.value})} disabled={isViewOnly} />}
+                                                {form.videoYoutube === 'Sim' && <StandardInput placeholder="Cole o link aqui" value={form.linkYoutube} onChange={(e:any)=>setStandardInput(e.target.value)} disabled={isViewOnly} />}
                                             </div>
                                         </div>
                                     )}
@@ -1081,7 +1106,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                                 <button type="button" onClick={() => activeStep > 1 ? setActiveStep(activeStep - 1) : setModalOpen(false)} className="px-5 py-2 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 rounded-xl font-bold text-[11px] hover:bg-gray-200 transition-all flex items-center gap-1.5"><ArrowLeftIcon className="w-4 h-4"/> {activeStep === 1 ? 'Cancelar' : 'Voltar'}</button>
                                 <div className="flex gap-2">
                                     {activeStep < 5 ? (
-                                        <button type="button" onClick={() => setActiveStep(activeStep + 1)} className="px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold text-[11px] shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-1.5">Próximo passo <span className="opacity-50">→</span></button>
+                                        <button type="button" onClick={() => setActiveStep(activeStep + 1)} className="px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold text-[11px] shadow-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-1.5">Próximo passo <span className="opacity-50">→</span></button>
                                     ) : (
                                         !isViewOnly && (
                                             <button type="button" onClick={handleSave} disabled={isSaving} className="px-8 py-2 bg-green-600 text-white rounded-xl font-bold text-[11px] shadow-lg hover:bg-green-700 transition-all active:scale-95 disabled:opacity-50">
