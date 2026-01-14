@@ -210,7 +210,7 @@ const DashboardPage: React.FC = () => {
         </div>
         <div className="lg:col-span-1">
             <RecentTransactions 
-                transactions={transactions.filter(t => t.status !== 'cancelado')} 
+                transactions={transactions.filter(t => t.status === 'pendente')} 
                 onEdit={handleEditTransaction}
                 onDelete={handleDeleteTransaction}
             />
