@@ -40,12 +40,8 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
 
         filtered.forEach(t => {
             if (t.id.startsWith('cc-') && t.type === 'despesa' && t.status !== 'cancelado') {
-                const cardMatch = t.description.match(/\[(.*?)\]/);
-                const cardName = cardMatch ? cardMatch[1] : 'Cartão';
-                const card = cards.find(c => c.name === cardName);
-                const closingDay = card ? card.closingDay : '0';
-                
-                const groupKey = `CC_GROUPED_${t.dueDate}_${closingDay}`;
+                // Unificamos a chave apenas pela data de vencimento para consolidar todos os cartões na mesma linha
+                const groupKey = `CC_GROUPED_${t.dueDate}`;
                 
                 if (!ccGroups[groupKey]) {
                     ccGroups[groupKey] = { items: [], dueDate: t.dueDate };

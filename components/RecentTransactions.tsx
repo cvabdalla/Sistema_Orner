@@ -22,7 +22,7 @@ const toSentenceCase = (str: string) => {
 };
 
 const TransactionRow: React.FC<{ transaction: any, categoryName: string, onViewDetails?: () => void }> = ({ transaction, categoryName, onViewDetails }) => {
-  const { description, amount, status, dueDate, type, isCC, originalItems } = transaction;
+  const { description, amount, status, dueDate, type, isCC } = transaction;
   
   const formatDate = (dateString: string) => {
       if (!dateString) return '-';
@@ -81,11 +81,8 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({ transactions, o
 
       transactions.forEach(t => {
           if (t.id.startsWith('cc-') && t.type === 'despesa') {
-              const cardMatch = t.description.match(/\[(.*?)\]/);
-              const cardName = cardMatch ? cardMatch[1] : '';
-              const card = cards.find(c => c.name === cardName);
-              const closingDay = card ? card.closingDay : '0';
-              const groupKey = `${t.dueDate}_${closingDay}`;
+              // Simplificação da chave para ignorar o dia de fechamento e unificar por data de vencimento
+              const groupKey = `DASH_CC_${t.dueDate}`;
 
               if (!ccGroups[groupKey]) ccGroups[groupKey] = [];
               ccGroups[groupKey].push(t);
@@ -95,7 +92,7 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({ transactions, o
       });
 
       const groupedCC = Object.entries(ccGroups).map(([key, items]) => {
-          const [dueDate] = key.split('_');
+          const dueDate = key.replace('DASH_CC_', '');
           return {
               id: `grouped-dashboard-${key}`,
               description: 'Cartão de crédito',

@@ -63,11 +63,8 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, bankAccounts, onO
 
         list.forEach(t => {
             if (t.id.startsWith('cc-') && t.type === 'despesa') {
-                const cardMatch = t.description.match(/\[(.*?)\]/);
-                const cardName = cardMatch ? cardMatch[1] : '';
-                const card = cards.find(c => c.name === cardName);
-                const closingDay = card ? card.closingDay : '0';
-                const groupKey = `ALL_CC_${t.dueDate}_${closingDay}`;
+                // Removemos o closingDay da chave para unificar faturas com mesma data de vencimento
+                const groupKey = `ALL_CC_${t.dueDate}`;
 
                 if (!ccGroups[groupKey]) ccGroups[groupKey] = [];
                 ccGroups[groupKey].push(t);
@@ -78,7 +75,7 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, bankAccounts, onO
 
         const groupedCC = Object.entries(ccGroups).map(([key, items]) => {
             const keyParts = key.split('_');
-            const dueDate = keyParts[keyParts.length - 2];
+            const dueDate = keyParts[keyParts.length - 1];
             const allPaid = items.every(i => i.status === 'pago');
             const maxPaymentDate = allPaid ? items.reduce((max, cur) => {
                 const curDate = cur.paymentDate || cur.dueDate;
