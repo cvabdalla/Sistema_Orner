@@ -24,7 +24,9 @@ const parseNumber = (val: any): number => {
 
 const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcamento, currentUser }: NovoOrcamentoPageProps): React.ReactElement => {
     const [isModalOpen, setModalOpen] = useState(false);
+    const [isPriceCalcModalOpen, setPriceCalcModalOpen] = useState(false);
     const [desiredMargin, setDesiredMargin] = useState('');
+    const [desiredPrice, setDesiredPrice] = useState('');
     const [isRenameModalOpen, setRenameModalOpen] = useState(false);
     const [tempVariantName, setTempVariantName] = useState('');
     const [isSaveModalOpen, setSaveModalOpen] = useState(false);
@@ -407,6 +409,49 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         setDesiredMargin('');
     };
 
+    const handlePriceCalculation = () => {
+        if (isReadOnly) return;
+        const targetPrice = parseNumber(desiredPrice);
+        if (isNaN(targetPrice) || targetPrice <= 0) return;
+
+        const n_terceiroInstalacaoQtd = parseNumber(formState.terceiroInstalacaoQtd);
+        const n_terceiroInstalacaoCusto = parseNumber(formState.terceiroInstalacaoCusto);
+        const n_visitaTecnicaCusto = parseNumber(formState.visitaTecnicaCusto);
+        const n_projetoHomologacaoCusto = parseNumber(formState.projetoHomologacaoCusto);
+        const n_custoViagem = parseNumber(formState.custoViagem);
+        const n_adequacaoLocalCusto = parseNumber(formState.adequacaoLocalCusto);
+        const n_custoSistema = parseNumber(formState.custoSistema);
+
+        const totalInstalacao = n_visitaTecnicaCusto + n_projetoHomologacaoCusto + (n_terceiroInstalacaoQtd * n_terceiroInstalacaoCusto) + n_custoViagem + n_adequacaoLocalCusto;
+        
+        const totalStockStructure = selectedStockTableItems.reduce((acc, item) => {
+            const data = (formState.fixedItemsData || {})[String(item.id)] || { qty: 0, cost: item.averagePrice || 0, markup: 0 };
+            const n_qty = parseNumber(data.qty);
+            const n_cost = parseNumber(data.cost);
+            const n_markup = parseNumber(data.markup);
+            const effectiveUnitCost = n_cost * (1 + (n_markup / 100));
+            return acc + (n_qty * effectiveUnitCost);
+        }, 0);
+
+        const totalOffStockStructure = (formState.offStockItems || []).reduce((acc, item) => {
+            const n_qty = parseNumber(item.qty);
+            const n_cost = parseNumber(item.cost);
+            const n_markup = parseNumber(item.markup);
+            const effectiveUnitCost = n_cost * (1 + (n_markup / 100));
+            return acc + (n_qty * effectiveUnitCost);
+        }, 0);
+
+        const totalEstrutura = totalStockStructure + totalOffStockStructure;
+
+        // Equação: TargetPrice = SystemCost + (NewMOG + TotalInst + TotalEstr)
+        // NewMOG = TargetPrice - SystemCost - TotalInst - TotalEstr
+        const newMOG = roundToCents(targetPrice - n_custoSistema - totalInstalacao - totalEstrutura);
+        
+        updateVariantsWithFormState({ ...formState, maoDeObraGeral: newMOG });
+        setPriceCalcModalOpen(false);
+        setDesiredPrice('');
+    };
+
     const handleSaveTrigger = () => {
         if (isReadOnly) return;
         if (!formState.nomeCliente.trim()) {
@@ -513,7 +558,21 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-xl p-4 text-white shadow-lg"><p className="text-xs font-medium opacity-80 tracking-wide">Preço venda final</p><p className="text-2xl font-bold">{formatCurrency(calculated.precoVendaFinal || 0)}</p></div>
+                <div className="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-xl p-4 text-white shadow-lg flex items-center justify-between">
+                    <div>
+                        <p className="text-xs font-medium opacity-80 tracking-wide">Preço venda final</p>
+                        <p className="text-2xl font-bold">{formatCurrency(calculated.precoVendaFinal || 0)}</p>
+                    </div>
+                    {!isReadOnly && (
+                        <button 
+                            onClick={() => setPriceCalcModalOpen(true)} 
+                            className="p-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
+                            title="Calculadora de preço alvo"
+                        >
+                            <CalculatorIcon className="w-5 h-5" />
+                        </button>
+                    )}
+                </div>
                 <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm"><p className="text-xs font-medium text-gray-500 tracking-wide">Lucro líquido</p><p className="text-xl font-bold text-green-600 dark:text-green-400">{formatCurrency(calculated.lucroLiquido || 0)}</p></div>
                 <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm"><p className="text-xs font-medium text-gray-500 tracking-wide">Margem líquida</p><p className="text-xl font-bold text-blue-600 dark:text-blue-400">{calculated.margemLiquida?.toFixed(2) || 0}%</p></div>
                 <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-between"><div><p className="text-xs font-medium text-gray-500 tracking-wide">Margem serviço</p><p className="text-xl font-bold text-purple-600 dark:text-purple-400">{calculated.margemLiquidaServico?.toFixed(2) || 0}%</p></div>{!isReadOnly && <button onClick={() => setModalOpen(true)} className="p-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors"><CalculatorIcon className="w-5 h-5" /></button>}</div>
@@ -549,7 +608,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                 { label: "Visita técnica", name: "visitaTecnicaCusto" }, 
                                 { label: "Projeto / homologação", name: "projetoHomologacaoCusto" }, 
                                 { label: "Custo de viagem", name: "custoViagem" }, 
-                                { label: "Adequação local", name: "adequacaoLocalCusto" }
+                                { label: "Adequacao local", name: "adequacaoLocalCusto" }
                             ].map(field => (
                                 <div key={field.name}>
                                     <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{field.label}</label>
@@ -900,6 +959,56 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                 </Modal>
             )}
 
+            {isPriceCalcModalOpen && (
+                <Modal title="Ajustar preço de venda alvo" onClose={() => setPriceCalcModalOpen(false)} maxWidth="max-w-md">
+                    <div className="space-y-6 pt-2">
+                        <div className="flex items-center gap-4 p-4 bg-indigo-50 dark:bg-indigo-900/30 rounded-2xl border border-indigo-100 dark:border-indigo-800">
+                             <div className="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-600/20">
+                                <DollarIcon className="w-6 h-6" />
+                             </div>
+                             <div>
+                                <p className="text-sm font-bold text-gray-800 dark:text-white">Cálculo reverso</p>
+                                <p className="text-[10px] font-bold text-gray-500 dark:text-indigo-400 tracking-tight leading-tight">O sistema ajustará a "Mão de obra geral" para que o valor final seja o desejado.</p>
+                             </div>
+                        </div>
+
+                        <div className="text-center space-y-4">
+                            <label htmlFor="desiredPrice" className="block text-xs font-black text-gray-400 uppercase tracking-widest">Preço final desejado</label>
+                            
+                            <div className="relative inline-block">
+                                <span className="absolute -left-8 top-1/2 -translate-y-1/2 text-2xl font-black text-gray-300">R$</span>
+                                <input 
+                                    type="text" 
+                                    inputMode="decimal"
+                                    id="desiredPrice" 
+                                    autoFocus
+                                    value={desiredPrice} 
+                                    onChange={(e) => setDesiredPrice(e.target.value)} 
+                                    className="w-52 text-center text-3xl font-black text-indigo-600 dark:text-indigo-400 bg-transparent border-b-4 border-indigo-200 dark:border-indigo-800 focus:border-indigo-500 outline-none py-2 transition-all" 
+                                    placeholder="0,00" 
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
+                            <button 
+                                onClick={handlePriceCalculation} 
+                                disabled={!desiredPrice || parseNumber(desiredPrice) <= 0}
+                                className="w-full py-3.5 bg-indigo-600 text-white rounded-2xl font-black text-xs shadow-xl shadow-indigo-600/30 hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 disabled:grayscale"
+                            >
+                                Aplicar novo preço
+                            </button>
+                            <button 
+                                onClick={() => setPriceCalcModalOpen(false)} 
+                                className="w-full py-3 text-gray-400 dark:text-gray-500 font-bold text-[10px] uppercase tracking-widest hover:text-gray-600"
+                            >
+                                Cancelar
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
             {isModalOpen && (
                 <Modal title="Ajustar margem de serviço" onClose={() => setModalOpen(false)} maxWidth="max-w-md">
                     <div className="space-y-6 pt-2">
@@ -948,7 +1057,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                             <button 
                                 onClick={handleMarginCalculation} 
                                 disabled={!desiredMargin || parseNumber(desiredMargin) <= 0}
-                                className="w-full py-3.5 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-600/30 hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 disabled:grayscale"
+                                className="w-full py-3.5 bg-indigo-600 text-white rounded-2xl font-black text-xs shadow-xl shadow-indigo-600/30 hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 disabled:grayscale"
                             >
                                 Aplicar novo cálculo
                             </button>
