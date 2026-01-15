@@ -466,6 +466,7 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
                         activeTab === 'visaoGeral' ? (
                             <VisaoGeral 
                                 transactions={filteredTransactions.filter(t => t.status !== 'cancelado')} 
+                                allTransactions={transactions.filter(t => t.status !== 'cancelado')}
                                 bankAccounts={bankAccounts}
                                 onOpenImport={() => setImportModalOpen(true)} 
                                 onOpenCreditCard={() => setCreditCardModalOpen(true)}

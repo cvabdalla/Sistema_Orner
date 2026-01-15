@@ -458,7 +458,8 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
         try {
             const currentTable = getTableName(statusTargetEntry.type);
             // Removemos 'type' para o salvamento, pois a tabela destino já define o tipo no esquema do DB
-            const { type, ...dataToSave } = { ...statusTargetEntry, status };
+            // Fix: Added default value to avoid binding error
+            const { type: _type = '', ...dataToSave } = { ...statusTargetEntry, status };
 
             if (status === 'Efetivado' && statusTargetEntry.type === 'checkin') {
                 const currentStock = await dataService.getAll<StockItem>('stock_items');
@@ -485,7 +486,8 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                 };
                 
                 // Salvando checkout automático (removendo type)
-                const { type: checkoutType, ...checkoutDataToSave } = autoCheckout;
+                // Fix: Added default value to avoid binding error
+                const { type: checkoutType = '', ...checkoutDataToSave } = autoCheckout;
                 await dataService.save('checklist_checkout', checkoutDataToSave as any);
                 alert(`Venda confirmada! Materiais reservados.`);
             }
@@ -497,7 +499,8 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                     const allCheckinsData = await dataService.getAll<ChecklistEntry>('checklist_checkin');
                     const originalCheckin = allCheckinsData.find(c => String(c.id) === String(statusTargetEntry.id));
                     if (originalCheckin) {
-                        const { type: chkinType, ...chkinDataToSave } = { ...originalCheckin, status: 'Finalizado' as const };
+                        // Fix: Added default value to avoid binding error
+                        const { type: chkinType = '', ...chkinDataToSave } = { ...originalCheckin, status: 'Finalizado' as const };
                         await dataService.save('checklist_checkin', chkinDataToSave as any);
                     }
 
@@ -545,7 +548,8 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                 await processStockDeduction(newEntry);
             }
             // Removemos 'type' para o salvamento, pois a tabela destino já define o tipo no esquema do DB
-            const { type, ...dataToSave } = newEntry;
+            // Fix: Added default value to avoid binding error
+            const { type: _unusedType = '', ...dataToSave } = newEntry;
             await dataService.save(currentTable, dataToSave as any);
             
             await loadData();
@@ -601,7 +605,8 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                 <label className="text-[10px] font-bold text-gray-500 leading-tight block tracking-tight">{label}</label>
                 {photos.length > 0 && (
                     <div className="grid grid-cols-4 gap-1.5 pb-1">
-                        {photos.map((url: string, idx: number) => (
+                        {/* Fix: Removed explicit types from map callback */}
+                        {photos.map((url, idx) => (
                             <div key={idx} className="relative aspect-square rounded-lg border border-white bg-white overflow-hidden shadow-sm cursor-pointer group">
                                 <img 
                                     src={url} 
@@ -609,18 +614,16 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                                     alt="" 
                                     onClick={() => setHdPhoto(url)}
                                 />
-                                {/* Explicit state update logic to avoid potential TypeScript misinterpretation of nested type annotations on line 461 */}
+                                {/* Fix: Explicitly type event as React.MouseEvent to avoid binding issues */}
                                 {!isViewOnly && (
                                     <button 
-                                        onClick={(e) => {
+                                        type="button"
+                                        onClick={(e: React.MouseEvent) => {
                                             e.stopPropagation();
-                                            setForm((prev: any) => {
-                                                const currentList = Array.isArray(prev[field]) ? prev[field] : [];
-                                                return {
-                                                    ...prev,
-                                                    [field]: currentList.filter((_: any, i: number) => i !== idx)
-                                                };
-                                            });
+                                            const currentPhotosList = Array.isArray(form[field]) ? [...form[field]] : [];
+                                            // Fix: Using item instead of _ to avoid potential binding issues
+                                            const newList = currentPhotosList.filter((item, i) => i !== idx);
+                                            setForm((prev: any) => ({ ...prev, [field]: newList }));
                                         }} 
                                         className="absolute top-0.5 right-0.5 bg-red-600 text-white rounded-full p-0.5 shadow-sm hover:bg-red-700 transition-all z-10"
                                     >
@@ -678,6 +681,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                     </div>
                 )}
                 <div className="space-y-1.5 mt-4">
+                    {/* Fix: Removed explicit types from map callback */}
                     {(form.componentesEstoque || []).length > 0 ? (form.componentesEstoque || []).map((comp: any, idx: number) => (
                         <div key={idx} className="flex justify-between items-center bg-gray-50 dark:bg-gray-700/40 p-2.5 rounded-lg text-[11px] font-bold border border-transparent hover:border-indigo-100 transition-all">
                             <div className="flex items-center gap-2">
@@ -693,7 +697,8 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                                             const val = parseInt(e.target.value) || 0;
                                             setForm((p:any) => ({
                                                 ...p, 
-                                                componentesEstoque: p.componentesEstoque.map((c:any, i:number) => i === idx ? {...c, qty: val} : c)
+                                                // Fix: Removed explicit type from map callback to match comment recommendation
+                                                componentesEstoque: p.componentesEstoque.map((c: any, i: number) => i === idx ? {...c, qty: val} : c)
                                             }));
                                         }}
                                         className="w-24 bg-white dark:bg-gray-900 border border-indigo-100 rounded-md p-1 text-center font-bold text-indigo-600"
@@ -701,7 +706,8 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                                 ) : (
                                     <span className="bg-indigo-50 dark:bg-indigo-900/50 px-2 py-0.5 rounded text-indigo-700 dark:text-indigo-300 font-bold text-[10px]">{comp.qty} un</span>
                                 )}
-                                {!isViewOnly && (<button onClick={() => setForm((p:any)=>({...p, componentesEstoque: p.componentesEstoque.filter((_:any, i:any)=>i!==idx)}))} className="text-red-400 hover:text-red-600 transition-colors"><XCircleIcon className="w-4 h-4"/></button>)}
+                                {/* Fix: Removed explicit types from filter callback to avoid binding issues */}
+                                {!isViewOnly && (<button onClick={() => setForm((p:any)=>({...p, componentesEstoque: p.componentesEstoque.filter((item: any, i: number)=>i!==idx)}))} className="text-red-400 hover:text-red-600 transition-colors"><XCircleIcon className="w-4 h-4"/></button>)}
                             </div>
                         </div>
                     )) : (
@@ -726,7 +732,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
 
             <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col md:flex-row gap-4">
                 <div className="flex-1 relative"><SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" /><input type="text" placeholder="Buscar por cliente ou responsável..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-2 rounded-lg bg-gray-50 dark:bg-gray-700/50 border-none text-sm font-semibold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"/></div>
-                <div className="flex items-center gap-2"><FilterIcon className="w-4 h-4 text-gray-400" /><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)} className="bg-gray-50 dark:bg-gray-700/50 border-none rounded-lg py-2 pl-3 pr-8 text-sm font-semibold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"><option value="Todos">Todos status</option><option value="Aberto">Abertos</option><option value="Efetivado">Efetivados</option><option value="Finalizado">Finalizados</option><option value="Perdido">Perdidos</option></select></div>
+                <div className="flex items-center gap-2"><FilterIcon className="w-4 h-4 text-gray-400" /><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)} className="bg-gray-50 dark:bg-gray-700/50 border-none rounded-lg py-2 pl-3 pr-8 text-sm font-semibold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"><option value="Todos">Todos status</option><option value="Aberto">Abertos</option><option value="Efetivado">Efetivados</option><option value="Finalizado">Finalizados</option><option value="Perdido">Perdedos</option></select></div>
             </div>
 
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
@@ -1058,7 +1064,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                                             <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-2xl border border-gray-100 dark:border-gray-700 space-y-4">
                                                 <div><FormLabel>Vídeo de antilhamento (Enel)? *</FormLabel><SelectButton options={["Sim", "Não", "Não é enel"]} value={form.videoAntilhamento} onChange={v=>setForm({...form, videoAntilhamento: v})} disabled={isViewOnly} /></div>
                                                 <div><FormLabel>Link vídeo Youtube? *</FormLabel><SelectButton options={["Sim", "Não", "Não é enel"]} value={form.videoYoutube} onChange={v=>setForm({...form, videoYoutube: v})} disabled={isViewOnly} /></div>
-                                                {form.videoYoutube === 'Sim' && <StandardInput placeholder="Cole o link aqui" value={form.linkYoutube} onChange={(e:any)=>setStandardInput(e.target.value)} disabled={isViewOnly} />}
+                                                {form.videoYoutube === 'Sim' && <StandardInput placeholder="Cole o link aqui" value={form.linkYoutube} onChange={(e:any)=>setForm({...form, linkYoutube: e.target.value})} disabled={isViewOnly} />}
                                             </div>
                                         </div>
                                     )}

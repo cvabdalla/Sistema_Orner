@@ -8,6 +8,7 @@ import CreditCardDetailModal from './CreditCardDetailModal';
 
 interface VisaoGeralProps {
     transactions: FinancialTransaction[];
+    allTransactions: FinancialTransaction[]; // Adicionado para o gráfico ver o ano todo
     bankAccounts: BankAccount[];
     onOpenImport: () => void;
     onOpenCreditCard: () => void;
@@ -26,7 +27,7 @@ const toSentenceCase = (str: string) => {
     return clean.charAt(0).toUpperCase() + clean.slice(1);
 };
 
-const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, bankAccounts, onOpenImport, onOpenCreditCard, onEditTransaction, onCancelTransaction }) => {
+const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, allTransactions, bankAccounts, onOpenImport, onOpenCreditCard, onEditTransaction, onCancelTransaction }) => {
     const [cards, setCards] = useState<CreditCard[]>([]);
     const [categories, setCategories] = useState<FinancialCategory[]>([]);
     const [selectedGroup, setSelectedGroup] = useState<FinancialTransaction[] | null>(null);
@@ -44,7 +45,7 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, bankAccounts, onO
         // Saldo inicial de todas as contas ativas
         const totalSaldoInicial = bankAccounts.filter(b => b.active).reduce((sum, b) => sum + (b.initialBalance || 0), 0);
         
-        // Movimentação realizada
+        // Movimentação realizada dentro do filtro de data
         const receitasPagas = activeTxs.filter(t => t.type === 'receita' && t.status === 'pago').reduce((sum, t) => sum + t.amount, 0);
         const despesasPagas = activeTxs.filter(t => t.type === 'despesa' && t.status === 'pago').reduce((sum, t) => sum + t.amount, 0);
         
@@ -63,9 +64,7 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, bankAccounts, onO
 
         list.forEach(t => {
             if (t.id.startsWith('cc-') && t.type === 'despesa') {
-                // Removemos o closingDay da chave para unificar faturas com mesma data de vencimento
                 const groupKey = `ALL_CC_${t.dueDate}`;
-
                 if (!ccGroups[groupKey]) ccGroups[groupKey] = [];
                 ccGroups[groupKey].push(t);
             } else {
@@ -97,24 +96,13 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, bankAccounts, onO
         });
 
         return [...normals, ...groupedCC].sort((a, b) => {
-            // REGRA 1: Pendentes (abertos) sempre primeiro
             const priorityA = String(a.status).toLowerCase() === 'pendente' ? 0 : 1;
             const priorityB = String(b.status).toLowerCase() === 'pendente' ? 0 : 1;
-            
-            if (priorityA !== priorityB) {
-                return priorityA - priorityB;
-            }
-            
-            // REGRA 2: Ordenação por data dentro do mesmo status
-            if (String(a.status).toLowerCase() === 'pendente') {
-                // Pendentes: Vencimento mais próximo primeiro (ASC)
-                return String(a.dueDate).localeCompare(String(b.dueDate));
-            } else {
-                // Pagos: Pagamento mais recente primeiro (DESC) para histórico
-                const dateA = a.paymentDate || a.dueDate;
-                const dateB = b.paymentDate || b.dueDate;
-                return String(dateB).localeCompare(String(dateA));
-            }
+            if (priorityA !== priorityB) return priorityA - priorityB;
+            if (String(a.status).toLowerCase() === 'pendente') return String(a.dueDate).localeCompare(String(b.dueDate));
+            const dateA = a.paymentDate || a.dueDate;
+            const dateB = b.paymentDate || b.dueDate;
+            return String(dateB).localeCompare(String(dateA));
         }).slice(0, 12);
     };
 
@@ -188,7 +176,8 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, bankAccounts, onO
             </div>
 
             <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700">
-                <FluxoCaixaChart transactions={transactions.filter(t => t.status !== 'cancelado')} />
+                {/* Aqui passamos allTransactions para o gráfico mostrar o ano inteiro */}
+                <FluxoCaixaChart transactions={allTransactions} />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
