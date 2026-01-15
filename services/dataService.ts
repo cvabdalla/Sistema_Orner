@@ -17,13 +17,10 @@ class SupabaseDataService implements IDataService {
             'orcamentos', 
             'financial_transactions', 
             'expense_reports', 
-            'checklist_checkin', 
-            'checklist_checkout', 
-            'checklist_manutencao', 
             'purchase_requests', 
-            'sales_summary',
-            'activity_appointments',
-            'activity_appointments_log'
+            'sales_summary'
+            // 'activity_appointments' e 'activity_appointments_log' removidos para visualização global
+            // 'checklist_checkin', 'checklist_checkout' e 'checklist_manutencao' removidos para permitir edição global colaborativa
         ];
 
         if (!isAdmin && userId && privateCollections.includes(collection)) {
