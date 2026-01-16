@@ -1,12 +1,10 @@
 # Sistema Orner - Instruções de Banco de Dados
 
-Para que a integração com o Supabase funcione totalmente, você precisa executar o seguinte SQL no **SQL Editor** do seu painel Supabase. 
-
-*Nota: Todas as tabelas agora incluem `owner_id` para controle de acesso por usuário.*
+Para que a integração com o Supabase funcione totalmente e as configurações não "resetem", você precisa executar o seguinte SQL no **SQL Editor** do seu painel Supabase.
 
 ```sql
 -- 1. Tabelas de Sistema e Usuários
-create table system_users (
+create table if not exists system_users (
   id text primary key,
   name text not null,
   email text unique not null,
@@ -18,14 +16,26 @@ create table system_users (
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
 
-create table system_profiles (
+create table if not exists system_profiles (
   id text primary key,
   name text not null,
   permissions text[]
 );
 
--- 2. Financeiro
-create table bank_accounts (
+-- 2. Tabela de Configurações Globais (CRITICAL: Corrige o erro de valores resetando)
+create table if not exists system_configs (
+  id text primary key, -- ex: 'km_value', 'installation_value'
+  value text not null,
+  updated_at timestamp with time zone default now()
+);
+
+-- Insere os valores iniciais obrigatórios
+insert into system_configs (id, value) 
+values ('km_value', '1.20'), ('installation_value', '120.00')
+on conflict (id) do nothing;
+
+-- 3. Financeiro
+create table if not exists bank_accounts (
   id text primary key,
   owner_id text references system_users(id),
   "accountName" text not null,
@@ -38,91 +48,23 @@ create table bank_accounts (
   active boolean default true
 );
 
-create table credit_cards (
+create table if not exists financial_transactions (
   id text primary key,
   owner_id text references system_users(id),
-  name text not null,
-  "lastDigits" text,
-  "closingDay" integer,
-  "dueDay" integer,
-  active boolean default true
-);
-
-create table financial_groups (
-  id text primary key,
-  name text not null,
-  type text -- 'receita' ou 'despesa'
-);
-
-create table financial_classifications (
-  id text primary key,
-  name text not null,
-  type text
-);
-
-create table financial_categories (
-  id text primary key,
-  name text not null,
-  type text check (type in ('receita', 'despesa', 'resultado')),
-  classification text,
-  "group" text,
-  code text,
-  "showInDre" boolean default true,
-  active boolean default true
-);
-
-create table financial_transactions (
-  id text primary key,
-  owner_id text references system_users(id),
-  description text,
+  description text not null,
   amount decimal not null,
-  type text,
+  type text check (type in ('receita', 'despesa', 'resultado')),
   "dueDate" date not null,
   "paymentDate" date,
-  "launchDate" date,
-  "categoryId" text references financial_categories(id),
-  "bankId" text references bank_accounts(id),
+  "categoryId" text,
+  "bankId" text,
   status text check (status in ('pendente', 'pago', 'cancelado')),
+  "launchDate" date,
   "cancelReason" text
 );
 
--- 3. Orçamentos e Vendas
-create table orcamentos (
-  id bigint primary key,
-  owner_id text references system_users(id),
-  status text,
-  "savedAt" timestamp with time zone,
-  variants jsonb,
-  "formState" jsonb,
-  calculated jsonb
-);
-
-create table sales_summary (
-  id bigint primary key,
-  "orcamentoId" bigint references orcamentos(id),
-  owner_id text references system_users(id),
-  "clientName" text,
-  date date,
-  "closedValue" decimal,
-  "systemCost" decimal,
-  supplier text,
-  "visitaTecnica" decimal,
-  homologation decimal,
-  installation decimal,
-  "travelCost" decimal,
-  "adequationCost" decimal,
-  "materialCost" decimal,
-  "invoicedTax" decimal,
-  commission decimal,
-  "bankFees" decimal,
-  "totalCost" decimal,
-  "netProfit" decimal,
-  "finalMargin" decimal,
-  status text
-);
-
--- 4. Estoque e Suprimentos
-create table stock_items (
+-- 4. Estoque e Compras
+create table if not exists stock_items (
   id text primary key,
   owner_id text references system_users(id),
   name text not null,
@@ -134,22 +76,11 @@ create table stock_items (
   description text,
   image text,
   "averagePrice" decimal default 0,
-  "isFixedInBudget" boolean default false,
-  "priceHistory" jsonb default '[]'
+  "isFixedInBudget" boolean default true,
+  "priceHistory" jsonb default '[]'::jsonb
 );
 
-create table stock_movements (
-  id text primary key,
-  owner_id text references system_users(id),
-  "itemId" text references stock_items(id),
-  quantity decimal not null,
-  type text check (type in ('entrada', 'saida')),
-  date timestamp with time zone default now(),
-  observation text,
-  "projectName" text
-);
-
-create table purchase_requests (
+create table if not exists purchase_requests (
   id text primary key,
   owner_id text references system_users(id),
   "itemName" text not null,
@@ -166,105 +97,4 @@ create table purchase_requests (
   "invoiceFile" text,
   "invoiceKey" text
 );
-
--- 5. Reembolsos
-create table expense_reports (
-  id text primary key,
-  owner_id text references system_users(id),
-  requester text,
-  sector text,
-  period text,
-  "periodStart" date,
-  "periodEnd" date,
-  items jsonb,
-  attachments jsonb,
-  "kmValueUsed" decimal,
-  status text,
-  "createdAt" timestamp with time zone default now(),
-  "totalValue" decimal,
-  "cancelReason" text
-);
-
--- 6. Checklists de Obra
--- Nota: Estas tabelas não possuem coluna 'type' pois são divididas por objetivo
-create table checklist_checkin (
-  id text primary key,
-  owner_id text references system_users(id),
-  project text,
-  responsible text,
-  date date,
-  status text,
-  details jsonb
-);
-
-create table checklist_checkout (
-  id text primary key,
-  owner_id text references system_users(id),
-  project text,
-  responsible text,
-  date date,
-  status text,
-  details jsonb
-);
-
-create table checklist_manutencao (
-  id text primary key,
-  owner_id text references system_users(id),
-  project text,
-  responsible text,
-  date date,
-  status text,
-  details jsonb
-);
-
--- 7. Agenda e Instalações
-create table activity_catalog (
-  id text primary key,
-  owner_id text references system_users(id),
-  title text not null,
-  color text,
-  "personalSchedule" boolean default false
-);
-
-create table activity_appointments (
-  id text primary key,
-  owner_id text references system_users(id),
-  "activityId" text references activity_catalog(id),
-  "clientName" text,
-  "startDate" date not null,
-  "endDate" date not null,
-  "startTime" text,
-  "endTime" text,
-  "isAllDay" boolean default false,
-  cep text,
-  address text,
-  number text,
-  complement text,
-  city text,
-  "platesCount" integer default 0,
-  "panelsConfig" jsonb,
-  arrangement text,
-  observations text,
-  "participantIds" text[],
-  "notifyByEmail" boolean default false
-);
-
-create table activity_appointments_log (
-  id text primary key,
-  owner_id text references system_users(id),
-  "deletedAt" timestamp with time zone default now(),
-  "deletedBy" text,
-  "deletedById" text,
-  "cancelReason" text,
-  "originalAppointment" jsonb
-);
-```
-
-### Dicas de Segurança (RLS)
-Recomenda-se habilitar o **Row Level Security (RLS)** nas tabelas e criar políticas onde `owner_id = auth.uid()` para garantir a privacidade dos dados entre diferentes usuários.
-
-### Habilitar Realtime
-Para atualizações em tempo real, habilite o Realtime nas tabelas principais:
-```sql
-alter publication supabase_realtime add table system_users, orcamentos, checklist_checkin, activity_appointments;
 ```

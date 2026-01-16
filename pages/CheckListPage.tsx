@@ -255,18 +255,22 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                 dataService.getAll<any>(currentTable, currentUser.id, isAdmin),
                 dataService.getAll<StockItem>('stock_items', currentUser.id, true),
                 dataService.getAll<SavedOrcamento>('orcamentos', currentUser.id, isAdmin),
-                dataService.getAll<ChecklistEntry>('checklist_checkin', currentUser.id, isAdmin)
+                dataService.getAll<any>('checklist_checkin', currentUser.id, isAdmin)
             ]);
             
-            const rawCurrent = results[0].status === 'fulfilled' ? results[0].value : [];
-            const rawStock = results[1].status === 'fulfilled' ? results[1].value : [];
-            const rawOrcamentos = results[2].status === 'fulfilled' ? results[2].value : [];
-            const rawAllCheckins = results[3].status === 'fulfilled' ? results[3].value : [];
+            const rawCurrent = results[0].status === 'fulfilled' ? (results[0].value as any[]) : [];
+            const rawStock = results[1].status === 'fulfilled' ? (results[1].value as any[]) : [];
+            const rawOrcamentos = results[2].status === 'fulfilled' ? (results[2].value as any[]) : [];
+            const rawAllCheckins = results[3].status === 'fulfilled' ? (results[3].value as any[]) : [];
             
-            setEntries(rawCurrent.sort((a:any, b:any) => (b.date || '').localeCompare(a.date || '')));
+            // Injetamos o tipo manualmente pois as tabelas são separadas no Supabase e não salvam a coluna 'type'
+            const processedCurrent = rawCurrent.map(item => ({ ...item, type: view }));
+            const processedAllCheckins = rawAllCheckins.map(item => ({ ...item, type: 'checkin' }));
+
+            setEntries(processedCurrent.sort((a, b) => (b.date || '').localeCompare(a.date || '')));
             setStockItems(rawStock.sort((a:any, b:any) => a.name.localeCompare(b.name)));
             setOrcamentos(rawOrcamentos);
-            setAllCheckins(rawAllCheckins);
+            setAllCheckins(processedAllCheckins);
         } catch (e) { console.error(e); } finally { setIsLoading(false); }
     };
 
@@ -411,8 +415,6 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                 
                 await dataService.save('stock_items', updatedStockItem);
 
-                // Geração de pedido de compra se abaixo do mínimo
-                // Fórmula solicitada: (Mínimo * 2) - Saldo Atual
                 if (newQty < stockItem.minQuantity && !hasPendingRequest(stockItem.name)) {
                     const buyQty = (stockItem.minQuantity * 2) - newQty;
                     if (buyQty > 0) {
@@ -457,8 +459,6 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
         setIsSaving(true);
         try {
             const currentTable = getTableName(statusTargetEntry.type);
-            // Removemos 'type' para o salvamento, pois a tabela destino já define o tipo no esquema do DB
-            // Fix: Added default value to avoid binding error
             const { type: _type = '', ...dataToSave } = { ...statusTargetEntry, status };
 
             if (status === 'Efetivado' && statusTargetEntry.type === 'checkin') {
@@ -485,8 +485,6 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                     details: { ...INITIAL_CHECKOUT, nomeCliente: statusTargetEntry.project, componentesEstoque: [...(statusTargetEntry.details.componentesEstoque || [])], originalCheckinId: statusTargetEntry.id } 
                 };
                 
-                // Salvando checkout automático (removendo type)
-                // Fix: Added default value to avoid binding error
                 const { type: checkoutType = '', ...checkoutDataToSave } = autoCheckout;
                 await dataService.save('checklist_checkout', checkoutDataToSave as any);
                 alert(`Venda confirmada! Materiais reservados.`);
@@ -499,7 +497,6 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                     const allCheckinsData = await dataService.getAll<ChecklistEntry>('checklist_checkin');
                     const originalCheckin = allCheckinsData.find(c => String(c.id) === String(statusTargetEntry.id));
                     if (originalCheckin) {
-                        // Fix: Added default value to avoid binding error
                         const { type: chkinType = '', ...chkinDataToSave } = { ...originalCheckin, status: 'Finalizado' as const };
                         await dataService.save('checklist_checkin', chkinDataToSave as any);
                     }
@@ -547,8 +544,6 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
             if (targetStatus === 'Finalizado') {
                 await processStockDeduction(newEntry);
             }
-            // Removemos 'type' para o salvamento, pois a tabela destino já define o tipo no esquema do DB
-            // Fix: Added default value to avoid binding error
             const { type: _unusedType = '', ...dataToSave } = newEntry;
             await dataService.save(currentTable, dataToSave as any);
             
@@ -605,8 +600,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                 <label className="text-[10px] font-bold text-gray-500 leading-tight block tracking-tight">{label}</label>
                 {photos.length > 0 && (
                     <div className="grid grid-cols-4 gap-1.5 pb-1">
-                        {/* Fix: Removed explicit types from map callback */}
-                        {photos.map((url, idx) => (
+                        {photos.map((url: string, idx: number) => (
                             <div key={idx} className="relative aspect-square rounded-lg border border-white bg-white overflow-hidden shadow-sm cursor-pointer group">
                                 <img 
                                     src={url} 
@@ -614,14 +608,12 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                                     alt="" 
                                     onClick={() => setHdPhoto(url)}
                                 />
-                                {/* Fix: Explicitly type event as React.MouseEvent to avoid binding issues */}
                                 {!isViewOnly && (
                                     <button 
                                         type="button"
                                         onClick={(e: React.MouseEvent) => {
                                             e.stopPropagation();
                                             const currentPhotosList = Array.isArray(form[field]) ? [...form[field]] : [];
-                                            // Fix: Using item instead of _ to avoid potential binding issues
                                             const newList = currentPhotosList.filter((item, i) => i !== idx);
                                             setForm((prev: any) => ({ ...prev, [field]: newList }));
                                         }} 
@@ -681,7 +673,6 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                     </div>
                 )}
                 <div className="space-y-1.5 mt-4">
-                    {/* Fix: Removed explicit types from map callback */}
                     {(form.componentesEstoque || []).length > 0 ? (form.componentesEstoque || []).map((comp: any, idx: number) => (
                         <div key={idx} className="flex justify-between items-center bg-gray-50 dark:bg-gray-700/40 p-2.5 rounded-lg text-[11px] font-bold border border-transparent hover:border-indigo-100 transition-all">
                             <div className="flex items-center gap-2">
@@ -697,7 +688,6 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                                             const val = parseInt(e.target.value) || 0;
                                             setForm((p:any) => ({
                                                 ...p, 
-                                                // Fix: Removed explicit type from map callback to match comment recommendation
                                                 componentesEstoque: p.componentesEstoque.map((c: any, i: number) => i === idx ? {...c, qty: val} : c)
                                             }));
                                         }}
@@ -706,7 +696,6 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                                 ) : (
                                     <span className="bg-indigo-50 dark:bg-indigo-900/50 px-2 py-0.5 rounded text-indigo-700 dark:text-indigo-300 font-bold text-[10px]">{comp.qty} un</span>
                                 )}
-                                {/* Fix: Removed explicit types from filter callback to avoid binding issues */}
                                 {!isViewOnly && (<button onClick={() => setForm((p:any)=>({...p, componentesEstoque: p.componentesEstoque.filter((item: any, i: number)=>i!==idx)}))} className="text-red-400 hover:text-red-600 transition-colors"><XCircleIcon className="w-4 h-4"/></button>)}
                             </div>
                         </div>

@@ -91,7 +91,8 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
     }
   }, [currentUser, isAdmin]);
 
-  const loadConfig = useCallback(() => {
+  const loadConfig = useCallback(async () => {
+      // Carregamento híbrido: primeiro localStorage para rapidez, depois banco para precisão
       const storedKm = localStorage.getItem('config_km_value');
       const storedInst = localStorage.getItem('config_installation_value');
       
@@ -104,6 +105,27 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
           const val = parseFloat(storedInst);
           setConfigInstValue(val);
       }
+
+      // Sincronização com o Banco de Dados (Supabase) - Torna as configs permanentes e globais
+      try {
+          const remoteConfigs = await dataService.getAll<any>('system_configs', undefined, true);
+          const remoteKm = remoteConfigs.find(c => c.id === 'km_value');
+          const remoteInst = remoteConfigs.find(c => c.id === 'installation_value');
+
+          if (remoteKm) {
+              const val = parseFloat(remoteKm.value);
+              setConfigKmValue(val);
+              setValorPorKm(val);
+              localStorage.setItem('config_km_value', val.toString());
+          }
+          if (remoteInst) {
+              const val = parseFloat(remoteInst.value);
+              setConfigInstValue(val);
+              localStorage.setItem('config_installation_value', val.toString());
+          }
+      } catch (e) {
+          console.error("Erro ao sincronizar configurações remotas:", e);
+      }
   }, []);
 
   useEffect(() => { 
@@ -111,10 +133,10 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
     loadConfig();
 
     const date = new Date();
-    const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
-    const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
-    setFilterStart(firstDay);
-    setFilterEnd(lastDay);
+    const filterStartDefault = new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
+    const filterEndDefault = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
+    setFilterStart(filterStartDefault);
+    setFilterEnd(filterEndDefault);
 
     const handleClickOutside = (event: MouseEvent) => {
         if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
@@ -214,7 +236,6 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
     return { paid, pending, filteredReports: filtered, totalKmValue, totalTollValue, totalFoodValue, totalComponentsValue, totalOthersValue, pieData, barData };
   }, [reports, filterStart, filterEnd, selectedUserFilter]);
 
-  // Função de validação para garantir que as datas dos gastos estejam no período informado
   const validateItemsDates = (reportItems: ExpenseReportItem[]): boolean => {
       if (!periodStart || !periodEnd) return true;
       const invalidItem = reportItems.find(item => {
@@ -233,8 +254,6 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
 
   const handleEfetivarHistorico = async () => {
     if (!reportInAction) return;
-    
-    // Validação extra antes de efetivar
     if (!validateItemsDates(reportInAction.items)) return;
 
     setIsLoading(true);
@@ -295,8 +314,6 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
       setIsLoading(true);
       try {
           await dataService.save('expense_reports', { ...reportInAction, status: 'Cancelado', cancelReason: cancelReason });
-          
-          // SINCRONIZAÇÃO COM FINANCEIRO: Se houver transação vinculada, cancela também
           const allTxs = await dataService.getAll<any>('financial_transactions');
           const relatedTx = allTxs.find(t => t.id === `tx-reemb-${reportInAction.id}`);
           if (relatedTx) {
@@ -306,7 +323,6 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                   cancelReason: `Reembolso cancelado via RD: ${cancelReason}` 
               });
           }
-
           setModalMessage("Reembolso cancelado com sucesso.");
           setSuccessModalOpen(true);
           await loadReports();
@@ -322,7 +338,6 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
   const handleViewFile = (file: ExpenseAttachment) => {
     const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.data.startsWith('data:application/pdf');
     if (isPdf) {
-        // Abrir PDF de forma mais compatível
         const link = document.createElement('a');
         link.href = file.data;
         link.target = '_blank';
@@ -331,24 +346,35 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
         link.click();
         document.body.removeChild(link);
     } else {
-        // Imagens abrem no visualizador HD interno
         setHdPhoto(file.data);
     }
   };
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
 
-  const handleSaveKmConfig = () => {
-      localStorage.setItem('config_km_value', configKmValue.toString());
-      setValorPorKm(configKmValue);
-      setIsEditingKm(false);
-      alert('Configuração de km salva!');
+  const handleSaveKmConfig = async () => {
+      setIsLoading(true);
+      try {
+          localStorage.setItem('config_km_value', configKmValue.toString());
+          await dataService.save('system_configs', { id: 'km_value', value: configKmValue.toString() });
+          setValorPorKm(configKmValue);
+          setIsEditingKm(false);
+          alert('Configuração de km salva no banco de dados!');
+      } catch (e) {
+          alert('Erro ao salvar configuração no banco. O valor foi mantido localmente.');
+      } finally { setIsLoading(false); }
   };
 
-  const handleSaveInstConfig = () => {
-      localStorage.setItem('config_installation_value', configInstValue.toString());
-      setIsEditingInst(false);
-      alert('Configuração de instalação salva!');
+  const handleSaveInstConfig = async () => {
+      setIsLoading(true);
+      try {
+          localStorage.setItem('config_installation_value', configInstValue.toString());
+          await dataService.save('system_configs', { id: 'installation_value', value: configInstValue.toString() });
+          setIsEditingInst(false);
+          alert('Configuração de instalação salva no banco de dados!');
+      } catch (e) {
+          alert('Erro ao salvar configuração no banco. O valor foi mantido localmente.');
+      } finally { setIsLoading(false); }
   };
 
   const renderContent = () => {
@@ -508,9 +534,10 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                                 {isEditingKm ? (
                                     <button 
                                         onClick={handleSaveKmConfig} 
+                                        disabled={isLoading}
                                         className="text-[11px] font-black text-white bg-indigo-600 hover:bg-indigo-700 transition-colors px-3 py-1 rounded-lg shadow-sm"
                                     >
-                                        Salvar
+                                        {isLoading ? '...' : 'Salvar'}
                                     </button>
                                 ) : (
                                     <button 
@@ -526,7 +553,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                                 <input 
                                     type="number" 
                                     step="0.01" 
-                                    disabled={!isEditingKm}
+                                    disabled={!isEditingKm || isLoading}
                                     value={configKmValue} 
                                     onChange={(e) => setConfigKmValue(parseFloat(e.target.value) || 0)} 
                                     className={`w-full border-2 rounded-xl py-3.5 pl-11 pr-4 text-sm font-black outline-none transition-all shadow-sm ${
@@ -550,9 +577,10 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                                 {isEditingInst ? (
                                     <button 
                                         onClick={handleSaveInstConfig} 
+                                        disabled={isLoading}
                                         className="text-[11px] font-black text-white bg-indigo-600 hover:bg-indigo-700 transition-colors px-3 py-1 rounded-lg shadow-sm"
                                     >
-                                        Salvar
+                                        {isLoading ? '...' : 'Salvar'}
                                     </button>
                                 ) : (
                                     <button 
@@ -568,7 +596,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                                 <input 
                                     type="number" 
                                     step="0.01" 
-                                    disabled={!isEditingInst}
+                                    disabled={!isEditingInst || isLoading}
                                     value={configInstValue} 
                                     onChange={(e) => setConfigInstValue(parseFloat(e.target.value) || 0)} 
                                     className={`w-full border-2 rounded-xl py-3.5 pl-11 pr-4 text-sm font-black outline-none transition-all shadow-sm ${
@@ -607,7 +635,6 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
 
     return (
       <div className="max-w-7xl mx-auto space-y-6 animate-fade-in pb-10">
-          {/* BANNER DE MOTIVO DE CANCELAMENTO */}
           {reportToEdit?.status === 'Cancelado' && reportToEdit.cancelReason && (
             <div className="bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-900/50 p-5 rounded-2xl flex items-start gap-4 shadow-sm animate-fade-in">
               <div className="p-2.5 bg-red-600 text-white rounded-xl shadow-lg shrink-0">
@@ -700,7 +727,6 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
             </div>
             );})}{!isReadOnly && (<button onClick={() => attachmentInputRef.current?.click()} className="aspect-square flex flex-col items-center justify-center border-2 border-dashed border-indigo-100 rounded-xl text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"><UploadIcon className="w-6 h-6 mb-1" /><span className="text-[9px] font-black tracking-tighter">Anexar</span></button>)}</div><input type="file" multiple className="hidden" ref={attachmentInputRef} accept="image/*,application/pdf" onChange={e => { const files = e.target.files; if (!files) return; const filesArray = Array.from(files) as File[]; filesArray.forEach(file => { const reader = new FileReader(); reader.onload = (ev) => { const result = ev.target?.result; if (typeof result === 'string') { setAttachments(prev => [...prev, { name: file.name, data: result }]); } }; reader.readAsDataURL(file); }); e.target.value = ''; }} /></div><div className="lg:col-span-5"><div className="bg-indigo-600 rounded-xl p-6 text-white shadow-xl shadow-indigo-100 dark:shadow-none sticky top-6"><h3 className="text-sm font-black mb-6 flex items-center gap-2 tracking-tight opacity-80"><DollarIcon className="w-4 h-4" /> Resumo financeiro</h3><div className="space-y-3.5 mb-6">{[{ label: "Total em Km", val: (items || []).reduce((acc, item) => acc + (Math.ceil(((item.km || 0) * valorPorKm) * 100) / 100), 0) }, { label: "Total em Pedágios", val: (items || []).reduce((acc, item) => acc + (item.toll || 0), 0) }, { label: "Total Alimentação", val: (items || []).reduce((acc, item) => acc + (item.food || 0), 0) }, { label: "Compra de Componentes", val: (items || []).reduce((acc, item) => acc + (item.components || 0), 0) }, { label: "Outros Custos", val: (items || []).reduce((acc, item) => acc + (item.others || 0), 0) }].map(row => (<div key={row.label} className="flex justify-between items-center text-[11px] font-medium border-b border-white/10 pb-2.5 last:border-0 last:pb-0"><span className="opacity-70">{row.label}</span><span className="font-black tracking-tight">{formatCurrency(row.val)}</span></div>))}</div><div className="pt-5 border-t border-white/20"><p className="text-[10px] font-black tracking-tight opacity-60 mb-1">Valor total a receber</p><p className="text-3xl font-black tracking-tighter leading-none">{formatCurrency((items || []).reduce((acc, item) => acc + (Math.ceil(((item.km || 0) * valorPorKm) * 100) / 100) + (item.toll || 0) + (item.food || 0) + (item.components || 0) + (item.others || 0), 0))}</p></div></div></div></div>
 
-          {/* VISUALIZADOR HD INTERNO */}
           {hdPhoto && (
             <div 
                 className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in"

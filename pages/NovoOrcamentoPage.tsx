@@ -40,8 +40,6 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
 
     const isReadOnly = orcamentoToEdit?.status === 'Aprovado';
 
-    const defaultInstCost = parseFloat(localStorage.getItem('config_installation_value') || '120');
-
     const initialFormState = {
         dataOrcamento: new Date().toISOString().split('T')[0],
         nomeCliente: '',
@@ -51,7 +49,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         visitaTecnicaCusto: 400,
         projetoHomologacaoCusto: 600,
         terceiroInstalacaoQtd: 12,
-        terceiroInstalacaoCusto: defaultInstCost, 
+        terceiroInstalacaoCusto: 120, // Default fallback
         custoViagem: 0,
         adequacaoLocalCusto: 0,
         manualStockItemIds: [] as string[],
@@ -71,21 +69,36 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
     const [calculated, setCalculated] = useState<any>({});
 
     useEffect(() => {
-        const loadStock = async () => {
-            const items = await dataService.getAll<StockItem>('stock_items');
+        const loadStockAndConfigs = async () => {
+            const [items, remoteConfigs] = await Promise.all([
+                dataService.getAll<StockItem>('stock_items'),
+                dataService.getAll<any>('system_configs', undefined, true)
+            ]);
+            
             setAllStockItems(items);
             
+            // Tenta obter o custo de instalação global do banco de dados
+            const remoteInst = remoteConfigs.find(c => c.id === 'installation_value');
+            const finalInstCost = remoteInst ? parseFloat(remoteInst.value) : 120;
+
             if (!orcamentoToEdit) {
                 const initialFixedData: Record<string, any> = {};
                 items.filter(i => i.isFixedInBudget).forEach(i => {
                     initialFixedData[String(i.id)] = { qty: 0, cost: i.averagePrice || 0, markup: 0 };
                 });
-                const newState = { ...initialFormState, fixedItemsData: initialFixedData };
+                const newState = { 
+                    ...initialFormState, 
+                    terceiroInstalacaoCusto: finalInstCost,
+                    fixedItemsData: initialFixedData 
+                };
                 setFormState(newState);
                 setVariants([{ id: '1', name: 'Opção 1', isPrincipal: true, formState: newState, calculated: {} }]);
+            } else if (formState.terceiroInstalacaoCusto === 120 && !isReadOnly) {
+                // Se for edição de orçamento aberto e o custo ainda é o padrão hardcoded, atualiza para o global
+                setFormState(prev => ({ ...prev, terceiroInstalacaoCusto: finalInstCost }));
             }
         }
-        loadStock();
+        loadStockAndConfigs();
     }, [orcamentoToEdit]);
 
     const selectedStockTableItems = useMemo(() => {
@@ -168,7 +181,6 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         if (isReadOnly) return;
         const { name, value } = e.target;
-        // Storing the raw value to allow intermediate typing states on mobile
         const updatedFormState = { ...formState, [name]: value };
         updateVariantsWithFormState(updatedFormState);
     };
@@ -256,7 +268,6 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
     };
     
     useEffect(() => {
-        // Safe conversion of state values to numbers for arithmetic
         const n_terceiroInstalacaoQtd = parseNumber(formState.terceiroInstalacaoQtd);
         const n_terceiroInstalacaoCusto = parseNumber(formState.terceiroInstalacaoCusto);
         const n_visitaTecnicaCusto = parseNumber(formState.visitaTecnicaCusto);
@@ -443,8 +454,6 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
 
         const totalEstrutura = totalStockStructure + totalOffStockStructure;
 
-        // Equação: TargetPrice = SystemCost + (NewMOG + TotalInst + TotalEstr)
-        // NewMOG = TargetPrice - SystemCost - TotalInst - TotalEstr
         const newMOG = roundToCents(targetPrice - n_custoSistema - totalInstalacao - totalEstrutura);
         
         updateVariantsWithFormState({ ...formState, maoDeObraGeral: newMOG });
