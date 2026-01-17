@@ -83,11 +83,10 @@ export const MENU_ITEMS: MenuItem[] = [
   },
   {
     id: 'INSTALACOES_MENU',
-    label: 'Instalações',
+    label: 'Gestão de Serviços',
     icon: TruckIcon,
     children: [
-        { id: 'INSTALACOES_CALENDARIO', label: 'Calendário', icon: CalendarIcon },
-        { id: 'INSTALACOES_CADASTRO', label: 'Cadastro', icon: AddIcon },
+        { id: 'INSTALACOES_CALENDARIO', label: 'Agenda de Serviços', icon: CalendarIcon },
         { id: 'INSTALACOES_LAVAGEM', label: 'Lavagem de Placas', icon: SparklesIcon },
     ]
   },

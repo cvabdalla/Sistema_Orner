@@ -175,7 +175,6 @@ const DashboardPage: React.FC = () => {
 
   if (isLoading) return <div className="flex items-center justify-center h-96"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
 
-  const totalReports = metrics.transferidos + metrics.envPagamento;
   const totalWashAlerts = metrics.upcomingWashes + metrics.overdueWashes;
 
   return (
@@ -246,7 +245,7 @@ const DashboardPage: React.FC = () => {
                     </div>
                     {totalWashAlerts > 0 && (
                         <div className="flex gap-2 mt-0.5">
-                            {metrics.overdueWashes > 0 && <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded animate-pulse">{metrics.overdueWashes} ATRASADA</span>}
+                            {metrics.overdueWashes > 0 && <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded animate-pulse">Atrasada</span>}
                             {metrics.upcomingWashes > 0 && <span className="text-[10px] font-bold text-cyan-700 bg-cyan-50 px-1.5 py-0.5 rounded">Próx. 7 dias</span>}
                         </div>
                     )}

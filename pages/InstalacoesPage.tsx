@@ -1,9 +1,8 @@
-
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
     CalendarIcon, ClipboardListIcon, PlusIcon, TrashIcon, 
     ArrowLeftIcon, ChevronDownIcon, CheckCircleIcon, 
-    EditIcon, MapIcon, BoltIcon, ClockIcon, UsersIcon, XCircleIcon, ExclamationTriangleIcon
+    EditIcon, MapIcon, BoltIcon, ClockIcon, UsersIcon, XCircleIcon, ExclamationTriangleIcon, CogIcon, TableIcon
 } from '../assets/icons';
 import Modal from '../components/Modal';
 import { dataService } from '../services/dataService';
@@ -17,6 +16,17 @@ const TIME_OPTIONS = Array.from({ length: 33 }, (_, i) => {
 
 const GRID_HOURS = Array.from({ length: 14 }, (_, i) => 7 + i);
 
+const PRESET_COLORS = [
+    { name: 'Indigo', hex: '#6366f1' },
+    { name: 'Esmeralda', hex: '#10b981' },
+    { name: 'Âmbar', hex: '#f59e0b' },
+    { name: 'Rosa', hex: '#f43f5e' },
+    { name: 'Céu', hex: '#0ea5e9' },
+    { name: 'Violeta', hex: '#8b5cf6' },
+    { name: 'Ardósia', hex: '#64748b' },
+    { name: 'Laranja', hex: '#f97316' }
+];
+
 const toSentenceCase = (str: string) => {
     if (!str) return '';
     const clean = str.toLowerCase();
@@ -29,11 +39,33 @@ const SectionHeader: React.FC<{ icon: React.ReactElement<any>; title: string; co
             <div className={`p-1 rounded-lg text-white ${color}`}>
                 {React.cloneElement(icon, { className: "w-3 h-3" })}
             </div>
-            <h4 className="text-[10px] font-black text-gray-500 dark:text-gray-400 tracking-widest">{title}</h4>
+            <h4 className="text-[11px] font-bold text-gray-500 dark:text-gray-400 tracking-tight">{title}</h4>
         </div>
         {rightElement && <div>{rightElement}</div>}
     </div>
 );
+
+const compressImage = (base64Str: string): Promise<string> => {
+    return new Promise((resolve) => {
+        if (!base64Str) return resolve('');
+        const img = new Image();
+        img.src = base64Str;
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const MAX_WIDTH = 1200;
+            const MAX_HEIGHT = 1200;
+            let width = img.width;
+            let height = img.height;
+            if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } }
+            else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
+            canvas.width = width; canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx?.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', 0.85)); 
+        };
+        img.onerror = () => resolve('');
+    });
+};
 
 const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
     const [catalog, setCatalog] = useState<ActivityCatalogEntry[]>([]);
@@ -45,7 +77,9 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
     const [isSaving, setIsSaving] = useState(false);
     const [isLoadingCep, setIsLoadingCep] = useState(false);
 
-    const [calendarViewMode, setCalendarViewMode] = useState<'mensal' | 'semanal' | 'cancelados'>('mensal');
+    // Gestão de abas e visões
+    const [activeMainTab, setActiveMainTab] = useState<'agenda' | 'logs'>('agenda');
+    const [calendarViewMode, setCalendarViewMode] = useState<'mensal' | 'semanal'>('mensal');
     const [currentDate, setCurrentDate] = useState(new Date());
 
     const [isApptModalOpen, setIsApptModalOpen] = useState(false);
@@ -54,6 +88,11 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
     const [isDeleteConfirmModalOpen, setIsDeleteConfirmModalOpen] = useState(false);
     const [isCancelReasonModalOpen, setIsCancelReasonModalOpen] = useState(false);
     const [isLogDetailModalOpen, setIsLogDetailModalOpen] = useState(false);
+    
+    const [isCatalogModalOpen, setIsCatalogModalOpen] = useState(false);
+    const [isCatalogItemFormOpen, setIsCatalogItemFormOpen] = useState(false);
+    const [catalogEditingItem, setCatalogEditingItem] = useState<ActivityCatalogEntry | null>(null);
+    const [catalogForm, setCatalogForm] = useState({ title: '', color: PRESET_COLORS[0].hex, personalSchedule: false });
     
     const [conflictedUsers, setConflictedUsers] = useState<User[]>([]);
     const [selectedLogEntry, setSelectedLogEntry] = useState<AppointmentLogEntry | null>(null);
@@ -111,6 +150,37 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
             fetchCep();
         }
     }, [apptForm.cep]);
+
+    const handleSaveCatalogItem = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!catalogForm.title.trim()) return;
+        setIsSaving(true);
+        try {
+            const data: ActivityCatalogEntry = {
+                id: catalogEditingItem ? catalogEditingItem.id : `cat-${Date.now()}`,
+                owner_id: currentUser.id,
+                title: catalogForm.title,
+                color: catalogForm.color,
+                personalSchedule: catalogForm.personalSchedule
+            };
+            await dataService.save('activity_catalog', data);
+            setIsCatalogItemFormOpen(false);
+            await loadData();
+        } catch (e) {
+            alert("Erro ao salvar atividade.");
+        } finally { setIsSaving(false); }
+    };
+
+    const handleDeleteCatalogItem = async (id: string) => {
+        if (window.confirm('Deseja realmente excluir esta atividade? Se houver agendamentos vinculados, pode haver erros.')) {
+            try {
+                await dataService.delete('activity_catalog', id);
+                await loadData();
+            } catch (e) {
+                alert("Erro ao excluir.");
+            }
+        }
+    };
 
     const checkConflicts = (data: ActivityAppointment): User[] => {
         if (!data.participantIds || data.participantIds.length === 0) return [];
@@ -246,6 +316,16 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
         }));
     };
 
+    const handleNavigateDate = (direction: 'prev' | 'next') => {
+        const newDate = new Date(currentDate);
+        if (calendarViewMode === 'mensal') {
+            newDate.setMonth(newDate.getMonth() + (direction === 'next' ? 1 : -1));
+        } else {
+            newDate.setDate(newDate.getDate() + (direction === 'next' ? 7 : -7));
+        }
+        setCurrentDate(newDate);
+    };
+
     const calendarDays = useMemo(() => {
         const days = [];
         const year = currentDate.getFullYear();
@@ -277,6 +357,12 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
             return v.formState?.nomeCliente;
         }).filter(Boolean);
     }, [orcamentos]);
+
+    const isPersonalForm = useMemo(() => {
+        if (!apptForm.activityId) return false;
+        const selectedActivity = catalog.find(c => c.id === apptForm.activityId);
+        return !!selectedActivity?.personalSchedule;
+    }, [apptForm.activityId, catalog]);
 
     const renderCancelados = () => (
         <div className="space-y-4 animate-fade-in">
@@ -335,47 +421,74 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
     );
 
     const renderCalendario = () => {
-        const selectedActivity = catalog.find(c => c.id === apptForm.activityId);
-        const isPersonalForm = !!selectedActivity?.personalSchedule;
-        const isCanceledView = calendarViewMode === 'cancelados';
-        const isInstalacao = selectedActivity?.title.toLowerCase().includes('instalação');
-        const isLavagem = selectedActivity?.title.toLowerCase().includes('lavagem');
-
+        const isAgenda = activeMainTab === 'agenda';
         return (
-        <div className="space-y-6 animate-fade-in">
-            <header className="flex flex-col md:flex-row justify-between items-center bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 gap-4">
-                <div className="flex items-center gap-4">
-                    <div className="p-3 bg-indigo-100 text-indigo-600 rounded-xl">{isCanceledView ? <TrashIcon className="w-6 h-6" /> : <CalendarIcon className="w-6 h-6" />}</div>
-                    <div>
-                        <h2 className="text-xl font-bold text-gray-800 dark:text-white">{isCanceledView ? 'Agendamentos excluídos' : 'Calendário de instalações'}</h2>
-                        <p className="text-xs text-gray-500 font-medium">{isCanceledView ? 'Histórico de auditoria de remoções' : currentDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}</p>
-                    </div>
-                </div>
-                <div className="flex items-center gap-4">
-                    {!isCanceledView && (
-                        <div className="flex items-center gap-3">
-                            <div className="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-xl">
-                                <button onClick={() => setCalendarViewMode('mensal')} className={`px-4 py-1.5 text-[10px] font-bold rounded-lg transition-all ${calendarViewMode === 'mensal' ? 'bg-white dark:bg-gray-600 text-indigo-600 shadow-sm' : 'text-gray-500'}`}>Mensal</button>
-                                <button onClick={() => setCalendarViewMode('semanal')} className={`px-4 py-1.5 text-[10px] font-bold rounded-lg transition-all ${calendarViewMode === 'semanal' ? 'bg-white dark:bg-gray-600 text-indigo-600 shadow-sm' : 'text-gray-500'}`}>Semanal</button>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <button onClick={() => { const newDate = new Date(currentDate); if (calendarViewMode === 'mensal') newDate.setMonth(newDate.getMonth() - 1); else newDate.setDate(newDate.getDate() - 7); setCurrentDate(newDate); }} className="p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg"><ArrowLeftIcon className="w-4 h-4" /></button>
-                                <button onClick={() => { const newDate = new Date(currentDate); if (calendarViewMode === 'mensal') newDate.setMonth(newDate.getMonth() + 1); else newDate.setDate(newDate.getDate() + 7); setCurrentDate(newDate); }} className="p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg rotate-180"><ArrowLeftIcon className="w-4 h-4" /></button>
-                            </div>
+        <div className="space-y-4 animate-fade-in">
+            <header className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700">
+                <div className="flex flex-col lg:flex-row justify-between items-center gap-4">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-indigo-100 text-indigo-600 rounded-xl">
+                            {isAgenda ? <CalendarIcon className="w-6 h-6" /> : <TrashIcon className="w-6 h-6" />}
                         </div>
-                    )}
-                    <div className="flex flex-col items-end gap-2">
-                        <button onClick={() => { setEditingAppt(null); setApptForm({ activityId: '', clientName: '', startDate: new Date().toISOString().split('T')[0], endDate: new Date().toISOString().split('T')[0], startTime: '08:00', endTime: '12:00', isAllDay: false, cep: '', address: '', number: '', complement: '', city: '', platesCount: 0, arrangement: '', observations: '', panelsConfig: [], participantIds: [], notifyByEmail: false }); setIsApptModalOpen(true); }} className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs shadow-lg hover:bg-indigo-700 transition-all active:scale-95">
-                            <PlusIcon className="w-4 h-4" /> Agendar serviço
-                        </button>
-                        <button onClick={() => setCalendarViewMode(isCanceledView ? 'mensal' : 'cancelados')} className={`flex items-center gap-2 px-4 py-1.5 rounded-xl font-bold text-[10px] transition-all border ${isCanceledView ? 'bg-red-50 text-red-600 border-red-200 shadow-sm' : 'bg-white dark:bg-gray-800 text-gray-500 border-gray-100 dark:border-gray-700 hover:bg-gray-50'}`}>
-                            {isCanceledView ? <ArrowLeftIcon className="w-3 h-3" /> : <TrashIcon className="w-3 h-3" />} {isCanceledView ? 'Voltar ao calendário' : 'Agendamentos cancelados'}
-                        </button>
+                        <div>
+                            <h2 className="text-xl font-black text-gray-800 dark:text-white tracking-tight">Agenda de Serviços</h2>
+                            <p className="text-[11px] text-indigo-600 font-bold mt-0.5">
+                                {isAgenda 
+                                    ? (calendarViewMode === 'mensal' 
+                                        ? currentDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })
+                                        : `Semana de ${new Date(new Date(currentDate).setDate(currentDate.getDate() - currentDate.getDay())).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'})}`)
+                                    : 'Auditoria de excluídos'}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Barra de Ferramentas Otimizada */}
+                    <div className="flex flex-wrap items-center gap-3">
+                        {/* Tab Switcher Principal */}
+                        <div className="flex bg-gray-100 dark:bg-gray-950 p-1 rounded-xl shadow-inner border border-gray-200 dark:border-gray-700">
+                            <button 
+                                onClick={() => setActiveMainTab('agenda')}
+                                className={`flex items-center gap-2 px-5 py-2 text-[10px] font-bold rounded-lg transition-all ${isAgenda ? 'bg-white dark:bg-gray-700 text-indigo-600 shadow-md' : 'text-gray-400'}`}
+                            >
+                                Agenda ativa
+                            </button>
+                            <button 
+                                onClick={() => setActiveMainTab('logs')}
+                                className={`flex items-center gap-2 px-5 py-2 text-[10px] font-bold rounded-lg transition-all ${!isAgenda ? 'bg-white dark:bg-gray-700 text-red-600 shadow-md' : 'text-gray-400'}`}
+                            >
+                                Excluídos
+                            </button>
+                        </div>
+
+                        {isAgenda && (
+                            <div className="flex items-center gap-1.5">
+                                <div className="flex bg-gray-100 dark:bg-gray-950 p-1 rounded-xl border border-gray-200 dark:border-gray-700">
+                                    <button onClick={() => setCalendarViewMode('mensal')} className={`px-4 py-2 text-[10px] font-bold rounded-lg transition-all ${calendarViewMode === 'mensal' ? 'bg-white dark:bg-gray-600 text-indigo-600 shadow-sm' : 'text-gray-400'}`}>Mensal</button>
+                                    <button onClick={() => setCalendarViewMode('semanal')} className={`px-4 py-2 text-[10px] font-bold rounded-lg transition-all ${calendarViewMode === 'semanal' ? 'bg-white dark:bg-gray-600 text-indigo-600 shadow-sm' : 'text-gray-400'}`}>Semanal</button>
+                                </div>
+                                
+                                <div className="flex items-center gap-1">
+                                    <button onClick={() => handleNavigateDate('prev')} className="p-2.5 bg-gray-50 dark:bg-gray-700 text-gray-500 rounded-xl hover:bg-white dark:hover:bg-gray-600 shadow-sm border border-gray-100 dark:border-gray-600 transition-all"><ArrowLeftIcon className="w-4 h-4" /></button>
+                                    <button onClick={() => handleNavigateDate('next')} className="p-2.5 bg-gray-50 dark:bg-gray-700 text-gray-500 rounded-xl hover:bg-white dark:hover:bg-gray-600 shadow-sm border border-gray-100 dark:border-gray-600 rotate-180 transition-all"><ArrowLeftIcon className="w-4 h-4" /></button>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex items-center gap-2">
+                            {isAgenda && (
+                                <button onClick={() => setIsCatalogModalOpen(true)} className="p-2.5 bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-300 rounded-xl hover:bg-gray-100 transition-all border border-gray-200 dark:border-gray-600 shadow-sm" title="Gerenciar categorias">
+                                    <CogIcon className="w-5 h-5" />
+                                </button>
+                            )}
+                            <button onClick={() => { setEditingAppt(null); setApptForm({ activityId: '', clientName: '', startDate: new Date().toISOString().split('T')[0], endDate: new Date().toISOString().split('T')[0], startTime: '08:00', endTime: '12:00', isAllDay: false, cep: '', address: '', number: '', complement: '', city: '', platesCount: 0, arrangement: '', observations: '', panelsConfig: [], participantIds: [], notifyByEmail: false }); setIsApptModalOpen(true); }} className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-[11px] shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-95">
+                                <PlusIcon className="w-4 h-4" /> Agendar serviço
+                            </button>
+                        </div>
                     </div>
                 </div>
             </header>
 
-            {!isCanceledView && (
+            {isAgenda ? (
                 calendarViewMode === 'mensal' ? (
                     <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
                         <div className="grid grid-cols-7 border-b border-gray-50 dark:border-gray-700 bg-gray-50/30 dark:bg-gray-900/40">
@@ -466,17 +579,80 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                         </div>
                     </div>
                 )
+            ) : (
+                renderCancelados()
             )}
 
-            {isCanceledView && renderCancelados()}
+            {/* Modal de Gestão de Categorias (Unificado) */}
+            {isCatalogModalOpen && (
+                <Modal title="Gerenciar categorias de serviços" onClose={() => setIsCatalogModalOpen(false)} maxWidth="max-w-2xl">
+                    <div className="space-y-4 pt-1">
+                        <div className="flex justify-between items-center mb-2 px-1">
+                            <h4 className="text-[10px] font-bold text-gray-400 tracking-widest uppercase">Catálogo de atividades</h4>
+                            <button onClick={() => { setCatalogEditingItem(null); setCatalogForm({ title: '', color: PRESET_COLORS[0].hex, personalSchedule: false }); setIsCatalogItemFormOpen(true); }} className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:underline"><PlusIcon className="w-3.5 h-3.5" /> Adicionar nova</button>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
+                            {catalog.map(item => (
+                                <div key={item.id} className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 flex items-center justify-between group hover:border-indigo-200 transition-all">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-4 h-4 rounded-full shadow-sm" style={{ backgroundColor: item.color }} />
+                                        <div>
+                                            <p className="text-sm font-bold text-gray-800 dark:text-gray-100 leading-tight">{item.title}</p>
+                                            {item.personalSchedule && <span className="text-[8px] font-bold text-indigo-500">Agenda pessoal</span>}
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={() => { setCatalogEditingItem(item); setCatalogForm({ title: item.title, color: item.color, personalSchedule: !!item.personalSchedule }); setIsCatalogItemFormOpen(true); }} className="p-1.5 text-gray-400 hover:text-indigo-600 transition-colors"><EditIcon className="w-4 h-4" /></button>
+                                        <button onClick={() => handleDeleteCatalogItem(item.id)} className="p-1.5 text-gray-300 hover:text-red-600 transition-colors"><TrashIcon className="w-4 h-4" /></button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="pt-4 border-t dark:border-gray-700 flex justify-end">
+                            <button onClick={() => setIsCatalogModalOpen(false)} className="px-6 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 rounded-xl font-bold text-xs">Fechar</button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
+            {/* Modal de Formulário de Atividade */}
+            {isCatalogItemFormOpen && (
+                <Modal title={catalogEditingItem ? "Editar atividade" : "Nova atividade"} onClose={() => setIsCatalogItemFormOpen(false)} maxWidth="max-w-md">
+                    <form onSubmit={handleSaveCatalogItem} className="space-y-6 pt-2">
+                        <div>
+                            <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1.5 ml-1 tracking-tight">Descrição da atividade</label>
+                            <input required autoFocus type="text" value={catalogForm.title} onChange={e => setCatalogForm({...catalogForm, title: e.target.value})} className="w-full rounded-2xl border-transparent bg-gray-50 dark:bg-gray-700/50 p-3.5 text-sm font-bold text-gray-800 dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm transition-all" placeholder="Ex: Manutenção preventiva" />
+                        </div>
+                        <div>
+                            <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-3 ml-1 tracking-tight">Cor de identificação</label>
+                            <div className="grid grid-cols-4 gap-3">
+                                {PRESET_COLORS.map(color => (
+                                    <button key={color.hex} type="button" onClick={() => setCatalogForm({...catalogForm, color: color.hex})} className={`h-10 rounded-xl transition-all border-4 flex items-center justify-center ${catalogForm.color === color.hex ? 'border-indigo-500 scale-110 shadow-lg' : 'border-transparent opacity-80 hover:opacity-100'}`} style={{ backgroundColor: color.hex }}>{catalogForm.color === color.hex && <CheckCircleIcon className="w-5 h-5 text-white drop-shadow-md" />}</button>
+                                ))}
+                            </div>
+                        </div>
+                        <label className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-2xl cursor-pointer hover:bg-indigo-50/50 transition-all border border-transparent hover:border-indigo-100 group">
+                            <div className="relative">
+                                <input type="checkbox" checked={catalogForm.personalSchedule} onChange={e => setCatalogForm({...catalogForm, personalSchedule: e.target.checked})} className="sr-only peer" />
+                                <div className="w-11 h-6 bg-gray-300 dark:bg-gray-600 rounded-full peer peer-checked:bg-indigo-600 transition-all after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
+                            </div>
+                            <div className="flex flex-col"><span className="text-xs font-bold text-gray-700 dark:text-gray-200 group-hover:text-indigo-600 transition-colors">Atividade pessoal</span><span className="text-[10px] text-gray-400 font-bold leading-tight">Agendamentos que não exigem dados técnicos de obra.</span></div>
+                        </label>
+                        <div className="flex gap-3 pt-4 border-t dark:border-gray-700">
+                            <button type="button" onClick={() => setIsCatalogItemFormOpen(false)} className="flex-1 py-3.5 bg-gray-100 text-gray-500 rounded-xl font-bold text-xs">Voltar</button>
+                            <button type="submit" disabled={isSaving} className="flex-[2] py-3.5 bg-indigo-600 text-white rounded-xl font-bold text-xs shadow-lg hover:bg-indigo-700 transition-all active:scale-95">{isSaving ? '...' : 'Salvar categoria'}</button>
+                        </div>
+                    </form>
+                </Modal>
+            )}
 
             {isApptModalOpen && (
                 <Modal title={editingAppt ? "Editar agendamento" : "Agendar serviço"} onClose={() => setIsApptModalOpen(false)} maxWidth="max-w-xl">
                     <form onSubmit={handleSaveAppt} className="space-y-3 pt-1">
                         {/* Seção 1: Atividade */}
                         <div className="bg-gray-50 dark:bg-gray-900/30 p-3.5 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
-                            <label className="block text-[9px] font-black text-gray-400 tracking-widest mb-1.5 ml-1">Atividade</label>
-                            <select required value={apptForm.activityId} onChange={e => setApptForm({...apptForm, activityId: e.target.value})} className="w-full rounded-xl border-transparent bg-white dark:bg-gray-700 p-2.5 text-xs font-black text-gray-800 dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm transition-all appearance-none cursor-pointer">
+                            <label className="block text-[11px] font-bold text-gray-400 mb-1.5 ml-1">Atividade</label>
+                            <select required value={apptForm.activityId} onChange={e => setApptForm({...apptForm, activityId: e.target.value})} className="w-full rounded-xl border-transparent bg-white dark:bg-gray-700 p-2.5 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm transition-all appearance-none cursor-pointer">
                                 <option value="">Selecione...</option>
                                 {catalog.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
                             </select>
@@ -489,7 +665,7 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                                 <span className="text-[9px] font-bold text-red-500">* Obrigatório</span>
                             </div>
                             <div className="flex flex-wrap gap-1.5">
-                                {users.map(user => (<button key={user.id} type="button" onClick={() => toggleParticipant(user.id)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all text-[10px] font-black ${apptForm.participantIds?.includes(user.id) ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-gray-50 dark:bg-gray-700 text-gray-500 border-transparent hover:border-indigo-100'}`}>{user.name}</button>))}
+                                {users.map(user => (<button key={user.id} type="button" onClick={() => toggleParticipant(user.id)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all text-[10px] font-bold ${apptForm.participantIds?.includes(user.id) ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-gray-50 dark:bg-gray-700 text-gray-500 border-transparent hover:border-indigo-100'}`}>{user.name}</button>))}
                             </div>
                             {(!apptForm.participantIds || apptForm.participantIds.length === 0) && (
                                 <p className="text-[9px] text-amber-600 font-bold mt-2 italic">⚠️ Selecione pelo menos uma pessoa para habilitar o salvamento.</p>
@@ -502,24 +678,24 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                                 <div className="space-y-2">
                                     <SectionHeader icon={<CalendarIcon />} title="Calendário" color="bg-indigo-600" />
                                     <div className="grid grid-cols-2 gap-2">
-                                        <div><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Início</label><input required type="date" value={apptForm.startDate} onChange={e => setApptForm({...apptForm, startDate: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2 text-xs font-black dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm" /></div>
-                                        <div><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Término</label><input required type="date" value={apptForm.endDate} min={apptForm.startDate} onChange={e => setApptForm({...apptForm, endDate: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2 text-xs font-black dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm" /></div>
+                                        <div><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Início</label><input required type="date" value={apptForm.startDate} onChange={e => setApptForm({...apptForm, startDate: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2 text-xs font-bold dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm" /></div>
+                                        <div><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Término</label><input required type="date" value={apptForm.endDate} min={apptForm.startDate} onChange={e => setApptForm({...apptForm, endDate: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2 text-xs font-bold dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm" /></div>
                                     </div>
                                 </div>
                                 <div className="space-y-2">
                                     <SectionHeader icon={<ClockIcon />} title="Horários" color="bg-indigo-600" rightElement={
                                         <label className="flex items-center gap-1.5 cursor-pointer group">
                                             <input type="checkbox" checked={apptForm.isAllDay} onChange={e => setApptForm({...apptForm, isAllDay: e.target.checked})} className="w-3.5 h-3.5 rounded text-indigo-600 border-gray-300 focus:ring-indigo-500" />
-                                            <span className="text-[10px] font-black text-gray-400 group-hover:text-indigo-600 transition-colors">Dia todo</span>
+                                            <span className="text-[10px] font-bold text-gray-400 group-hover:text-indigo-600 transition-colors">Dia todo</span>
                                         </label>
                                     } />
                                     {!apptForm.isAllDay ? (
                                         <div className="grid grid-cols-2 gap-2 animate-fade-in">
-                                            <div><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1 tracking-tighter">De</label><select value={apptForm.startTime} onChange={e => setApptForm({...apptForm, startTime: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2 text-xs font-black dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm">{TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-                                            <div><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1 tracking-tighter">Até</label><select value={apptForm.endTime} onChange={e => setApptForm({...apptForm, endTime: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2 text-xs font-black dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm">{TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                                            <div><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1 tracking-tighter">De</label><select value={apptForm.startTime} onChange={e => setApptForm({...apptForm, startTime: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2 text-xs font-bold dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm">{TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                                            <div><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1 tracking-tighter">Até</label><select value={apptForm.endTime} onChange={e => setApptForm({...apptForm, endTime: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2 text-xs font-bold dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm">{TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
                                         </div>
                                     ) : (
-                                        <div className="h-[38px] flex items-center justify-center bg-indigo-50/30 dark:bg-indigo-900/10 rounded-xl border border-dashed border-indigo-200"><span className="text-[10px] font-black text-indigo-500 uppercase">Período integral</span></div>
+                                        <div className="h-[38px] flex items-center justify-center bg-indigo-50/30 dark:bg-indigo-900/10 rounded-xl border border-dashed border-indigo-200"><span className="text-[10px] font-bold text-indigo-500">Período integral</span></div>
                                     )}
                                 </div>
                             </div>
@@ -529,15 +705,15 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                         {!isPersonalForm && (
                             <div className="bg-white dark:bg-gray-800 p-3.5 rounded-2xl border border-gray-100 dark:border-gray-700 space-y-3 shadow-sm">
                                 <SectionHeader icon={<MapIcon />} title="Localização do serviço" color="bg-teal-600" />
-                                <div><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Cliente</label><input required list="client-list" type="text" value={apptForm.clientName} onChange={e => setApptForm({...apptForm, clientName: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2.5 text-xs font-black shadow-sm" placeholder="Nome do cliente..." /><datalist id="client-list">{approvedClients.map(c => <option key={c} value={c} />)}</datalist></div>
+                                <div><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Cliente</label><input required list="client-list" type="text" value={apptForm.clientName} onChange={e => setApptForm({...apptForm, clientName: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2.5 text-xs font-bold shadow-sm" placeholder="Nome do cliente..." /><datalist id="client-list">{approvedClients.map(c => <option key={c} value={c} />)}</datalist></div>
                                 <div className="grid grid-cols-12 gap-2">
-                                    <div className="col-span-4"><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">CEP</label><input type="text" value={apptForm.cep} onChange={e => setApptForm({...apptForm, cep: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2 text-xs font-black shadow-sm" /></div>
-                                    <div className="col-span-8"><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Endereço</label><input type="text" value={apptForm.address} onChange={e => setApptForm({...apptForm, address: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2 text-xs font-black shadow-sm" /></div>
+                                    <div className="col-span-4"><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">CEP</label><input type="text" value={apptForm.cep} onChange={e => setApptForm({...apptForm, cep: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2 text-xs font-bold shadow-sm" /></div>
+                                    <div className="col-span-8"><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Endereço</label><input type="text" value={apptForm.address} onChange={e => setApptForm({...apptForm, address: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2 text-xs font-bold shadow-sm" /></div>
                                 </div>
                                 <div className="grid grid-cols-3 gap-2">
-                                    <div className="col-span-1"><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Cidade</label><input type="text" value={apptForm.city} onChange={e => setApptForm({...apptForm, city: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2 text-xs font-black shadow-sm" /></div>
-                                    <div className="col-span-1"><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Número</label><input type="text" value={apptForm.number} onChange={e => setApptForm({...apptForm, number: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2 text-xs font-black shadow-sm" /></div>
-                                    <div className="col-span-1"><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Compl.</label><input type="text" value={apptForm.complement} onChange={e => setApptForm({...apptForm, complement: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2 text-xs font-black shadow-sm" /></div>
+                                    <div className="col-span-1"><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Cidade</label><input type="text" value={apptForm.city} onChange={e => setApptForm({...apptForm, city: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2 text-xs font-bold shadow-sm" /></div>
+                                    <div className="col-span-1"><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Número</label><input type="text" value={apptForm.number} onChange={e => setApptForm({...apptForm, number: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2 text-xs font-bold shadow-sm" /></div>
+                                    <div className="col-span-1"><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Compl.</label><input type="text" value={apptForm.complement} onChange={e => setApptForm({...apptForm, complement: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2 text-xs font-bold shadow-sm" /></div>
                                 </div>
                             </div>
                         )}
@@ -546,27 +722,25 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                         {!isPersonalForm && (
                             <div className="bg-white dark:bg-gray-800 p-3.5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
                                 <SectionHeader icon={<BoltIcon />} title="Especificações técnicas" color="bg-gray-500" />
-                                {isInstalacao ? (
+                                {apptForm.activityId && catalog.find(c => c.id === apptForm.activityId)?.title.toLowerCase().includes('instalação') ? (
                                     <div className="space-y-3">
                                         <div className="grid grid-cols-12 gap-2 items-end bg-gray-50 dark:bg-gray-900/50 p-2.5 rounded-xl border border-indigo-100 dark:border-indigo-900/50 shadow-inner">
-                                            <div className="col-span-3"><label className="block text-[8px] font-black text-gray-400 mb-1">Linhas</label><input type="number" value={tempPainel.linhas} onChange={e => setTempPainel({...tempPainel, linhas: parseInt(e.target.value)||1})} className="w-full rounded-lg border-transparent bg-white dark:bg-gray-800 p-1.5 text-xs font-black outline-none" /></div>
-                                            <div className="col-span-3"><label className="block text-[8px] font-black text-gray-400 mb-1">Módulos</label><input type="number" value={tempPainel.modulos} onChange={e => setTempPainel({...tempPainel, modulos: parseInt(e.target.value)||1})} className="w-full rounded-lg border-transparent bg-white dark:bg-gray-800 p-1.5 text-xs font-black outline-none" /></div>
-                                            <div className="col-span-4"><label className="block text-[8px] font-black text-gray-400 mb-1">Orientação</label><select value={tempPainel.orientacao} onChange={e => setTempPainel({...tempPainel, orientacao: e.target.value})} className="w-full rounded-lg border-transparent bg-white dark:bg-gray-800 p-1.5 text-xs font-black outline-none"><option value="Retrato">Retrato</option><option value="Paisagem">Paisagem</option></select></div>
+                                            <div className="col-span-3"><label className="block text-[8px] font-bold text-gray-400 mb-1">Linhas</label><input type="number" value={tempPainel.linhas} onChange={e => setTempPainel({...tempPainel, linhas: parseInt(e.target.value)||1})} className="w-full rounded-lg border-transparent bg-white dark:bg-gray-800 p-1.5 text-xs font-bold outline-none" /></div>
+                                            <div className="col-span-3"><label className="block text-[8px] font-bold text-gray-400 mb-1">Módulos</label><input type="number" value={tempPainel.modulos} onChange={e => setTempPainel({...tempPainel, modulos: parseInt(e.target.value)||1})} className="w-full rounded-lg border-transparent bg-white dark:bg-gray-800 p-1.5 text-xs font-bold outline-none" /></div>
+                                            <div className="col-span-4"><label className="block text-[8px] font-bold text-gray-400 mb-1">Orientação</label><select value={tempPainel.orientacao} onChange={e => setTempPainel({...tempPainel, orientacao: e.target.value})} className="w-full rounded-lg border-transparent bg-white dark:bg-gray-800 p-1.5 text-xs font-bold outline-none"><option value="Retrato">Retrato</option><option value="Paisagem">Paisagem</option></select></div>
                                             <div className="col-span-2"><button type="button" onClick={addPainelConfig} className="w-full h-[32px] bg-indigo-600 text-white rounded-lg flex items-center justify-center hover:bg-indigo-700 shadow-sm active:scale-95 transition-all"><PlusIcon className="w-4 h-4" /></button></div>
                                         </div>
                                         <div className="space-y-1.5 max-h-24 overflow-y-auto custom-scrollbar">
                                             {(apptForm.panelsConfig || []).map((p: any, idx: number) => (
-                                                <div key={p.id} className="flex justify-between items-center bg-gray-50 dark:bg-gray-700/40 p-2 rounded-lg border border-transparent text-[9px] font-bold"><span className="text-gray-500"><span className="text-indigo-600 font-black">F{idx+1}</span> • {p.linhas}L x {p.modulos}M ({p.orientacao})</span><button type="button" onClick={() => removePainelConfig(idx)} className="text-red-400 hover:text-red-600 transition-colors"><TrashIcon className="w-3.5 h-3.5"/></button></div>
+                                                <div key={p.id} className="flex justify-between items-center bg-gray-50 dark:bg-gray-700/40 p-2 rounded-lg border border-transparent text-[9px] font-bold"><span className="text-gray-500"><span className="text-indigo-600 font-bold">F{idx+1}</span> • {p.linhas}L x {p.modulos}M ({p.orientacao})</span><button type="button" onClick={() => removePainelConfig(idx)} className="text-red-400 hover:text-red-600 transition-colors"><TrashIcon className="w-3.5 h-3.5"/></button></div>
                                             ))}
                                         </div>
-                                        <div className="flex justify-between items-center px-1 pt-1.5 border-t dark:border-gray-700"><span className="text-[9px] font-black text-gray-400 tracking-tighter">Total calculado</span><span className="text-xs font-black text-indigo-600">{apptForm.platesCount || 0} unidades</span></div>
+                                        <div className="flex justify-between items-center px-1 pt-1.5 border-t dark:border-gray-700"><span className="text-[9px] font-bold text-gray-400 tracking-tighter">Total calculado</span><span className="text-xs font-bold text-indigo-600">{apptForm.platesCount || 0} unidades</span></div>
                                     </div>
-                                ) : isLavagem ? (
-                                    <div><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Quantidade de placas</label><input type="number" value={apptForm.platesCount} onChange={e => setApptForm({...apptForm, platesCount: parseInt(e.target.value)||0})} className="w-full rounded-xl bg-gray-50 dark:bg-gray-700 p-2.5 text-xs font-black outline-none shadow-sm" /></div>
                                 ) : (
                                     <div className="grid grid-cols-2 gap-3">
-                                        <div><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Quantidade placas</label><input type="number" value={apptForm.platesCount} onChange={e => setApptForm({...apptForm, platesCount: parseInt(e.target.value)||0})} className="w-full rounded-xl bg-gray-50 dark:bg-gray-700 p-2.5 text-xs font-black outline-none shadow-sm" /></div>
-                                        <div><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Arranjo (Ex: 2x10)</label><input type="text" value={apptForm.arrangement} onChange={e => setApptForm({...apptForm, arrangement: e.target.value})} className="w-full rounded-xl bg-gray-50 dark:bg-gray-700 p-2.5 text-xs font-black outline-none shadow-sm" /></div>
+                                        <div><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Quantidade placas</label><input type="number" value={apptForm.platesCount} onChange={e => setApptForm({...apptForm, platesCount: parseInt(e.target.value)||0})} className="w-full rounded-xl bg-gray-50 dark:bg-gray-700 p-2.5 text-xs font-bold outline-none shadow-sm" /></div>
+                                        <div><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Arranjo (Ex: 2x10)</label><input type="text" value={apptForm.arrangement} onChange={e => setApptForm({...apptForm, arrangement: e.target.value})} className="w-full rounded-xl bg-gray-50 dark:bg-gray-700 p-2.5 text-xs font-bold outline-none shadow-sm" /></div>
                                     </div>
                                 )}
                             </div>
@@ -580,12 +754,12 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
 
                         {/* Ações */}
                         <div className="flex gap-3 pt-3 border-t dark:border-gray-700">
-                            <button type="button" onClick={() => setIsApptModalOpen(false)} className="flex-1 py-3 bg-gray-100 text-gray-500 rounded-xl font-black text-[10px] tracking-widest hover:bg-gray-200 transition-all">Cancelar</button>
-                            {editingAppt && (<button type="button" onClick={() => setIsDeleteConfirmModalOpen(true)} className="flex-1 py-3 bg-red-50 text-red-600 rounded-xl font-black text-[10px] tracking-widest hover:bg-red-100 transition-all">Excluir</button>)}
+                            <button type="button" onClick={() => setIsApptModalOpen(false)} className="flex-1 py-3 bg-gray-100 text-gray-500 rounded-xl font-bold text-[11px] hover:bg-gray-200 transition-all">Cancelar</button>
+                            {editingAppt && (<button type="button" onClick={() => setIsDeleteConfirmModalOpen(true)} className="flex-1 py-3 bg-red-50 text-red-600 rounded-xl font-bold text-[11px] hover:bg-red-100 transition-all">Excluir</button>)}
                             <button 
                                 type="submit" 
                                 disabled={isSaving || !apptForm.activityId || !apptForm.participantIds?.length} 
-                                className="flex-[2] py-3 bg-indigo-600 text-white rounded-xl font-black text-[10px] tracking-widest shadow-lg hover:bg-indigo-700 transition-all disabled:bg-gray-400 disabled:shadow-none"
+                                className="flex-[2] py-3 bg-indigo-600 text-white rounded-xl font-bold text-[11px] shadow-lg hover:bg-indigo-700 transition-all disabled:bg-gray-400 disabled:shadow-none"
                             >
                                 Confirmar agendamento
                             </button>
@@ -605,7 +779,7 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                                     <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-700/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-600 shadow-sm">
                                         <div className="flex items-center gap-3">
                                             <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-lg" style={{ backgroundColor: cat?.color || '#ccc' }}><CalendarIcon className="w-5 h-5" /></div>
-                                            <div><h4 className="text-sm font-black text-gray-800 dark:text-white leading-none">{cat?.title || 'Atividade'}</h4><p className="text-[10px] text-gray-400 font-bold mt-1.5 tracking-tighter">Consulta rápida</p></div>
+                                            <div><h4 className="text-sm font-bold text-gray-800 dark:text-white leading-none">{cat?.title || 'Atividade'}</h4><p className="text-[10px] text-gray-400 font-bold mt-1.5 tracking-tighter">Consulta rápida</p></div>
                                         </div>
                                         <button onClick={handleStartApptEdit} className="p-2.5 bg-white dark:bg-gray-800 text-indigo-600 rounded-xl shadow-md hover:bg-indigo-50 transition-all border border-gray-100" title="Editar agendamento"><EditIcon className="w-5 h-5" /></button>
                                     </div>
@@ -625,7 +799,7 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                                                     const user = users.find(u => u.id === pId);
                                                     return (
                                                         <div key={pId} className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/30 px-2.5 py-1.5 rounded-xl border border-indigo-100 dark:border-indigo-800">
-                                                            <div className="w-5 h-5 rounded-full bg-indigo-600 flex items-center justify-center text-white text-[8px] font-black ring-1 ring-indigo-200">
+                                                            <div className="w-5 h-5 rounded-full bg-indigo-600 flex items-center justify-center text-white text-[8px] font-bold ring-1 ring-indigo-200">
                                                                 {user?.avatar ? <img src={user.avatar} className="w-full h-full object-cover rounded-full" alt="" /> : user?.name.substring(0, 2).toUpperCase()}
                                                             </div>
                                                             <span className="text-[11px] font-bold text-gray-700 dark:text-gray-200">{user?.name}</span>
@@ -638,7 +812,7 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                                         {/* Cliente */}
                                         <div className="p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm">
                                             <p className="text-[10px] font-bold text-gray-400 mb-1.5 tracking-tight">Cliente</p>
-                                            <div className="flex items-center gap-3"><div className="p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-lg"><UsersIcon className="w-4 h-4" /></div><p className="text-xs font-black text-gray-800 dark:text-white truncate">{toSentenceCase(editingAppt.clientName)}</p></div>
+                                            <div className="flex items-center gap-3"><div className="p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-lg"><UsersIcon className="w-4 h-4" /></div><p className="text-xs font-bold text-gray-800 dark:text-white truncate">{toSentenceCase(editingAppt.clientName)}</p></div>
                                         </div>
 
                                         {/* Localização (Oculto se pessoal) */}
@@ -650,7 +824,7 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                                                     <div>
                                                         <p className="text-xs font-bold text-gray-700 dark:text-gray-200">{editingAppt.address}, {editingAppt.number}</p>
                                                         {editingAppt.complement && <p className="text-[10px] font-medium text-gray-500">{editingAppt.complement}</p>}
-                                                        <p className="text-[10px] font-black text-teal-600 mt-1">{editingAppt.city || '---'} {editingAppt.cep ? `• CEP: ${editingAppt.cep}` : ''}</p>
+                                                        <p className="text-[10px] font-bold text-teal-600 mt-1">{editingAppt.city || '---'} {editingAppt.cep ? `• CEP: ${editingAppt.cep}` : ''}</p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -663,17 +837,17 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                                                 <div className="space-y-3">
                                                     <div className="flex justify-between items-center bg-gray-50 dark:bg-gray-900/40 p-2 rounded-lg">
                                                         <span className="text-[10px] font-bold text-gray-500">Quantidade de placas</span>
-                                                        <span className="text-xs font-black text-indigo-600">{editingAppt.platesCount || 0} un</span>
+                                                        <span className="text-xs font-bold text-indigo-600">{editingAppt.platesCount || 0} un</span>
                                                     </div>
                                                     {editingAppt.arrangement && (
                                                         <div className="flex justify-between items-center bg-gray-50 dark:bg-gray-900/40 p-2 rounded-lg">
                                                             <span className="text-[10px] font-bold text-gray-500">Arranjo sugerido</span>
-                                                            <span className="text-xs font-black text-gray-700 dark:text-gray-200">{editingAppt.arrangement}</span>
+                                                            <span className="text-xs font-bold text-gray-700 dark:text-gray-200">{editingAppt.arrangement}</span>
                                                         </div>
                                                     )}
                                                     {editingAppt.panelsConfig && editingAppt.panelsConfig.length > 0 && (
                                                         <div className="pt-2 mt-1 space-y-1">
-                                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Configuração de fileiras</p>
+                                                            <p className="text-[9px] font-bold text-gray-400 tracking-widest mb-1">Configuração de fileiras</p>
                                                             {editingAppt.panelsConfig.map((p, idx) => (
                                                                 <div key={p.id} className="text-[10px] font-bold text-gray-600 dark:text-gray-300 flex justify-between bg-white dark:bg-gray-700 p-1.5 rounded border border-gray-100 dark:border-gray-600">
                                                                     <span>Fileira {idx+1}: {p.linhas}L x {p.modulos}M</span>
@@ -719,7 +893,7 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
             {isCancelReasonModalOpen && (
                 <Modal title="Motivo do cancelamento" onClose={() => setIsCancelReasonModalOpen(false)} maxWidth="max-w-md">
                     <div className="space-y-4 pt-2">
-                        <div className="p-4 bg-indigo-50 dark:bg-indigo-900/30 rounded-2xl border border-indigo-100 dark:border-indigo-800"><p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest leading-none mb-1">Atenção</p><p className="text-xs font-bold text-gray-700 dark:text-gray-200">Justifique por que o serviço está sendo removido da agenda.</p></div>
+                        <div className="p-4 bg-indigo-50 dark:bg-indigo-900/30 rounded-2xl border border-indigo-100 dark:border-indigo-800"><p className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest leading-none mb-1">Atenção</p><p className="text-xs font-bold text-gray-700 dark:text-gray-200">Justifique por que o serviço está sendo removido da agenda.</p></div>
                         <div><label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1.5 ml-1">Justificativa do cancelamento</label><textarea autoFocus required rows={4} value={cancelReasonText} onChange={e => setCancelReasonText(e.target.value)} className="w-full rounded-xl border-2 border-red-100 dark:border-red-900/30 bg-gray-50 dark:bg-gray-700/50 p-3 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-4 focus:ring-red-500/10 focus:border-red-500 transition-all shadow-sm" placeholder="Descreva aqui o motivo..." /></div>
                         <div className="flex gap-3"><button type="button" onClick={() => setIsCancelReasonModalOpen(false)} className="flex-1 py-3 bg-gray-100 text-gray-500 rounded-xl font-bold text-xs">Voltar</button><button type="button" disabled={!cancelReasonText.trim() || isSaving} onClick={handleConfirmDeleteWithReason} className="flex-[2] py-3 bg-red-600 text-white rounded-xl font-bold text-xs shadow-lg hover:bg-red-700 transition-all disabled:opacity-50">Confirmar cancelamento</button></div>
                     </div>
@@ -739,7 +913,7 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
             {isLogDetailModalOpen && selectedLogEntry && (
                 <Modal title="Detalhes do cancelamento" onClose={() => { setIsLogDetailModalOpen(false); setSelectedLogEntry(null); }} maxWidth="max-w-md">
                     <div className="space-y-6 pt-2">
-                        <div className="bg-red-50 dark:bg-red-900/20 p-5 rounded-2xl border border-red-100 dark:border-red-900/50 shadow-sm"><div className="flex items-center gap-3 mb-4"><div className="p-2 bg-red-600 text-white rounded-lg shadow-lg"><XCircleIcon className="w-5 h-5" /></div><div><p className="text-[10px] font-black text-red-400 uppercase tracking-widest leading-none mb-1">Motivo informado</p><h4 className="text-sm font-black text-gray-800 dark:text-white">{selectedLogEntry.cancelReason || 'Não informado'}</h4></div></div></div>
+                        <div className="bg-red-50 dark:bg-red-900/20 p-5 rounded-2xl border border-red-100 dark:border-red-900/50 shadow-sm"><div className="flex items-center gap-3 mb-4"><div className="p-2 bg-red-600 text-white rounded-lg shadow-lg"><XCircleIcon className="w-5 h-5" /></div><div><p className="text-[10px] font-bold text-red-400 uppercase tracking-widest leading-none mb-1">Motivo informado</p><h4 className="text-sm font-bold text-gray-800 dark:text-white">{selectedLogEntry.cancelReason || 'Não informado'}</h4></div></div></div>
                         <div className="space-y-4">
                             <div className="p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm"><p className="text-[10px] font-bold text-gray-400 mb-1.5 tracking-tight">Registro de remoção</p><div className="flex items-center justify-between"><div className="flex items-center gap-2"><div className="w-6 h-6 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold text-[9px] border border-indigo-100">{selectedLogEntry.deletedBy.substring(0, 1).toUpperCase()}</div><span className="text-xs font-bold text-gray-700 dark:text-gray-200">{toSentenceCase(selectedLogEntry.deletedBy)}</span></div><p className="text-[10px] font-bold text-red-500">{new Date(selectedLogEntry.deletedAt).toLocaleString('pt-BR')}</p></div></div>
                             <div className="p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm"><p className="text-[10px] font-bold text-gray-400 mb-1.5 tracking-tight">Agendamento original</p><div className="space-y-1"><p className="text-xs font-bold">{selectedLogEntry.originalAppointment.clientName}</p><p className="text-[10px] text-gray-500 font-medium">{new Date(selectedLogEntry.originalAppointment.startDate).toLocaleDateString('pt-BR', {timeZone:'UTC'})} {selectedLogEntry.originalAppointment.startTime || ''}</p></div></div>
