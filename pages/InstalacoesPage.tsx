@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
     CalendarIcon, ClipboardListIcon, PlusIcon, TrashIcon, 
@@ -451,7 +452,7 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                                                             <div className="flex -space-x-2 overflow-hidden">
                                                                 {appt.participantIds.slice(0, 3).map(pId => {
                                                                     const user = users.find(u => u.id === pId);
-                                                                    return (<div key={pId} className="inline-block h-5 w-5 rounded-full ring-2 ring-white dark:ring-gray-800 bg-gray-200 flex items-center justify-center overflow-hidden" title={user?.name}>{user?.avatar ? <img src={user.avatar} className="w-full h-full object-cover" /> : <span className="text-[8px] font-black">{user?.name.substring(0, 2).toUpperCase()}</span>}</div>);
+                                                                    return (<div key={pId} className="inline-block h-5 w-5 rounded-full ring-2 ring-white dark:ring-gray-800 bg-gray-200 flex items-center justify-center overflow-hidden" title={user?.name}>{user?.avatar ? <img src={user.avatar} className="w-full h-full object-cover rounded-full" /> : <span className="text-[8px] font-black">{user?.name.substring(0, 2).toUpperCase()}</span>}</div>);
                                                                 })}
                                                             </div>
                                                         )}

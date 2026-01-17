@@ -10,35 +10,41 @@ interface IDataService {
 class SupabaseDataService implements IDataService {
     
     async getAll<T>(collection: string, userId?: string, isAdmin?: boolean): Promise<T[]> {
-        let query = supabase.from(collection).select('*');
-        
-        // Lista de coleções que devem ser privadas ao criador (não admin)
-        const privateCollections = [
-            'orcamentos', 
-            'financial_transactions', 
-            'expense_reports', 
-            'purchase_requests', 
-            'sales_summary'
-            // 'activity_appointments' e 'activity_appointments_log' removidos para visualização global
-            // 'checklist_checkin', 'checklist_checkout' e 'checklist_manutencao' removidos para permitir edição global colaborativa
-        ];
+        try {
+            let query = supabase.from(collection).select('*');
+            
+            // Lista de coleções que devem ser privadas ao criador (não admin)
+            const privateCollections = [
+                'orcamentos', 
+                'financial_transactions', 
+                'expense_reports', 
+                'purchase_requests', 
+                'sales_summary',
+                'lavagem_clients',
+                'lavagem_packages',
+                'lavagem_records'
+            ];
 
-        if (!isAdmin && userId && privateCollections.includes(collection)) {
-            query = query.eq('owner_id', userId);
-        }
+            if (!isAdmin && userId && privateCollections.includes(collection)) {
+                query = query.eq('owner_id', userId);
+            }
 
-        const { data, error } = await query;
-        
-        if (error) {
-            console.error(`[SUPABASE] Erro ao buscar em ${collection}:`, error.message || error);
+            const { data, error } = await query;
+            
+            if (error) {
+                console.error(`[SUPABASE] Erro retornado em ${collection}:`, error.message);
+                return [];
+            }
+
+            return (data as T[]) || [];
+        } catch (e: any) {
+            // Captura erros de rede como "Failed to fetch"
+            console.error(`[SUPABASE] Erro de rede/conexão ao buscar em ${collection}:`, e.message || e);
             return [];
         }
-
-        return (data as T[]) || [];
     }
 
     async save<T extends { id: string | number }>(collection: string, item: T): Promise<T> {
-        // Remove campos nulos ou indefinidos para evitar erros no Supabase
         const cleanItem = Object.fromEntries(
             Object.entries(item).filter(([_, v]) => v !== undefined)
         );

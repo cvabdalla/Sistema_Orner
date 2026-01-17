@@ -6,9 +6,9 @@ import TransactionModal from '../components/Financeiro/TransactionModal';
 import { 
     DollarIcon, UsersIcon, TrendUpIcon, DocumentReportIcon, 
     OrcamentoIcon, FinanceiroIcon, ExclamationTriangleIcon, 
-    ShoppingCartIcon, CubeIcon, ClockIcon 
+    ShoppingCartIcon, CubeIcon, ClockIcon, SparklesIcon, CalendarIcon
 } from '../assets/icons';
-import type { FinancialTransaction, SavedOrcamento, StockItem, PurchaseRequest, ExpenseReport, FinancialCategory, BankAccount } from '../types';
+import type { FinancialTransaction, SavedOrcamento, StockItem, PurchaseRequest, ExpenseReport, FinancialCategory, BankAccount, LavagemRecord, LavagemClient } from '../types';
 import { dataService } from '../services/dataService';
 
 const DashboardPage: React.FC = () => {
@@ -17,6 +17,8 @@ const DashboardPage: React.FC = () => {
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
   const [purchaseRequests, setPurchaseRequests] = useState<PurchaseRequest[]>([]);
   const [expenseReports, setExpenseReports] = useState<ExpenseReport[]>([]);
+  const [lavagemRecords, setLavagemRecords] = useState<LavagemRecord[]>([]);
+  const [lavagemClients, setLavagemClients] = useState<LavagemClient[]>([]);
   const [categories, setCategories] = useState<FinancialCategory[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -27,14 +29,16 @@ const DashboardPage: React.FC = () => {
 
   const loadData = async () => {
       try {
-          const [txs, orcs, items, reqs, reports, cats, banks] = await Promise.all([
+          const [txs, orcs, items, reqs, reports, cats, banks, washRecs, washClis] = await Promise.all([
               dataService.getAll<FinancialTransaction>('financial_transactions'),
               dataService.getAll<SavedOrcamento>('orcamentos'),
               dataService.getAll<StockItem>('stock_items'),
               dataService.getAll<PurchaseRequest>('purchase_requests'),
               dataService.getAll<ExpenseReport>('expense_reports'),
               dataService.getAll<FinancialCategory>('financial_categories'),
-              dataService.getAll<BankAccount>('bank_accounts')
+              dataService.getAll<BankAccount>('bank_accounts'),
+              dataService.getAll<LavagemRecord>('lavagem_records'),
+              dataService.getAll<LavagemClient>('lavagem_clients')
           ]);
           setTransactions(txs || []);
           setOrcamentos(orcs || []);
@@ -43,6 +47,8 @@ const DashboardPage: React.FC = () => {
           setExpenseReports(reports || []);
           setCategories(cats || []);
           setBankAccounts(banks || []);
+          setLavagemRecords(washRecs || []);
+          setLavagemClients(washClis || []);
       } catch (error) {
           console.error("Erro ao carregar dados do dashboard:", error);
       } finally {
@@ -67,6 +73,35 @@ const DashboardPage: React.FC = () => {
       const transferidos = expenseReports.filter(r => r.status === 'Transferido').length;
       const envPagamento = expenseReports.filter(r => r.status === 'Env. p/ Pagamento').length;
 
+      // Lógica de Lavagens Próximas (Janela de 7 dias)
+      const today = new Date();
+      const nextWeek = new Date();
+      nextWeek.setDate(today.getDate() + 7);
+      const todayStr = today.toISOString().split('T')[0];
+      const nextWeekStr = nextWeek.toISOString().split('T')[0];
+
+      const upcomingWashes = lavagemRecords.filter(r => 
+        r.status === 'scheduled' && 
+        r.date >= todayStr && 
+        r.date <= nextWeekStr
+      ).length;
+
+      const overdueWashes = lavagemRecords.filter(r => 
+        r.status === 'scheduled' && 
+        r.date < todayStr
+      ).length;
+
+      // Oportunidade de 1 ano
+      const oneYearAgo = new Date();
+      oneYearAgo.setFullYear(today.getFullYear() - 1);
+      const oneYearAgoStr = oneYearAgo.toISOString().split('T')[0];
+
+      const salesOpportunities = lavagemClients.filter(c => 
+        !c.package_id && 
+        c.installation_end_date && 
+        c.installation_end_date <= oneYearAgoStr
+      ).length;
+
       return { 
           receitaTotal, 
           despesaTotal, 
@@ -75,9 +110,12 @@ const DashboardPage: React.FC = () => {
           openPurchaseRequests,
           lowStockItems,
           transferidos,
-          envPagamento
+          envPagamento,
+          upcomingWashes,
+          overdueWashes,
+          salesOpportunities
       };
-  }, [transactions, orcamentos, stockItems, purchaseRequests, expenseReports]);
+  }, [transactions, orcamentos, stockItems, purchaseRequests, expenseReports, lavagemRecords, lavagemClients]);
 
   const chartData = useMemo(() => {
       const data = [];
@@ -138,6 +176,7 @@ const DashboardPage: React.FC = () => {
   if (isLoading) return <div className="flex items-center justify-center h-96"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
 
   const totalReports = metrics.transferidos + metrics.envPagamento;
+  const totalWashAlerts = metrics.upcomingWashes + metrics.overdueWashes;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -159,13 +198,13 @@ const DashboardPage: React.FC = () => {
             </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className={`p-4 rounded-xl border-2 transition-all flex items-center gap-4 ${metrics.openPurchaseRequests > 0 ? 'bg-orange-50 dark:bg-orange-900/10 border-orange-200 dark:border-orange-800' : 'bg-gray-50 dark:bg-gray-900/40 border-transparent opacity-60'}`}>
                 <div className={`p-3 rounded-xl ${metrics.openPurchaseRequests > 0 ? 'bg-orange-500 text-white shadow-lg shadow-orange-200' : 'bg-gray-200 text-gray-400'}`}>
                     <ShoppingCartIcon className="w-6 h-6" />
                 </div>
                 <div>
-                    <p className="text-sm font-bold text-gray-500 dark:text-gray-400">Pedidos de compra</p>
+                    <p className="text-sm font-bold text-gray-500 dark:text-gray-400 leading-tight">Pedidos de compra</p>
                     <p className={`text-xl font-black ${metrics.openPurchaseRequests > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-gray-500'}`}>
                         {metrics.openPurchaseRequests} {metrics.openPurchaseRequests === 1 ? 'pendente' : 'pendentes'}
                     </p>
@@ -177,26 +216,38 @@ const DashboardPage: React.FC = () => {
                     <CubeIcon className="w-6 h-6" />
                 </div>
                 <div>
-                    <p className="text-sm font-bold text-gray-500 dark:text-gray-400">Abaixo do mínimo</p>
+                    <p className="text-sm font-bold text-gray-500 dark:text-gray-400 leading-tight">Abaixo do mínimo</p>
                     <p className={`text-xl font-black ${metrics.lowStockItems > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500'}`}>
                         {metrics.lowStockItems} {metrics.lowStockItems === 1 ? 'item' : 'itens'}
                     </p>
                 </div>
             </div>
 
-            <div className={`p-4 rounded-xl border-2 transition-all flex items-center gap-4 ${totalReports > 0 ? 'bg-indigo-50 dark:bg-indigo-900/10 border-indigo-200 dark:border-indigo-800' : 'bg-gray-50 dark:bg-gray-900/40 border-transparent opacity-60'}`}>
-                <div className={`p-3 rounded-xl ${totalReports > 0 ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-200' : 'bg-gray-200 text-gray-400'}`}>
-                    <ClockIcon className="w-6 h-6" />
+            <div className={`p-4 rounded-xl border-2 transition-all flex items-center gap-4 ${metrics.salesOpportunities > 0 ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800' : 'bg-gray-50 dark:bg-gray-900/40 border-transparent opacity-60'}`}>
+                <div className={`p-3 rounded-xl ${metrics.salesOpportunities > 0 ? 'bg-amber-500 text-white shadow-lg shadow-amber-200' : 'bg-gray-200 text-gray-400'}`}>
+                    <CalendarIcon className="w-6 h-6" />
                 </div>
                 <div>
-                    <p className="text-sm font-bold text-gray-500 dark:text-gray-400">Análise de reembolso</p>
-                    <div className={`text-xl font-black ${totalReports > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-500'}`}>
-                        {totalReports} pendentes
+                    <p className="text-sm font-bold text-gray-500 dark:text-gray-400 leading-tight">Oportunidade (1 ano)</p>
+                    <p className={`text-xl font-black ${metrics.salesOpportunities > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500'}`}>
+                        {metrics.salesOpportunities} {metrics.salesOpportunities === 1 ? 'contato' : 'contatos'}
+                    </p>
+                </div>
+            </div>
+
+            <div className={`p-4 rounded-xl border-2 transition-all flex items-center gap-4 ${totalWashAlerts > 0 ? (metrics.overdueWashes > 0 ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-800' : 'bg-cyan-50 dark:bg-cyan-900/10 border-cyan-200 dark:border-cyan-800') : 'bg-gray-50 dark:bg-gray-900/40 border-transparent opacity-60'}`}>
+                <div className={`p-3 rounded-xl ${totalWashAlerts > 0 ? (metrics.overdueWashes > 0 ? 'bg-rose-500' : 'bg-cyan-600') : 'bg-gray-200'} text-white shadow-lg`}>
+                    <SparklesIcon className="w-6 h-6" />
+                </div>
+                <div>
+                    <p className="text-sm font-bold text-gray-500 dark:text-gray-400 leading-tight">Próximas lavagens</p>
+                    <div className={`text-xl font-black ${totalWashAlerts > 0 ? (metrics.overdueWashes > 0 ? 'text-rose-600' : 'text-cyan-600') : 'text-gray-500'}`}>
+                        {totalWashAlerts} visitas
                     </div>
-                    {totalReports > 0 && (
+                    {totalWashAlerts > 0 && (
                         <div className="flex gap-2 mt-0.5">
-                            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{metrics.transferidos} Transf.</span>
-                            <span className="text-[10px] font-bold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">{metrics.envPagamento} Env. Pgto</span>
+                            {metrics.overdueWashes > 0 && <span className="text-[10px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded animate-pulse">{metrics.overdueWashes} ATRASADA</span>}
+                            {metrics.upcomingWashes > 0 && <span className="text-[10px] font-bold text-cyan-700 bg-cyan-50 px-1.5 py-0.5 rounded">Próx. 7 dias</span>}
                         </div>
                     )}
                 </div>
