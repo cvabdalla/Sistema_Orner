@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
-  // Add PlusIcon to the imports
   AddIcon, EditIcon, UsersIcon, LockClosedIcon, SaveIcon, 
   PhotographIcon, XCircleIcon, ExclamationTriangleIcon, EyeIcon, 
   EyeOffIcon, UploadIcon, CheckCircleIcon, TrashIcon, ClockIcon,
@@ -304,7 +303,7 @@ const UsuariosPage: React.FC<UsuariosPageProps> = ({ view, currentUser }) => {
                                             <div className="p-2 bg-white dark:bg-gray-800 rounded-xl shadow-sm text-amber-500 border border-gray-100 dark:border-gray-700">
                                                 <PhotographIcon className="w-4 h-4" />
                                             </div>
-                                            <span className="text-[11px] font-black text-gray-700 dark:text-white tracking-tighter uppercase">Modo noturno</span>
+                                            <span className="text-[11px] font-black text-gray-700 dark:text-white tracking-tighter">Modo noturno</span>
                                         </div>
                                         <button type="button" onClick={toggleDarkMode} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${userData.darkMode ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-600'}`}><span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ease-in-out ${userData.darkMode ? 'translate-x-6' : 'translate-x-1'}`} /></button>
                                     </div>
@@ -314,7 +313,7 @@ const UsuariosPage: React.FC<UsuariosPageProps> = ({ view, currentUser }) => {
                                             <div className={`p-2 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors ${userData.biometricsEnabled ? 'text-indigo-600' : 'text-gray-400'}`}>
                                                 <FingerprintIcon className="w-4 h-4" />
                                             </div>
-                                            <span className="text-[11px] font-black text-gray-700 dark:text-white tracking-tighter uppercase">Acesso FaceID</span>
+                                            <span className="text-[11px] font-black text-gray-700 dark:text-white tracking-tighter">Acesso FaceID</span>
                                         </div>
                                         <button 
                                             type="button" 
@@ -328,8 +327,8 @@ const UsuariosPage: React.FC<UsuariosPageProps> = ({ view, currentUser }) => {
                             </div>
 
                             <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t dark:border-gray-700">
-                                <button type="button" onClick={() => setUserModalOpen(false)} className="flex-1 py-4 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black text-xs uppercase tracking-widest text-gray-500 dark:text-gray-300 hover:bg-gray-200 transition-all">Cancelar</button>
-                                <button type="submit" className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-95">Salvar alterações</button>
+                                <button type="button" onClick={() => setUserModalOpen(false)} className="flex-1 py-4 bg-gray-100 dark:bg-gray-700 rounded-2xl font-black text-xs text-gray-500 dark:text-gray-300 hover:bg-gray-200 transition-all">Cancelar</button>
+                                <button type="submit" className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-95">Salvar alterações</button>
                             </div>
                         </form>
                     </Modal>
