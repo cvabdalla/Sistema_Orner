@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import type { SavedOrcamento, OrcamentoPageProps, OrcamentoStatus, SalesSummaryItem, User } from '../types';
+import type { SavedOrcamento, OrcamentoPageProps, OrcamentoStatus, SalesSummaryItem, User, ChecklistEntry, LavagemClient } from '../types';
 import { 
     TrashIcon, AddIcon, EditIcon, FilterIcon, CalendarIcon, 
-    DollarIcon, TrendUpIcon, EyeIcon, ChevronDownIcon, CheckCircleIcon, UsersIcon 
+    DollarIcon, TrendUpIcon, EyeIcon, ChevronDownIcon, CheckCircleIcon, UsersIcon, SparklesIcon 
 } from '../assets/icons';
 import Modal from '../components/Modal';
 import DashboardCard from '../components/DashboardCard';
@@ -41,17 +40,18 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
   const ADMIN_PROFILE_ID = '001';
   const isAdminUser = currentUser.profileId === ADMIN_PROFILE_ID;
 
+  const loadData = async () => {
+      setIsLoading(true);
+      const [orcData, userData] = await Promise.all([
+          dataService.getAll<SavedOrcamento>('orcamentos', currentUser.id, isAdminUser),
+          dataService.getAll<User>('system_users', undefined, true)
+      ]);
+      setOrcamentos(orcData);
+      setUsers(userData);
+      setIsLoading(false);
+  };
+
   useEffect(() => {
-    const loadData = async () => {
-        setIsLoading(true);
-        const [orcData, userData] = await Promise.all([
-            dataService.getAll<SavedOrcamento>('orcamentos', currentUser.id, isAdminUser),
-            dataService.getAll<User>('system_users', undefined, true)
-        ]);
-        setOrcamentos(orcData);
-        setUsers(userData);
-        setIsLoading(false);
-    };
     loadData();
 
     const date = new Date();
@@ -109,9 +109,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
   const handleStatusChange = async (id: number, newStatus: OrcamentoStatus) => {
       const orcamento = orcamentos.find(o => o.id === id);
       if (orcamento) {
-          const updatedOrcamento = { ...orcamento, status: newStatus };
-          setOrcamentos(p => p.map(o => o.id === id ? updatedOrcamento : o));
-          await dataService.save('orcamentos', updatedOrcamento);
+          let updatedOrcamento = { ...orcamento, status: newStatus };
           
           if (newStatus === 'Aprovado' || newStatus === 'Finalizado') {
               const currentSales = await dataService.getAll<SalesSummaryItem>('sales_summary');
@@ -120,7 +118,6 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
               if (variant.formState && variant.calculated) {
                   const fs = variant.formState;
                   const calc = variant.calculated;
-
                   const thirdPartyInstallation = (fs.terceiroInstalacaoQtd || 0) * (fs.terceiroInstalacaoCusto || 0);
 
                   const saleItem: SalesSummaryItem = {
@@ -141,15 +138,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                       invoicedTax: calc.nfServicoValor || 0,
                       commission: calc.comissaoVendasValor || 0,
                       bankFees: 0,
-                      totalCost: 
-                          (fs.visitaTecnicaCusto || 0) + 
-                          (fs.projetoHomologacaoCusto || 0) + 
-                          thirdPartyInstallation + 
-                          (fs.custoViagem || 0) + 
-                          (fs.adequacaoLocalCusto || 0) + 
-                          (calc.totalEstrutura || 0) + 
-                          (calc.nfServicoValor || 0) + 
-                          (calc.comissaoVendasValor || 0),
+                      totalCost: (fs.visitaTecnicaCusto || 0) + (fs.projetoHomologacaoCusto || 0) + thirdPartyInstallation + (fs.custoViagem || 0) + (fs.adequacaoLocalCusto || 0) + (calc.totalEstrutura || 0) + (calc.nfServicoValor || 0) + (calc.comissaoVendasValor || 0),
                       netProfit: calc.lucroLiquido || 0,
                       finalMargin: calc.margemLiquida || 0,
                       status: newStatus
@@ -158,12 +147,43 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                   const existing = currentSales.find(s => s.orcamentoId === orcamento.id);
                   if (existing) await dataService.save('sales_summary', { ...saleItem, id: existing.id, status: newStatus });
                   else await dataService.save('sales_summary', saleItem);
+
+                  // --- Automação Lavagem de Placas ---
+                  if (newStatus === 'Finalizado' && !orcamento.lavagem_cadastrada) {
+                      try {
+                          const checkins = await dataService.getAll<ChecklistEntry>('checklist_checkin');
+                          const techData = checkins.find(c => c.project === fs.nomeCliente)?.details || {};
+                          
+                          const newWashClient: LavagemClient = {
+                              id: `wash-auto-${Date.now()}`,
+                              owner_id: orcamento.owner_id,
+                              name: fs.nomeCliente,
+                              cep: techData.cep || '',
+                              address: techData.enderecoCompleto || '',
+                              address_number: '',
+                              complement: '',
+                              city: techData.cidade || '',
+                              plates_count: (variant.formState?.terceiroInstalacaoQtd) || (calc.placasQtd) || 0,
+                              phone: techData.telefoneTitular || '',
+                              observations: `Importado automaticamente do orçamento finalizado em ${new Date().toLocaleDateString('pt-BR')}.`,
+                              installation_end_date: new Date().toISOString().split('T')[0]
+                          };
+                          
+                          await dataService.save('lavagem_clients', newWashClient);
+                          updatedOrcamento.lavagem_cadastrada = true;
+                      } catch (err) {
+                          console.error("Erro na automação de lavagem:", err);
+                      }
+                  }
               }
           } else {
               const currentSales = await dataService.getAll<SalesSummaryItem>('sales_summary');
               const saleToRemove = currentSales.find(s => s.orcamentoId === id);
               if (saleToRemove) await dataService.delete('sales_summary', saleToRemove.id);
           }
+
+          setOrcamentos(p => p.map(o => o.id === id ? updatedOrcamento : o));
+          await dataService.save('orcamentos', updatedOrcamento);
       }
   };
 
@@ -205,15 +225,9 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
       const f = orcamentos.filter(orc => {
           const d = getDisplayData(orc);
           const s = orc.status || 'Em Aberto';
-          
           if (searchTerm && !d.clientName.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-          
-          // Lógica do Filtro Multi-status
           if (selectedStatuses.length > 0 && !selectedStatuses.includes(s)) return false;
-
-          // Lógica do Filtro de Usuário
           if (selectedUsers.length > 0 && !selectedUsers.includes(String(orc.owner_id))) return false;
-          
           if (startDate && d.dataOrcamento < startDate) return false;
           if (endDate && d.dataOrcamento > endDate) return false;
           v += d.displayPrice; l += d.lucroLiquido;
@@ -244,89 +258,39 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                     <input type="text" placeholder="Buscar cliente..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full p-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm dark:bg-gray-800 outline-none focus:ring-2 focus:ring-indigo-500/20" />
                 </div>
                 
-                {/* Filtro de Status */}
                 <div className="relative w-full lg:w-48" ref={statusDropdownRef}>
-                    <button 
-                        onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
-                        className="flex items-center justify-between w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 p-2 rounded-lg text-sm font-semibold text-gray-700 dark:text-gray-200 transition-all hover:bg-gray-50 dark:hover:bg-gray-700/50"
-                    >
-                        <div className="flex items-center gap-2 truncate">
-                            <FilterIcon className="w-4 h-4 text-gray-400" />
-                            <span>
-                                {selectedStatuses.length === 0 
-                                    ? 'Status' 
-                                    : `${selectedStatuses.length} sel.`}
-                            </span>
-                        </div>
+                    <button onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)} className="flex items-center justify-between w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 p-2 rounded-lg text-sm font-semibold text-gray-700 dark:text-gray-200 transition-all hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                        <div className="flex items-center gap-2 truncate"><FilterIcon className="w-4 h-4 text-gray-400" /><span>{selectedStatuses.length === 0 ? 'Status' : `${selectedStatuses.length} sel.`}</span></div>
                         <ChevronDownIcon className={`w-4 h-4 transition-transform ${isStatusDropdownOpen ? 'rotate-180' : ''}`} />
                     </button>
-
                     {isStatusDropdownOpen && (
                         <div className="absolute top-full left-0 mt-2 w-full bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 z-50 animate-fade-in py-2 max-h-64 overflow-y-auto custom-scrollbar">
                             <p className="px-4 py-1.5 text-[9px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 dark:border-gray-700 mb-1">Situação</p>
                             {STATUS_OPTIONS.map(status => (
                                 <label key={status} className="flex items-center px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-900/40 cursor-pointer group transition-colors">
-                                    <input 
-                                        type="checkbox" 
-                                        className="hidden"
-                                        checked={selectedStatuses.includes(status)}
-                                        onChange={() => toggleStatus(status)}
-                                    />
-                                    <div className={`w-4.5 h-4.5 rounded border mr-3 flex items-center justify-center transition-all ${
-                                        selectedStatuses.includes(status) 
-                                        ? 'bg-indigo-600 border-indigo-600' 
-                                        : 'border-gray-300 dark:border-gray-600'
-                                    }`}>
-                                        {selectedStatuses.includes(status) && <CheckCircleIcon className="w-3.5 h-3.5 text-white" />}
-                                    </div>
-                                    <span className={`text-xs font-bold ${selectedStatuses.includes(status) ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-600 dark:text-gray-300'}`}>
-                                        {status}
-                                    </span>
+                                    <input type="checkbox" className="hidden" checked={selectedStatuses.includes(status)} onChange={() => toggleStatus(status)} />
+                                    <div className={`w-4.5 h-4.5 rounded border mr-3 flex items-center justify-center transition-all ${selectedStatuses.includes(status) ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300 dark:border-gray-600'}`}>{selectedStatuses.includes(status) && <CheckCircleIcon className="w-3.5 h-3.5 text-white" />}</div>
+                                    <span className={`text-xs font-bold ${selectedStatuses.includes(status) ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-600 dark:text-gray-300'}`}>{status}</span>
                                 </label>
                             ))}
                         </div>
                     )}
                 </div>
 
-                {/* Filtro de Usuário */}
                 {isAdminUser && (
                     <div className="relative w-full lg:w-48" ref={userDropdownRef}>
-                        <button 
-                            onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-                            className="flex items-center justify-between w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 p-2 rounded-lg text-sm font-semibold text-gray-700 dark:text-gray-200 transition-all hover:bg-gray-50 dark:hover:bg-gray-700/50"
-                        >
-                            <div className="flex items-center gap-2 truncate">
-                                <UsersIcon className="w-4 h-4 text-gray-400" />
-                                <span>
-                                    {selectedUsers.length === 0 
-                                        ? 'Usuário' 
-                                        : `${selectedUsers.length} sel.`}
-                                </span>
-                            </div>
+                        <button onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)} className="flex items-center justify-between w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 p-2 rounded-lg text-sm font-semibold text-gray-700 dark:text-gray-200 transition-all hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <div className="flex items-center gap-2 truncate"><UsersIcon className="w-4 h-4 text-gray-400" /><span>{selectedUsers.length === 0 ? 'Usuário' : `${selectedUsers.length} sel.`}</span></div>
                             <ChevronDownIcon className={`w-4 h-4 transition-transform ${isUserDropdownOpen ? 'rotate-180' : ''}`} />
                         </button>
-
                         {isUserDropdownOpen && (
                             <div className="absolute top-full left-0 mt-2 w-full bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 z-50 animate-fade-in py-2 max-h-64 overflow-y-auto custom-scrollbar">
                                 <p className="px-4 py-1.5 text-[9px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 dark:border-gray-700 mb-1">Vendedor / Admin</p>
                                 {users.map(user => (
                                     <label key={user.id} className="flex items-center px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-900/40 cursor-pointer group transition-colors">
-                                        <input 
-                                            type="checkbox" 
-                                            className="hidden"
-                                            checked={selectedUsers.includes(String(user.id))}
-                                            onChange={() => toggleUserFilter(String(user.id))}
-                                        />
-                                        <div className={`w-4.5 h-4.5 rounded border mr-3 flex items-center justify-center transition-all ${
-                                            selectedUsers.includes(String(user.id)) 
-                                            ? 'bg-indigo-600 border-indigo-600' 
-                                            : 'border-gray-300 dark:border-gray-600'
-                                        }`}>
-                                            {selectedUsers.includes(String(user.id)) && <CheckCircleIcon className="w-3.5 h-3.5 text-white" />}
-                                        </div>
-                                        <span className={`text-xs font-bold ${selectedUsers.includes(String(user.id)) ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-600 dark:text-gray-300'}`}>
-                                            {user.name}
-                                        </span>
+                                        <input type="checkbox" className="hidden" checked={selectedUsers.includes(String(user.id))} onChange={() => toggleUserFilter(String(user.id))} />
+                                        <div className={`w-4.5 h-4.5 rounded border mr-3 flex items-center justify-center transition-all ${selectedUsers.includes(String(user.id)) ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300 dark:border-gray-600'}`}>{selectedUsers.includes(String(user.id)) && <CheckCircleIcon className="w-3.5 h-3.5 text-white" />}</div>
+                                        <span className={`text-xs font-bold ${selectedUsers.includes(String(user.id)) ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-600 dark:text-gray-300'}`}>{user.name}</span>
                                     </label>
                                 ))}
                             </div>
@@ -348,9 +312,17 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                     const isApproved = orc.status === 'Aprovado' || orc.status === 'Finalizado';
                     
                     return (
-                        <div key={orc.id} className="p-4 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 hover:shadow-md transition-all flex flex-col md:flex-row justify-between items-center gap-4">
+                        <div key={orc.id} className="p-4 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 hover:shadow-md transition-all flex flex-col md:flex-row justify-between items-center gap-4 relative overflow-hidden">
+                            {orc.lavagem_cadastrada && (
+                                <div className="absolute top-0 right-0 p-1.5 bg-indigo-50 dark:bg-indigo-900/40 rounded-bl-xl border-b border-l border-indigo-100 dark:border-indigo-800" title="Integrado à Lavagem de Placas">
+                                    <SparklesIcon className="w-3 h-3 text-indigo-600" />
+                                </div>
+                            )}
                             <div className="flex-1">
-                                <h4 className={`font-bold text-lg text-gray-900 dark:text-white`}>{d.clientName}</h4>
+                                <div className="flex items-center gap-2">
+                                    <h4 className={`font-bold text-lg text-gray-900 dark:text-white`}>{d.clientName}</h4>
+                                    {orc.lavagem_cadastrada && <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest bg-indigo-50 dark:bg-indigo-900/50 px-2 py-0.5 rounded-full border border-indigo-100 dark:border-indigo-800">Lavagem Ativa</span>}
+                                </div>
                                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5">
                                     <p className="text-xs text-gray-500 font-bold tracking-wide">
                                         {new Date(d.dataOrcamento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})} | {d.variantCount} opções
@@ -379,11 +351,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                                     <p className="font-bold text-indigo-600">{formatCurrency(d.displayPrice)}</p>
                                 </div>
                                 <div className="flex gap-1">
-                                    <button 
-                                        onClick={() => onEdit(orc)} 
-                                        className={`p-2 rounded-lg transition-all ${isApproved ? 'text-blue-500 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20' : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20'}`}
-                                        title={isApproved ? 'Visualizar' : 'Editar'}
-                                    >
+                                    <button onClick={() => onEdit(orc)} className={`p-2 rounded-lg transition-all ${isApproved ? 'text-blue-500 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20' : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20'}`} title={isApproved ? 'Visualizar' : 'Editar'}>
                                         {isApproved ? <EyeIcon className="w-5 h-5" /> : <EditIcon className="w-5 h-5" />}
                                     </button>
                                     {isAdminUser && !isReadOnlyStatus && (

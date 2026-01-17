@@ -156,6 +156,7 @@ export interface SavedOrcamento {
     owner_id: string;
     savedAt: string;
     status: OrcamentoStatus;
+    lavagem_cadastrada?: boolean;
     variants?: OrcamentoVariant[];
     formState?: any;
     calculated?: any;
