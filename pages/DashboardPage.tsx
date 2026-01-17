@@ -182,71 +182,79 @@ const DashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <DashboardCard title="Receita (Realizada)" value={formatCurrency(metrics.receitaTotal)} icon={FinanceiroIcon} color="bg-green-500" />
         <DashboardCard title="Despesa (Realizada)" value={formatCurrency(metrics.despesaTotal)} icon={TrendUpIcon} color="bg-red-500" />
-        <DashboardCard title="Projetos Aprovados" value={metrics.orcamentosAprovados.toString()} icon={OrcamentoIcon} color="bg-blue-500" />
-        <DashboardCard title="Total de Orçamentos" value={metrics.orcamentosTotal.toString()} icon={UsersIcon} color="bg-indigo-500" />
+        <DashboardCard title="Projetos aprovados" value={metrics.orcamentosAprovados.toString()} icon={OrcamentoIcon} color="bg-blue-500" />
+        <DashboardCard title="Total de orçamentos" value={metrics.orcamentosTotal.toString()} icon={UsersIcon} color="bg-indigo-500" />
       </div>
 
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-orange-100 dark:border-orange-900/30">
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-lg border border-orange-100 dark:border-orange-900/30">
         <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-orange-100 dark:bg-orange-900/30 text-orange-600 rounded-lg">
+            <div className="p-2.5 bg-orange-100 dark:bg-orange-900/30 text-orange-600 rounded-xl">
                 <ExclamationTriangleIcon className="w-5 h-5" />
             </div>
             <div>
-                <h3 className="text-xl font-bold text-gray-800 dark:text-white tracking-tight">Alertas e pendências críticas</h3>
-                <p className="text-xs text-gray-500 font-semibold mt-1">Ações imediatas necessárias</p>
+                <h3 className="text-xl font-black text-gray-800 dark:text-white tracking-tight leading-none">Alertas e pendências críticas</h3>
+                <p className="text-[11px] text-gray-500 font-bold mt-1.5">Ações imediatas necessárias por departamento</p>
             </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className={`p-4 rounded-xl border-2 transition-all flex items-center gap-4 ${metrics.openPurchaseRequests > 0 ? 'bg-orange-50 dark:bg-orange-900/10 border-orange-200 dark:border-orange-800' : 'bg-gray-50 dark:bg-gray-900/40 border-transparent opacity-60'}`}>
-                <div className={`p-3 rounded-xl ${metrics.openPurchaseRequests > 0 ? 'bg-orange-500 text-white shadow-lg shadow-orange-200' : 'bg-gray-200 text-gray-400'}`}>
+            {/* Suprimentos */}
+            <div className={`p-4 rounded-2xl border-2 transition-all flex items-center gap-4 ${metrics.openPurchaseRequests > 0 ? 'bg-orange-50 dark:bg-orange-900/10 border-orange-200 dark:border-orange-800' : 'bg-gray-50 dark:bg-gray-900/40 border-transparent opacity-60'}`}>
+                <div className={`p-3 rounded-xl flex-shrink-0 ${metrics.openPurchaseRequests > 0 ? 'bg-orange-500 text-white shadow-lg shadow-orange-200' : 'bg-gray-200 text-gray-400'}`}>
                     <ShoppingCartIcon className="w-6 h-6" />
                 </div>
-                <div>
-                    <p className="text-sm font-bold text-gray-500 dark:text-gray-400 leading-tight">Pedidos de compra</p>
+                <div className="overflow-hidden">
+                    <span className="text-[9px] font-bold text-gray-400 block mb-0.5">Suprimentos</span>
+                    <p className="text-sm font-bold text-gray-600 dark:text-gray-400 leading-tight truncate">Pedidos de compra</p>
                     <p className={`text-xl font-black ${metrics.openPurchaseRequests > 0 ? 'text-orange-600 dark:text-orange-400' : 'text-gray-500'}`}>
                         {metrics.openPurchaseRequests} {metrics.openPurchaseRequests === 1 ? 'pendente' : 'pendentes'}
                     </p>
                 </div>
             </div>
 
-            <div className={`p-4 rounded-xl border-2 transition-all flex items-center gap-4 ${metrics.lowStockItems > 0 ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800' : 'bg-gray-50 dark:bg-gray-900/40 border-transparent opacity-60'}`}>
-                <div className={`p-3 rounded-xl ${metrics.lowStockItems > 0 ? 'bg-red-500 text-white shadow-lg shadow-red-200' : 'bg-gray-200 text-gray-400'}`}>
+            {/* Estoque */}
+            <div className={`p-4 rounded-2xl border-2 transition-all flex items-center gap-4 ${metrics.lowStockItems > 0 ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800' : 'bg-gray-50 dark:bg-gray-900/40 border-transparent opacity-60'}`}>
+                <div className={`p-3 rounded-xl flex-shrink-0 ${metrics.lowStockItems > 0 ? 'bg-red-500 text-white shadow-lg shadow-red-200' : 'bg-gray-200 text-gray-400'}`}>
                     <CubeIcon className="w-6 h-6" />
                 </div>
-                <div>
-                    <p className="text-sm font-bold text-gray-500 dark:text-gray-400 leading-tight">Abaixo do mínimo</p>
+                <div className="overflow-hidden">
+                    <span className="text-[9px] font-bold text-gray-400 block mb-0.5">Estoque de Materiais</span>
+                    <p className="text-sm font-bold text-gray-600 dark:text-gray-400 leading-tight truncate">Abaixo do mínimo</p>
                     <p className={`text-xl font-black ${metrics.lowStockItems > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500'}`}>
                         {metrics.lowStockItems} {metrics.lowStockItems === 1 ? 'item' : 'itens'}
                     </p>
                 </div>
             </div>
 
-            <div className={`p-4 rounded-xl border-2 transition-all flex items-center gap-4 ${metrics.salesOpportunities > 0 ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800' : 'bg-gray-50 dark:bg-gray-900/40 border-transparent opacity-60'}`}>
-                <div className={`p-3 rounded-xl ${metrics.salesOpportunities > 0 ? 'bg-amber-500 text-white shadow-lg shadow-amber-200' : 'bg-gray-200 text-gray-400'}`}>
+            {/* Comercial Lavagem */}
+            <div className={`p-4 rounded-2xl border-2 transition-all flex items-center gap-4 ${metrics.salesOpportunities > 0 ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800' : 'bg-gray-50 dark:bg-gray-900/40 border-transparent opacity-60'}`}>
+                <div className={`p-3 rounded-xl flex-shrink-0 ${metrics.salesOpportunities > 0 ? 'bg-amber-500 text-white shadow-lg shadow-amber-200' : 'bg-gray-200 text-gray-400'}`}>
                     <CalendarIcon className="w-6 h-6" />
                 </div>
-                <div>
-                    <p className="text-sm font-bold text-gray-500 dark:text-gray-400 leading-tight">Oportunidade (1 ano)</p>
+                <div className="overflow-hidden">
+                    <span className="text-[9px] font-bold text-gray-400 block mb-0.5">Comercial/Lavagem</span>
+                    <p className="text-sm font-bold text-gray-600 dark:text-gray-400 leading-tight truncate">Oportunidade (1 ano)</p>
                     <p className={`text-xl font-black ${metrics.salesOpportunities > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500'}`}>
                         {metrics.salesOpportunities} {metrics.salesOpportunities === 1 ? 'contato' : 'contatos'}
                     </p>
                 </div>
             </div>
 
-            <div className={`p-4 rounded-xl border-2 transition-all flex items-center gap-4 ${totalWashAlerts > 0 ? (metrics.overdueWashes > 0 ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-800' : 'bg-cyan-50 dark:bg-cyan-900/10 border-cyan-200 dark:border-cyan-800') : 'bg-gray-50 dark:bg-gray-900/40 border-transparent opacity-60'}`}>
-                <div className={`p-3 rounded-xl ${totalWashAlerts > 0 ? (metrics.overdueWashes > 0 ? 'bg-rose-500' : 'bg-cyan-600') : 'bg-gray-200'} text-white shadow-lg`}>
+            {/* Operacional Lavagem */}
+            <div className={`p-4 rounded-2xl border-2 transition-all flex items-center gap-4 ${totalWashAlerts > 0 ? (metrics.overdueWashes > 0 ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-800' : 'bg-cyan-50 dark:bg-cyan-900/10 border-cyan-200 dark:border-cyan-800') : 'bg-gray-50 dark:bg-gray-900/40 border-transparent opacity-60'}`}>
+                <div className={`p-3 rounded-xl flex-shrink-0 ${totalWashAlerts > 0 ? (metrics.overdueWashes > 0 ? 'bg-rose-500' : 'bg-cyan-600') : 'bg-gray-200'} text-white shadow-lg`}>
                     <SparklesIcon className="w-6 h-6" />
                 </div>
-                <div>
-                    <p className="text-sm font-bold text-gray-500 dark:text-gray-400 leading-tight">Próximas lavagens</p>
+                <div className="overflow-hidden">
+                    <span className="text-[9px] font-bold text-gray-400 block mb-0.5">Operacional/Lavagem</span>
+                    <p className="text-sm font-bold text-gray-600 dark:text-gray-400 leading-tight truncate">Próximas lavagens</p>
                     <div className={`text-xl font-black ${totalWashAlerts > 0 ? (metrics.overdueWashes > 0 ? 'text-rose-600' : 'text-cyan-600') : 'text-gray-500'}`}>
-                        {totalWashAlerts} visitas
+                        {totalWashAlerts} {totalWashAlerts === 1 ? 'visita' : 'visitas'}
                     </div>
                     {totalWashAlerts > 0 && (
                         <div className="flex gap-2 mt-0.5">
-                            {metrics.overdueWashes > 0 && <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded animate-pulse">Atrasada</span>}
-                            {metrics.upcomingWashes > 0 && <span className="text-[10px] font-bold text-cyan-700 bg-cyan-50 px-1.5 py-0.5 rounded">Próx. 7 dias</span>}
+                            {metrics.overdueWashes > 0 && <span className="text-[8px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded animate-pulse">Atrasada</span>}
+                            {metrics.upcomingWashes > 0 && <span className="text-[8px] font-black text-cyan-700 bg-cyan-50 px-1.5 py-0.5 rounded">Próx. 7 dias</span>}
                         </div>
                     )}
                 </div>
