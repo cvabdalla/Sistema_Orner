@@ -1,30 +1,31 @@
+
 import React from 'react';
 
 export type Page = 
   | 'DASHBOARD' 
   | 'ORCAMENTO' 
-  | 'RESUMO_VENDAS' 
-  | 'FINANCEIRO_VISAO_GERAL' 
-  | 'FINANCEIRO_CATEGORIAS' 
-  | 'FINANCEIRO_BANCOS'
-  | 'FINANCEIRO_DRE' 
-  | 'RELATORIOS_VISAO_GERAL' 
-  | 'RELATORIOS_NOVO' 
-  | 'RELATORIOS_STATUS' 
-  | 'RELATORIOS_HISTORICO' 
-  | 'RELATORIOS_CONFIG' 
   | 'NOVO_ORCAMENTO'
+  | 'RESUMO_VENDAS'
+  | 'FINANCEIRO_VISAO_GERAL'
+  | 'FINANCEIRO_DRE'
+  | 'FINANCEIRO_CATEGORIAS'
+  | 'FINANCEIRO_BANCOS'
   | 'ESTOQUE_VISAO_GERAL'
   | 'ESTOQUE_NOVO_PRODUTO'
   | 'ESTOQUE_COMPRAS'
   | 'CHECKLIST_CHECKIN'
   | 'CHECKLIST_CHECKOUT'
   | 'CHECKLIST_MANUTENCAO'
-  | 'USUARIOS_GESTAO'
-  | 'USUARIOS_PERFIL'
+  | 'RELATORIOS_VISAO_GERAL'
+  | 'RELATORIOS_NOVO'
+  | 'RELATORIOS_STATUS'
+  | 'RELATORIOS_HISTORICO'
+  | 'RELATORIOS_CONFIG'
   | 'INSTALACOES_CALENDARIO'
   | 'INSTALACOES_CADASTRO'
-  | 'INSTALACOES_LAVAGEM';
+  | 'INSTALACOES_LAVAGEM'
+  | 'USUARIOS_GESTAO'
+  | 'USUARIOS_PERFIL';
 
 export interface User {
     id: string;
@@ -35,62 +36,7 @@ export interface User {
     avatar?: string;
     active: boolean;
     darkMode?: boolean;
-}
-
-export interface LavagemPackage {
-  id: string;
-  owner_id: string;
-  name: string;
-  color: string;
-  wash_qty: number;
-  price_per_plate: number;
-}
-
-export interface LavagemContract {
-  id: string;
-  client_id: string;
-  package_name: string;
-  total_value: number;
-  travel_cost?: number;
-  created_at: string;
-}
-
-export interface LavagemClient {
-  id: string;
-  owner_id: string;
-  package_id?: string;
-  name: string;
-  cep: string;
-  address: string;
-  address_number: string;
-  complement: string;
-  city: string;
-  plates_count: number;
-  phone?: string;
-  observations?: string;
-  created_at?: string;
-  installation_end_date?: string;
-  contract_wash_qty?: number;
-  contract_price_per_plate?: number;
-  package_launch_date?: string;
-  travel_cost?: number;
-}
-
-export interface LavagemRecord {
-  id: string;
-  owner_id: string;
-  client_id: string;
-  date: string;
-  status: 'scheduled' | 'executed' | 'cancelled';
-  notes?: string;
-  created_at?: string;
-}
-
-export interface MenuItem {
-  id: Page | string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  children?: MenuItem[];
+    biometricsEnabled?: boolean;
 }
 
 export interface UserProfile {
@@ -99,56 +45,21 @@ export interface UserProfile {
     permissions: string[];
 }
 
-export type FinancialTransactionStatus = 'pendente' | 'pago' | 'cancelado';
-export type FinancialTransactionType = 'receita' | 'despesa' | 'resultado';
+export interface MenuItem {
+    id: string;
+    label: string;
+    icon: React.FC<{ className?: string }>;
+    children?: MenuItem[];
+}
 
-export interface FinancialCategory {
+export type OrcamentoStatus = 'Em Aberto' | 'Aprovado' | 'Finalizado' | 'Parado' | 'Perdido';
+
+export interface OrcamentoVariant {
     id: string;
     name: string;
-    type: FinancialTransactionType;
-    classification: string;
-    group?: string; 
-    code?: string;
-    showInDre?: boolean;
-    active?: boolean;
-}
-
-export interface FinancialTransaction {
-    id: string;
-    owner_id: string;
-    description: string;
-    amount: number;
-    type: FinancialTransactionType;
-    dueDate: string;
-    paymentDate?: string;
-    categoryId: string;
-    bankId?: string;
-    status: FinancialTransactionStatus;
-    launchDate?: string;
-    cancelReason?: string;
-}
-
-export interface BankAccount {
-    id: string;
-    owner_id: string;
-    accountName: string;
-    bankName: string;
-    bankCode: string;
-    agency: string;
-    accountNumber: string;
-    initialBalance: number;
-    initialBalanceDate: string;
-    active: boolean;
-}
-
-export interface CreditCard {
-    id: string;
-    owner_id: string;
-    name: string;
-    lastDigits: string;
-    closingDay: number;
-    dueDay: number;
-    active: boolean;
+    isPrincipal: boolean;
+    formState: any;
+    calculated: any;
 }
 
 export interface SavedOrcamento {
@@ -156,21 +67,13 @@ export interface SavedOrcamento {
     owner_id: string;
     savedAt: string;
     status: OrcamentoStatus;
-    lavagem_cadastrada?: boolean;
-    variants?: OrcamentoVariant[];
     formState?: any;
     calculated?: any;
+    variants?: OrcamentoVariant[];
+    lavagem_cadastrada?: boolean;
 }
 
-export type OrcamentoStatus = 'Em Aberto' | 'Aprovado' | 'Parado' | 'Perdido' | 'Finalizado';
-
-export interface OrcamentoVariant {
-  id: string;
-  name: string;
-  isPrincipal: boolean;
-  formState: any;
-  calculated: any;
-}
+export type ExpenseReportStatus = 'Rascunho' | 'Transferido' | 'Env. p/ Pagamento' | 'Pago' | 'Cancelado';
 
 export interface ExpenseReportItem {
     id: string;
@@ -188,39 +91,75 @@ export interface ExpenseAttachment {
     data: string;
 }
 
-export type ExpenseReportStatus = 'Rascunho' | 'Transferido' | 'Env. p/ Pagamento' | 'Pago' | 'Cancelado';
-
 export interface ExpenseReport {
     id: string;
     owner_id: string;
     requester: string;
     sector: string;
     period: string;
-    periodStart?: string;
-    periodEnd?: string;
+    periodStart: string;
+    periodEnd: string;
     items: ExpenseReportItem[];
-    attachments?: ExpenseAttachment[];
+    attachments: ExpenseAttachment[];
     kmValueUsed: number;
-    status: ExpenseReportStatus | string;
+    status: ExpenseReportStatus;
     createdAt: string;
     totalValue: number;
     cancelReason?: string;
 }
 
-export interface StockItem {
-    id: string | number;
+export type FinancialTransactionType = 'receita' | 'despesa' | 'resultado';
+
+export interface FinancialCategory {
+    id: string;
+    name: string;
+    type: FinancialTransactionType;
+    classification: string;
+    group: string;
+    showInDre: boolean;
+    active: boolean;
+    code?: string;
+}
+
+export type FinancialTransactionStatus = 'pendente' | 'pago' | 'cancelado';
+
+export interface FinancialTransaction {
+    id: string;
+    owner_id: string;
+    description: string;
+    amount: number;
+    // Fix: Updated to use FinancialTransactionType to support 'resultado' and fix assignability errors
+    type: FinancialTransactionType;
+    dueDate: string;
+    launchDate: string;
+    categoryId: string;
+    bankId?: string;
+    status: FinancialTransactionStatus;
+    paymentDate?: string;
+    cancelReason?: string;
+}
+
+export interface CreditCard {
+    id: string;
     owner_id: string;
     name: string;
-    ncm?: string;
-    quantity: number; 
-    reservedQuantity?: number;
-    minQuantity: number;
-    unit: string;
-    description?: string;
-    image?: string; 
-    averagePrice?: number;
-    isFixedInBudget?: boolean;
-    priceHistory?: PriceHistoryEntry[];
+    lastDigits: string;
+    closingDay: number;
+    dueDay: number;
+    active: boolean;
+}
+
+export interface BankAccount {
+    id: string;
+    owner_id: string;
+    accountName: string;
+    bankName: string;
+    bankCode: string;
+    agency: string;
+    accountNumber: string;
+    initialBalance: number;
+    initialBalanceDate: string;
+    active: boolean;
 }
 
 export interface PriceHistoryEntry {
@@ -228,6 +167,24 @@ export interface PriceHistoryEntry {
     price: number;
     invoiceNumber?: string;
 }
+
+export interface StockItem {
+    id: string | number;
+    owner_id: string;
+    name: string;
+    ncm?: string;
+    quantity: number;
+    reservedQuantity?: number;
+    minQuantity: number;
+    unit: string;
+    description?: string;
+    image?: string;
+    averagePrice: number;
+    isFixedInBudget: boolean;
+    priceHistory?: PriceHistoryEntry[];
+}
+
+export type PurchaseRequestStatus = 'Aberto' | 'Aprovado' | 'Comprado' | 'Em trânsito' | 'Concluído' | 'Cancelado';
 
 export interface PurchaseRequest {
     id: string;
@@ -241,13 +198,11 @@ export interface PurchaseRequest {
     status: PurchaseRequestStatus;
     clientName?: string;
     purchaseLink?: string;
-    purchaseType: 'Reposição' | 'Obra' | 'Avulso';
+    purchaseType?: 'Reposição' | 'Obra' | 'Avulso';
     observation?: string;
     invoiceFile?: string;
     invoiceKey?: string;
 }
-
-export type PurchaseRequestStatus = 'Aberto' | 'Aprovado' | 'Comprado' | 'Em trânsito' | 'Concluído' | 'Cancelado';
 
 export interface StockMovement {
     id: string;
@@ -261,14 +216,14 @@ export interface StockMovement {
 }
 
 export interface ChecklistEntry {
-  id: string;
-  owner_id: string;
-  type: 'checkin' | 'checkout' | 'manutencao';
-  project: string;
-  responsible: string;
-  date: string;
-  status: string;
-  details: any;
+    id: string;
+    owner_id: string;
+    type: 'checkin' | 'checkout' | 'manutencao';
+    project: string;
+    responsible: string;
+    date: string;
+    status: 'Aberto' | 'Efetivado' | 'Finalizado' | 'Perdido';
+    details: any;
 }
 
 export interface SalesSummaryItem {
@@ -280,19 +235,113 @@ export interface SalesSummaryItem {
     closedValue: number;
     systemCost: number;
     supplier: string;
-    visitaTecnica: number;
-    homologation: number;
-    installation: number;
-    travelCost: number;
-    adequationCost: number;
-    materialCost: number;
-    invoicedTax: number;
-    commission: number;
-    bankFees: number;
+    visitaTecnica?: number;
+    homologation?: number;
+    installation?: number;
+    travelCost?: number;
+    adequationCost?: number;
+    materialCost?: number;
+    invoicedTax?: number;
+    commission?: number;
+    bankFees?: number;
     totalCost: number;
     netProfit: number;
     finalMargin: number;
-    status: string;
+    status?: string;
+}
+
+export interface LavagemClient {
+    id: string;
+    owner_id: string;
+    name: string;
+    phone?: string;
+    cep: string;
+    address: string;
+    address_number: string;
+    complement: string;
+    city: string;
+    plates_count: number;
+    observations?: string;
+    installation_end_date?: string;
+    package_id?: string;
+    contract_wash_qty?: number;
+    contract_price_per_plate?: number;
+    package_launch_date?: string;
+    travel_cost?: number;
+}
+
+export interface LavagemPackage {
+    id: string;
+    owner_id: string;
+    name: string;
+    color: string;
+    wash_qty: number;
+    price_per_plate: number;
+}
+
+export interface LavagemRecord {
+    id: string;
+    owner_id: string;
+    client_id: string;
+    date: string;
+    status: 'scheduled' | 'executed';
+    created_at: string;
+}
+
+export interface LavagemContract {
+    id: string;
+    client_id: string;
+    package_name: string;
+    total_value: number;
+    travel_cost: number;
+    created_at: string;
+}
+
+export interface OrcamentoPageProps {
+    setCurrentPage: (page: Page) => void;
+    onEdit: (orcamento: SavedOrcamento) => void;
+    currentUser: User;
+}
+
+export interface FinanceiroPageProps {
+    view: 'dashboard' | 'dre' | 'categorias' | 'bancos';
+    currentUser: User;
+}
+
+export interface RelatoriosPageProps {
+    view: 'analise' | 'reembolso' | 'status' | 'historico' | 'config';
+    reportToEdit: ExpenseReport | null;
+    onSave?: () => void;
+    onEditReport?: (report: ExpenseReport) => void;
+    currentUser: User;
+}
+
+export interface NovoOrcamentoPageProps {
+    setCurrentPage: (page: Page) => void;
+    orcamentoToEdit: SavedOrcamento | null;
+    clearEditingOrcamento: () => void;
+    currentUser: User;
+}
+
+export interface EstoquePageProps {
+    view: 'visao_geral' | 'cadastro' | 'compras';
+    setCurrentPage: (page: Page) => void;
+    currentUser: User;
+    userPermissions: string[];
+}
+
+export interface CheckListPageProps {
+    view: 'checkin' | 'checkout' | 'manutencao';
+    currentUser: User;
+}
+
+export interface UsuariosPageProps {
+    view: 'gestao' | 'perfil';
+    currentUser: User;
+}
+
+export interface InstalacoesPageProps {
+    currentUser: User;
 }
 
 export interface FinancialGroup {
@@ -307,19 +356,19 @@ export interface FinancialClassification {
     type: FinancialTransactionType;
 }
 
+export interface PainelConfig {
+    id: string;
+    linhas: number;
+    modulos: number;
+    orientacao: string;
+}
+
 export interface ActivityCatalogEntry {
     id: string;
     owner_id: string;
     title: string;
     color: string;
     personalSchedule?: boolean;
-}
-
-export interface PainelConfig {
-    id: string;
-    linhas: number;
-    modulos: number;
-    orientacao: string;
 }
 
 export interface ActivityAppointment {
@@ -331,13 +380,13 @@ export interface ActivityAppointment {
     endDate: string;
     startTime?: string;
     endTime?: string;
-    isAllDay: boolean;
+    isAllDay?: boolean;
     cep?: string;
     address: string;
     number?: string;
     complement?: string;
     city?: string;
-    platesCount: number;
+    platesCount?: number;
     panelsConfig?: PainelConfig[];
     arrangement?: string;
     observations?: string;
@@ -353,51 +402,4 @@ export interface AppointmentLogEntry {
     deletedById: string;
     cancelReason: string;
     originalAppointment: ActivityAppointment;
-}
-
-export interface RelatoriosPageProps {
-  view: 'analise' | 'reembolso' | 'status' | 'historico' | 'config';
-  reportToEdit?: ExpenseReport | null;
-  onSave?: () => void;
-  onEditReport?: (report: ExpenseReport) => void;
-  currentUser: User;
-}
-
-export interface FinanceiroPageProps {
-  view: 'dashboard' | 'dre' | 'categorias' | 'bancos';
-  currentUser: User;
-}
-
-export interface NovoOrcamentoPageProps {
-  setCurrentPage: (page: Page) => void;
-  orcamentoToEdit: SavedOrcamento | null;
-  clearEditingOrcamento: () => void;
-  currentUser: User;
-}
-
-export interface OrcamentoPageProps {
-  setCurrentPage: (page: Page) => void;
-  onEdit: (orcamento: SavedOrcamento) => void;
-  currentUser: User;
-}
-
-export interface EstoquePageProps {
-  view: 'visao_geral' | 'cadastro' | 'compras';
-  setCurrentPage: (page: Page) => void;
-  currentUser: User;
-  userPermissions: string[];
-}
-
-export interface CheckListPageProps {
-  view: 'checkin' | 'checkout' | 'manutencao';
-  currentUser: User;
-}
-
-export interface UsuariosPageProps {
-  view: 'gestao' | 'perfil';
-  currentUser: User;
-}
-
-export interface InstalacoesPageProps {
-    currentUser: User;
 }

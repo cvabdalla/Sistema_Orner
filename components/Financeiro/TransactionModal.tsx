@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Modal from '../Modal';
 import { 
@@ -26,14 +27,15 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         const day = String(d.getDate()).padStart(2, '0');
         const todayStr = `${year}-${month}-${day}`;
 
-        const type = transaction?.type || initialType || 'despesa';
+        // Ensure type is narrowed correctly from FinancialTransactionType to match what's expected
+        const type = (transaction?.type || initialType || 'despesa') as FinancialTransactionType;
 
         return {
             id: transaction?.id || Date.now().toString(),
             owner_id: transaction?.owner_id || '',
             description: transaction?.description || '',
             amount: transaction?.amount || 0,
-            type: type as FinancialTransactionType,
+            type: type,
             dueDate: transaction?.dueDate || todayStr,
             launchDate: transaction?.launchDate || todayStr,
             categoryId: transaction?.categoryId || categories.find(c => c.type === type)?.id || '',
@@ -115,8 +117,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
             )}
 
             <div className="flex items-center gap-4 mb-8 bg-indigo-50 dark:bg-indigo-900/20 p-5 rounded-2xl border border-indigo-100 dark:border-indigo-800 shadow-sm">
-                <div className={`p-3.5 rounded-2xl shadow-xl ${formState.type === 'receita' ? 'bg-green-500' : 'bg-red-500'} text-white`}>
-                    {formState.type === 'receita' ? <ArrowUpIcon className="w-6 h-6" /> : <ArrowDownIcon className="w-6 h-6" />}
+                <div className={`p-3.5 rounded-2xl shadow-xl ${formState.type === 'receita' ? 'bg-green-500' : formState.type === 'resultado' ? 'bg-indigo-500' : 'bg-red-500'} text-white`}>
+                    {formState.type === 'receita' ? <ArrowUpIcon className="w-6 h-6" /> : formState.type === 'resultado' ? <TableIcon className="w-6 h-6" /> : <ArrowDownIcon className="w-6 h-6" />}
                 </div>
                 <div>
                     <h4 className="text-sm font-black text-gray-800 dark:text-white leading-none">
@@ -254,6 +256,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                                 >
                                     <option value="receita">Receita (+)</option>
                                     <option value="despesa">Despesa (-)</option>
+                                    <option value="resultado">Resultado (±)</option>
                                 </select>
                                 {(isTypeLocked || isCancelled) && (
                                     <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 bg-indigo-600 text-white px-2.5 py-1 rounded-lg text-[9px] font-black shadow-sm">
