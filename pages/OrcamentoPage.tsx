@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import type { SavedOrcamento, OrcamentoPageProps, OrcamentoStatus, SalesSummaryItem, User, ChecklistEntry, LavagemClient } from '../types';
 import { 
@@ -10,7 +11,6 @@ import { dataService } from '../services/dataService';
 
 const STATUS_OPTIONS: OrcamentoStatus[] = ['Em Aberto', 'Aprovado', 'Finalizado', 'Parado', 'Perdido'];
 
-// Função auxiliar para Sentence Case
 const toSentenceCase = (str: string) => {
     if (!str) return '';
     const clean = str.toLowerCase();
@@ -42,13 +42,18 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
 
   const loadData = async () => {
       setIsLoading(true);
-      const [orcData, userData] = await Promise.all([
-          dataService.getAll<SavedOrcamento>('orcamentos', currentUser.id, isAdminUser),
-          dataService.getAll<User>('system_users', undefined, true)
-      ]);
-      setOrcamentos(orcData);
-      setUsers(userData);
-      setIsLoading(false);
+      try {
+          const [orcData, userData] = await Promise.all([
+              dataService.getAll<SavedOrcamento>('orcamentos', currentUser.id, isAdminUser),
+              dataService.getAll<User>('system_users', undefined, true)
+          ]);
+          setOrcamentos(orcData);
+          setUsers(userData);
+      } catch (e) {
+          console.error("Erro ao carregar dados:", e);
+      } finally {
+          setIsLoading(false);
+      }
   };
 
   useEffect(() => {
@@ -108,82 +113,105 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
 
   const handleStatusChange = async (id: number, newStatus: OrcamentoStatus) => {
       const orcamento = orcamentos.find(o => o.id === id);
-      if (orcamento) {
+      if (!orcamento) return;
+
+      // 1. Feedback visual imediato (Optimistic Update)
+      setOrcamentos(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o));
+
+      try {
+          // 2. Salva o status do orçamento no banco de dados primeiro
+          // Isso garante que mesmo se as automações falharem, o status principal foi trocado
           let updatedOrcamento = { ...orcamento, status: newStatus };
-          
+          await dataService.save('orcamentos', updatedOrcamento);
+
+          // 3. Processa automações em blocos Try/Catch isolados
           if (newStatus === 'Aprovado' || newStatus === 'Finalizado') {
-              const currentSales = await dataService.getAll<SalesSummaryItem>('sales_summary');
-              let variant = orcamento.variants?.find(v => v.isPrincipal) || orcamento.variants?.[0] || { formState: orcamento.formState, calculated: orcamento.calculated };
-              
-              if (variant.formState && variant.calculated) {
-                  const fs = variant.formState;
-                  const calc = variant.calculated;
-                  const thirdPartyInstallation = (fs.terceiroInstalacaoQtd || 0) * (fs.terceiroInstalacaoCusto || 0);
+              // --- Automação Resumo de Vendas ---
+              try {
+                  const currentSales = await dataService.getAll<SalesSummaryItem>('sales_summary');
+                  let variant = orcamento.variants?.find(v => v.isPrincipal) || orcamento.variants?.[0] || { formState: orcamento.formState, calculated: orcamento.calculated };
+                  
+                  if (variant.formState && variant.calculated) {
+                      const fs = variant.formState;
+                      const calc = variant.calculated;
+                      const thirdPartyInstallation = (fs.terceiroInstalacaoQtd || 0) * (fs.terceiroInstalacaoCusto || 0);
 
-                  const saleItem: SalesSummaryItem = {
-                      id: Date.now(),
-                      orcamentoId: orcamento.id,
-                      owner_id: orcamento.owner_id,
-                      clientName: fs.nomeCliente || 'Cliente sem nome',
-                      date: fs.dataOrcamento || orcamento.savedAt.split('T')[0],
-                      closedValue: calc.precoVendaFinal || 0,
-                      systemCost: calc.valorVendaSistema || 0,
-                      supplier: fs.fornecedor || 'N/A',
-                      visitaTecnica: fs.visitaTecnicaCusto || 0,
-                      homologation: fs.projetoHomologacaoCusto || 0,
-                      installation: thirdPartyInstallation,
-                      travelCost: fs.custoViagem || 0,
-                      adequationCost: fs.adequacaoLocalCusto || 0,
-                      materialCost: calc.totalEstrutura || 0,
-                      invoicedTax: calc.nfServicoValor || 0,
-                      commission: calc.comissaoVendasValor || 0,
-                      bankFees: 0,
-                      totalCost: (fs.visitaTecnicaCusto || 0) + (fs.projetoHomologacaoCusto || 0) + thirdPartyInstallation + (fs.custoViagem || 0) + (fs.adequacaoLocalCusto || 0) + (calc.totalEstrutura || 0) + (calc.nfServicoValor || 0) + (calc.comissaoVendasValor || 0),
-                      netProfit: calc.lucroLiquido || 0,
-                      finalMargin: calc.margemLiquida || 0,
-                      status: newStatus
-                  };
+                      const saleItem: SalesSummaryItem = {
+                          id: Date.now(),
+                          orcamentoId: orcamento.id,
+                          owner_id: orcamento.owner_id,
+                          clientName: fs.nomeCliente || 'Cliente sem nome',
+                          date: fs.dataOrcamento || orcamento.savedAt.split('T')[0],
+                          closedValue: calc.precoVendaFinal || 0,
+                          systemCost: calc.valorVendaSistema || 0,
+                          supplier: fs.fornecedor || 'N/A',
+                          visitaTecnica: fs.visitaTecnicaCusto || 0,
+                          homologation: fs.projetoHomologacaoCusto || 0,
+                          installation: thirdPartyInstallation,
+                          travelCost: fs.custoViagem || 0,
+                          adequationCost: fs.adequacaoLocalCusto || 0,
+                          materialCost: calc.totalEstrutura || 0,
+                          invoicedTax: calc.nfServicoValor || 0,
+                          commission: calc.comissaoVendasValor || 0,
+                          bankFees: 0,
+                          totalCost: (fs.visitaTecnicaCusto || 0) + (fs.projetoHomologacaoCusto || 0) + thirdPartyInstallation + (fs.custoViagem || 0) + (fs.adequacaoLocalCusto || 0) + (calc.totalEstrutura || 0) + (calc.nfServicoValor || 0) + (calc.comissaoVendasValor || 0),
+                          netProfit: calc.lucroLiquido || 0,
+                          finalMargin: calc.margemLiquida || 0,
+                          status: newStatus
+                      };
 
-                  const existing = currentSales.find(s => s.orcamentoId === orcamento.id);
-                  if (existing) await dataService.save('sales_summary', { ...saleItem, id: existing.id, status: newStatus });
-                  else await dataService.save('sales_summary', saleItem);
+                      const existing = currentSales.find(s => s.orcamentoId === orcamento.id);
+                      if (existing) await dataService.save('sales_summary', { ...saleItem, id: existing.id, status: newStatus });
+                      else await dataService.save('sales_summary', saleItem);
+                  }
+              } catch (err) {
+                  console.warn("Automação Resumo de Vendas falhou:", err);
+              }
 
-                  // --- Automação Lavagem de Placas ---
-                  if (newStatus === 'Finalizado' && !orcamento.lavagem_cadastrada) {
-                      try {
-                          const checkins = await dataService.getAll<ChecklistEntry>('checklist_checkin');
-                          const techData = checkins.find(c => c.project === fs.nomeCliente)?.details || {};
-                          
-                          const newWashClient: LavagemClient = {
-                              id: `wash-auto-${Date.now()}`,
-                              owner_id: orcamento.owner_id,
-                              name: fs.nomeCliente,
-                              cep: techData.cep || '',
-                              address: techData.enderecoCompleto || '',
-                              address_number: '',
-                              complement: '',
-                              city: techData.cidade || '',
-                              plates_count: (variant.formState?.terceiroInstalacaoQtd) || (calc.placasQtd) || 0,
-                              phone: techData.telefoneTitular || '',
-                              observations: `Importado automaticamente do orçamento finalizado em ${new Date().toLocaleDateString('pt-BR')}.`,
-                              installation_end_date: new Date().toISOString().split('T')[0]
-                          };
-                          
-                          await dataService.save('lavagem_clients', newWashClient);
-                          updatedOrcamento.lavagem_cadastrada = true;
-                      } catch (err) {
-                          console.error("Erro na automação de lavagem:", err);
-                      }
+              // --- Automação Lavagem de Placas (Apenas se finalizado) ---
+              if (newStatus === 'Finalizado' && !orcamento.lavagem_cadastrada) {
+                  try {
+                      let variant = orcamento.variants?.find(v => v.isPrincipal) || orcamento.variants?.[0] || { formState: orcamento.formState, calculated: orcamento.calculated };
+                      const fs = variant.formState;
+                      
+                      const newWashClient: LavagemClient = {
+                          id: `wash-auto-${Date.now()}`,
+                          owner_id: orcamento.owner_id,
+                          name: fs.nomeCliente,
+                          cep: fs.cep || '',
+                          address: fs.enderecoCompleto || '',
+                          address_number: '',
+                          complement: '',
+                          city: fs.cidade || '',
+                          plates_count: (fs.terceiroInstalacaoQtd) || (variant.calculated?.placasQtd) || 0,
+                          phone: fs.telefoneTitular || '',
+                          observations: `Importado automaticamente em ${new Date().toLocaleDateString('pt-BR')}.`,
+                          installation_end_date: new Date().toISOString().split('T')[0]
+                      };
+                      
+                      await dataService.save('lavagem_clients', newWashClient);
+                      updatedOrcamento.lavagem_cadastrada = true;
+                      // Salva a flag de lavagem no orçamento
+                      await dataService.save('orcamentos', updatedOrcamento);
+                      setOrcamentos(prev => prev.map(o => o.id === id ? updatedOrcamento : o));
+                  } catch (err) {
+                      console.warn("Automação Lavagem falhou:", err);
                   }
               }
           } else {
-              const currentSales = await dataService.getAll<SalesSummaryItem>('sales_summary');
-              const saleToRemove = currentSales.find(s => s.orcamentoId === id);
-              if (saleToRemove) await dataService.delete('sales_summary', saleToRemove.id);
+              // Remove do resumo de vendas se o status mudar de Aprovado para outro
+              try {
+                  const currentSales = await dataService.getAll<SalesSummaryItem>('sales_summary');
+                  const saleToRemove = currentSales.find(s => s.orcamentoId === id);
+                  if (saleToRemove) await dataService.delete('sales_summary', saleToRemove.id);
+              } catch (err) {
+                  console.warn("Erro ao remover do Resumo de Vendas:", err);
+              }
           }
-
-          setOrcamentos(p => p.map(o => o.id === id ? updatedOrcamento : o));
-          await dataService.save('orcamentos', updatedOrcamento);
+      } catch (e) {
+          console.error("Erro crítico ao trocar status:", e);
+          alert("Erro ao salvar no banco. Verifique se as tabelas existem.");
+          loadData(); // Reverte para os dados do servidor
       }
   };
 

@@ -92,21 +92,6 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
   }, [currentUser, isAdmin]);
 
   const loadConfig = useCallback(async () => {
-      // Carregamento híbrido: primeiro localStorage para rapidez, depois banco para precisão
-      const storedKm = localStorage.getItem('config_km_value');
-      const storedInst = localStorage.getItem('config_installation_value');
-      
-      if (storedKm) {
-          const val = parseFloat(storedKm);
-          setConfigKmValue(val);
-          setValorPorKm(val);
-      }
-      if (storedInst) {
-          const val = parseFloat(storedInst);
-          setConfigInstValue(val);
-      }
-
-      // Sincronização com o Banco de Dados (Supabase) - Torna as configs permanentes e globais
       try {
           const remoteConfigs = await dataService.getAll<any>('system_configs', undefined, true);
           const remoteKm = remoteConfigs.find(c => c.id === 'km_value');
@@ -116,12 +101,10 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
               const val = parseFloat(remoteKm.value);
               setConfigKmValue(val);
               setValorPorKm(val);
-              localStorage.setItem('config_km_value', val.toString());
           }
           if (remoteInst) {
               const val = parseFloat(remoteInst.value);
               setConfigInstValue(val);
-              localStorage.setItem('config_installation_value', val.toString());
           }
       } catch (e) {
           console.error("Erro ao sincronizar configurações remotas:", e);
@@ -262,8 +245,10 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
         setModalMessage("Reembolso efetivado com sucesso! Agora disponível para análise.");
         setSuccessModalOpen(true);
         await loadReports();
-    } catch (e) { console.error(e); }
-    finally { 
+    } catch (e: any) { 
+        console.error(e); 
+        alert("Erro ao salvar no banco de dados. Verifique a conexão.");
+    } finally { 
         setIsLoading(false); 
         setIsConfirmEfetivarHistoricoModal(false);
         setReportInAction(null);
@@ -305,8 +290,14 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
         setModalMessage("Reembolso efetivado! Transação criada em 'Contas a Pagar' com vencimento em 7 dias.");
         setSuccessModalOpen(true);
         await loadReports();
-    } catch (e) { console.error(e); alert("Erro ao processar efetivação financeira."); } 
-    finally { setIsLoading(false); setIsConfirmEfetivarStatusModal(false); setReportInAction(null); }
+    } catch (e: any) { 
+        console.error(e); 
+        alert("Erro ao processar transação financeira."); 
+    } finally { 
+        setIsLoading(false); 
+        setIsConfirmEfetivarStatusModal(false); 
+        setReportInAction(null); 
+    }
   };
 
   const handleCancelarStatus = async () => {
@@ -326,8 +317,15 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
           setModalMessage("Reembolso cancelado com sucesso.");
           setSuccessModalOpen(true);
           await loadReports();
-      } catch (e) { console.error(e); }
-      finally { setIsLoading(false); setIsCancelModalOpen(false); setReportInAction(null); setCancelReason(''); }
+      } catch (e: any) { 
+          console.error(e); 
+          alert("Erro ao cancelar relatório.");
+      } finally { 
+          setIsLoading(false); 
+          setIsCancelModalOpen(false); 
+          setReportInAction(null); 
+          setCancelReason(''); 
+      }
   };
 
   const handleSuccessModalClose = () => {
@@ -355,25 +353,23 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
   const handleSaveKmConfig = async () => {
       setIsLoading(true);
       try {
-          localStorage.setItem('config_km_value', configKmValue.toString());
           await dataService.save('system_configs', { id: 'km_value', value: configKmValue.toString() });
           setValorPorKm(configKmValue);
           setIsEditingKm(false);
-          alert('Configuração de km salva no banco de dados!');
-      } catch (e) {
-          alert('Erro ao salvar configuração no banco. O valor foi mantido localmente.');
+          alert('Configuração salva com sucesso!');
+      } catch (e: any) {
+          alert('Erro ao salvar configuração.');
       } finally { setIsLoading(false); }
   };
 
   const handleSaveInstConfig = async () => {
       setIsLoading(true);
       try {
-          localStorage.setItem('config_installation_value', configInstValue.toString());
           await dataService.save('system_configs', { id: 'installation_value', value: configInstValue.toString() });
           setIsEditingInst(false);
-          alert('Configuração de instalação salva no banco de dados!');
-      } catch (e) {
-          alert('Erro ao salvar configuração no banco. O valor foi mantido localmente.');
+          alert('Configuração salva com sucesso!');
+      } catch (e: any) {
+          alert('Erro ao salvar configuração.');
       } finally { setIsLoading(false); }
   };
 
@@ -535,37 +531,30 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                                     <button 
                                         onClick={handleSaveKmConfig} 
                                         disabled={isLoading}
-                                        className="text-[11px] font-black text-white bg-indigo-600 hover:bg-indigo-700 transition-colors px-3 py-1 rounded-lg shadow-sm"
+                                        className="text-[11px] font-black text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1 rounded-lg"
                                     >
                                         {isLoading ? '...' : 'Salvar'}
                                     </button>
                                 ) : (
                                     <button 
                                         onClick={() => setIsEditingKm(true)} 
-                                        className="text-[11px] font-black text-indigo-600 hover:text-indigo-700 transition-colors bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1 rounded-lg"
+                                        className="text-[11px] font-black text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-3 py-1 rounded-lg"
                                     >
                                         Editar
                                     </button>
                                 )}
                             </div>
                             <div className="relative mt-2">
-                                <span className={`absolute left-4 top-1/2 -translate-y-1/2 font-black text-sm transition-colors ${isEditingKm ? 'text-indigo-600' : 'text-gray-400'}`}>R$</span>
+                                <span className={`absolute left-4 top-1/2 -translate-y-1/2 font-black text-sm ${isEditingKm ? 'text-indigo-600' : 'text-gray-400'}`}>R$</span>
                                 <input 
                                     type="number" 
                                     step="0.01" 
                                     disabled={!isEditingKm || isLoading}
                                     value={configKmValue} 
                                     onChange={(e) => setConfigKmValue(parseFloat(e.target.value) || 0)} 
-                                    className={`w-full border-2 rounded-xl py-3.5 pl-11 pr-4 text-sm font-black outline-none transition-all shadow-sm ${
-                                        isEditingKm 
-                                        ? 'bg-white dark:bg-gray-900 border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 text-indigo-700 dark:text-indigo-400' 
-                                        : 'bg-gray-100 dark:bg-gray-800 border-transparent text-gray-500 cursor-not-allowed opacity-80'
-                                    }`}
+                                    className={`w-full border-2 rounded-xl py-3.5 pl-11 pr-4 text-sm font-black outline-none transition-all ${isEditingKm ? 'bg-white dark:bg-gray-900 border-indigo-500 text-indigo-700' : 'bg-gray-100 text-gray-500 cursor-not-allowed'}`}
                                 />
                             </div>
-                            <p className="text-[10px] text-gray-400 font-bold mt-3 px-1 leading-relaxed">
-                                Este valor será utilizado automaticamente na criação de novos relatórios de reembolso de combustível.
-                            </p>
                         </div>
                     </div>
 
@@ -578,37 +567,30 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                                     <button 
                                         onClick={handleSaveInstConfig} 
                                         disabled={isLoading}
-                                        className="text-[11px] font-black text-white bg-indigo-600 hover:bg-indigo-700 transition-colors px-3 py-1 rounded-lg shadow-sm"
+                                        className="text-[11px] font-black text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1 rounded-lg"
                                     >
                                         {isLoading ? '...' : 'Salvar'}
                                     </button>
                                 ) : (
                                     <button 
                                         onClick={() => setIsEditingInst(true)} 
-                                        className="text-[11px] font-black text-green-600 hover:text-green-700 transition-colors bg-green-50 dark:bg-indigo-900/30 px-3 py-1 rounded-lg"
+                                        className="text-[11px] font-black text-green-600 hover:text-green-700 bg-green-50 px-3 py-1 rounded-lg"
                                     >
                                         Editar
                                     </button>
                                 )}
                             </div>
                             <div className="relative mt-2">
-                                <span className={`absolute left-4 top-1/2 -translate-y-1/2 font-black text-sm transition-colors ${isEditingInst ? 'text-green-600' : 'text-gray-400'}`}>R$</span>
+                                <span className={`absolute left-4 top-1/2 -translate-y-1/2 font-black text-sm ${isEditingInst ? 'text-green-600' : 'text-gray-400'}`}>R$</span>
                                 <input 
                                     type="number" 
                                     step="0.01" 
                                     disabled={!isEditingInst || isLoading}
                                     value={configInstValue} 
                                     onChange={(e) => setConfigInstValue(parseFloat(e.target.value) || 0)} 
-                                    className={`w-full border-2 rounded-xl py-3.5 pl-11 pr-4 text-sm font-black outline-none transition-all shadow-sm ${
-                                        isEditingInst 
-                                        ? 'bg-white dark:bg-gray-900 border-green-500 focus:ring-4 focus:ring-green-500/10 text-green-700 dark:text-green-400' 
-                                        : 'bg-gray-100 dark:bg-gray-800 border-transparent text-gray-500 cursor-not-allowed opacity-80'
-                                    }`}
+                                    className={`w-full border-2 rounded-xl py-3.5 pl-11 pr-4 text-sm font-black outline-none transition-all ${isEditingInst ? 'bg-white dark:bg-gray-900 border-green-500 text-green-700' : 'bg-gray-100 text-gray-500 cursor-not-allowed'}`}
                                 />
                             </div>
-                            <p className="text-[10px] text-gray-400 font-bold mt-3 px-1 leading-relaxed">
-                                Custo padrão sugerido por módulo instalado. Pode ser alterado individualmente em cada orçamento.
-                            </p>
                         </div>
                     </div>
                 </div>
@@ -626,9 +608,6 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
               </div>
               <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm"><div className="max-w-xs"><FormLabel>Filtrar por status</FormLabel><div className="relative"><select value={statusFilterValue} onChange={(e) => setStatusFilterValue(e.target.value as any)} className="w-full bg-gray-50 dark:bg-gray-900 border-none rounded-lg px-3 py-2 text-xs font-bold text-gray-700 dark:text-gray-200 outline-none focus:ring-2 focus:ring-indigo-500/20 appearance-none shadow-sm cursor-pointer"><option value="Todos">Todos os status</option><option value="Rascunho">Rascunho</option><option value="Transferido">Transferido</option><option value="Env. p/ Pagamento">Env. p/ Pagamento</option><option value="Pago">Pago</option><option value="Cancelado">Cancelado</option></select><div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-40"><ChevronDownIcon className="w-4 h-4" /></div></div></div></div>
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 overflow-hidden"><div className="overflow-x-auto"><table className="w-full text-left"><thead className="bg-gray-50/50 dark:bg-gray-900/40 text-[10px] font-black text-gray-400 tracking-tight border-b dark:border-gray-700"><tr><th className="px-6 py-4">Data</th><th className="px-6 py-4">Solicitante</th><th className="px-6 py-4 text-right">Valor total</th><th className="px-6 py-4 text-center">Status</th><th className="px-6 py-4 text-center w-48">Ações</th></tr></thead><tbody className="divide-y divide-gray-100 dark:divide-gray-700">{listReports.map((report) => { const canEdit = report.status === 'Rascunho'; const canEffectuateHistory = report.status === 'Rascunho'; const canEffectuateStatus = view === 'status' && report.status === 'Transferido' && isAdmin; const canCancelStatus = view === 'status' && report.status === 'Transferido' && isAdmin; return (<tr key={report.id} className="hover:bg-indigo-50/30 dark:hover:bg-indigo-900/10 transition-colors"><td className="px-6 py-4 text-[11px] font-bold text-gray-600 dark:text-gray-400">{new Date(report.createdAt).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td><td className="px-6 py-4 text-xs font-black text-gray-800 dark:text-white">{report.requester}</td><td className="px-6 py-4 text-right text-xs font-black text-indigo-600 dark:text-indigo-400">{formatCurrency(report.totalValue)}</td><td className="px-6 py-4 text-center"><span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black tracking-tighter ${report.status === 'Pago' ? 'bg-green-100 text-green-700' : report.status === 'Transferido' ? 'bg-blue-100 text-blue-700' : report.status === 'Env. p/ Pagamento' ? 'bg-orange-100 text-orange-700' : report.status === 'Cancelado' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{report.status}</span></td><td className="px-6 py-4 text-center"><div className="flex justify-center gap-1.5 transition-opacity"><button onClick={() => onEditReport?.(report)} className={`p-1.5 rounded-lg ${canEdit ? 'text-indigo-500 hover:bg-indigo-50' : 'text-blue-500 hover:bg-blue-50'}`} title={canEdit ? "Alterar" : "Visualizar"}>{canEdit ? <EditIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}</button>{view === 'historico' && canEffectuateHistory && (<button onClick={() => { setReportInAction(report); setIsConfirmEfetivarHistoricoModal(true); }} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg" title="Efetivar reembolso"><CheckCircleIcon className="w-4 h-4" /></button>)}{canEffectuateStatus && (<button onClick={() => { setReportInAction(report); setIsConfirmEfetivarStatusModal(true); }} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg" title="Aprovar p/ Pagamento"><CheckCircleIcon className="w-4 h-4" /></button>)}{canCancelStatus && (<button onClick={() => { setReportInAction(report); setIsCancelModalOpen(true); }} className="p-1.5 text-red-600 hover:bg-green-50 rounded-lg" title="Cancelar reembolso"><XCircleIcon className="w-5 h-5" /></button>)}</div></td></tr>);})}</tbody></table></div></div>
-              {isConfirmEfetivarHistoricoModal && (<Modal title="Confirmar efetivação" onClose={() => setIsConfirmEfetivarHistoricoModal(false)}><div className="text-center p-4 space-y-4"><CheckCircleIcon className="w-12 h-12 text-green-500 mx-auto" /><h3 className="text-sm font-bold text-gray-800">Deseja efetivar o Reembolso?</h3><p className="text-[10px] text-gray-500">Ao efetivar, o status mudará para 'Transferido' e a edição será bloqueada.</p><div className="flex gap-3 mt-4"><button onClick={() => setIsConfirmEfetivarHistoricoModal(false)} className="flex-1 py-2 bg-gray-100 rounded-lg text-xs font-bold">Não</button><button onClick={handleEfetivarHistorico} className="flex-1 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold">Sim</button></div></div></Modal>)}
-              {isConfirmEfetivarStatusModal && (<Modal title="Aprovar para Pagamento" onClose={() => setIsConfirmEfetivarStatusModal(false)}><div className="text-center p-4 space-y-4"><DollarIcon className="w-12 h-12 text-indigo-600 mx-auto" /><h3 className="text-sm font-bold text-gray-800">Deseja efetivar o Reembolso?</h3><p className="text-[10px] text-gray-500">Esta ação criará um lançamento no Financeiro para pagamento em 7 dias.</p><div className="flex gap-3 mt-4"><button onClick={() => setIsConfirmEfetivarStatusModal(false)} className="flex-1 py-2 bg-gray-100 rounded-lg text-xs font-bold">Não</button><button onClick={handleEfetivarStatus} className="flex-1 py-2 bg-green-600 text-white rounded-lg text-xs font-bold">Sim</button></div></div></Modal>)}
-              {isCancelModalOpen && (<Modal title="Cancelar Reembolso" onClose={() => setIsCancelModalOpen(false)}><div className="space-y-4"><div><FormLabel>Motivo do cancelamento *</FormLabel><textarea value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} className="w-full rounded-lg border-gray-200 bg-gray-50 p-3 text-xs font-bold outline-none focus:ring-2 focus:ring-red-500/20" placeholder="Explique o motivo..." rows={4} /></div><div className="flex gap-3"><button onClick={() => setIsCancelModalOpen(false)} className="flex-1 py-2 bg-gray-100 rounded-lg text-xs font-bold">Voltar</button><button onClick={handleCancelarStatus} className="flex-1 py-2 bg-red-600 text-white rounded-lg text-xs font-bold shadow-lg shadow-red-200">Confirmar cancelamento</button></div></div></Modal>)}
           </div>
       );
     }
@@ -651,34 +630,76 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
 
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200 dark:shadow-none"><DocumentReportIcon className="w-6 h-6 text-white" /></div>
+              <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg"><DocumentReportIcon className="w-6 h-6 text-white" /></div>
               <div><h1 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">{isReadOnly ? 'Visualizar reembolso' : reportToEdit ? 'Alterar reembolso' : 'Novo reembolso'}</h1><div className="flex items-center gap-2 mt-0.5">{reportToEdit?.status && (<span className={`px-2 py-0.5 rounded-md text-[9px] font-black ${reportToEdit.status === 'Pago' ? 'bg-green-100 text-green-700' : reportToEdit.status === 'Transferido' ? 'bg-blue-100 text-blue-700' : reportToEdit.status === 'Env. p/ Pagamento' ? 'bg-orange-100 text-orange-700' : reportToEdit.status === 'Cancelado' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{reportToEdit.status}</span>)}<span className="text-[10px] text-gray-400 font-bold tracking-tight">Controle de despesas</span></div></div>
             </div>
             {!isReadOnly && (
               <div className="flex gap-2 w-full md:w-auto">
+                <button onClick={async () => { 
+                  if (!solicitante || !periodStart || !periodEnd) { alert("Preencha solicitante e período."); return; } 
+                  setIsLoading(true);
+                  try {
+                    const itemsList = items
+                        .filter(i => i.date || i.description) // Filtra linhas vazias
+                        .map(i => ({...i, id: i.id || String(Math.random())}));
+                    
+                    if (!validateItemsDates(itemsList)) { setIsLoading(false); return; }
+                    
+                    const report: ExpenseReport = { 
+                        id: reportToEdit?.id || String(Date.now()), 
+                        owner_id: reportToEdit?.owner_id || currentUser.id, 
+                        requester: solicitante, sector: setor, 
+                        period: `${periodStart} a ${periodEnd}`, 
+                        periodStart, periodEnd, items: itemsList, 
+                        attachments, kmValueUsed: valorPorKm, 
+                        status: 'Rascunho', 
+                        createdAt: reportToEdit?.createdAt || new Date().toISOString(), 
+                        totalValue: itemsList.reduce((acc, item) => acc + (Math.ceil(((item.km || 0) * valorPorKm) * 100) / 100) + (item.toll || 0) + (item.food || 0) + (item.components || 0) + (item.others || 0), 0)
+                    }; 
+                    
+                    await dataService.save('expense_reports', report); 
+                    setModalMessage("Rascunho salvo com sucesso."); 
+                    setSuccessModalOpen(true); 
+                    await loadReports(); 
+                  } catch (e: any) { 
+                      alert("Erro ao salvar rascunho: " + (e.message || "Erro de conexão")); 
+                  } finally { setIsLoading(false); }
+                }} className="flex-1 md:flex-none px-6 py-2.5 bg-white dark:bg-gray-800 text-gray-600 border border-gray-200 rounded-xl font-bold text-xs">Salvar rascunho</button>
+                
                 <button onClick={() => { 
                   if (!solicitante || !periodStart || !periodEnd) { alert("Preencha solicitante e período."); return; } 
-                  const itemsList = items.map(i => ({...i, id: i.id || String(Math.random())}));
-                  if (!validateItemsDates(itemsList)) return;
-                  const report: ExpenseReport = { id: reportToEdit?.id || `exp-${Date.now()}`, owner_id: reportToEdit?.owner_id || currentUser.id, requester: solicitante, sector: setor, period: `${periodStart} a ${periodEnd}`, periodStart, periodEnd, items: itemsList, attachments, kmValueUsed: valorPorKm, status: 'Rascunho', createdAt: reportToEdit?.createdAt || new Date().toISOString(), totalValue: (itemsList || []).reduce((acc, item) => acc + (Math.ceil(((item.km || 0) * valorPorKm) * 100) / 100) + (item.toll || 0) + (item.food || 0) + (item.components || 0) + (item.others || 0), 0)}; dataService.save('expense_reports', report).then(() => { setModalMessage("Rascunho salvo com sucesso."); setSuccessModalOpen(true); loadReports(); }); 
-                }} className="flex-1 md:flex-none px-6 py-2.5 bg-white dark:bg-gray-800 text-gray-600 border border-gray-200 rounded-xl font-bold text-xs shadow-sm">Salvar rascunho</button>
-                <button onClick={() => { 
-                  if (!solicitante || !periodStart || !periodEnd) { alert("Preencha solicitante e período."); return; } 
-                  const itemsList = items.map(i => ({...i, id: i.id || String(Math.random())})); 
+                  const itemsList = items
+                    .filter(i => i.date || i.description)
+                    .map(i => ({...i, id: i.id || String(Math.random())})); 
+                  
                   if (!validateItemsDates(itemsList)) return; 
-                  setReportInAction({ id: reportToEdit?.id || `exp-${Date.now()}`, owner_id: reportToEdit?.owner_id || currentUser.id, requester: solicitante, sector: setor, period: `${periodStart} a ${periodEnd}`, periodStart, periodEnd, items: itemsList, attachments, kmValueUsed: valorPorKm, status: 'Rascunho', createdAt: reportToEdit?.createdAt || new Date().toISOString(), totalValue: (itemsList || []).reduce((acc, item) => acc + (Math.ceil(((item.km || 0) * valorPorKm) * 100) / 100) + (item.toll || 0) + (item.food || 0) + (item.components || 0) + (item.others || 0), 0)}); setIsConfirmEfetivarHistoricoModal(true); 
+                  
+                  setReportInAction({ 
+                      id: reportToEdit?.id || String(Date.now()), 
+                      owner_id: reportToEdit?.owner_id || currentUser.id, 
+                      requester: solicitante, sector: setor, 
+                      period: `${periodStart} a ${periodEnd}`, 
+                      periodStart, periodEnd, items: itemsList, 
+                      attachments, kmValueUsed: valorPorKm, 
+                      status: 'Rascunho', 
+                      createdAt: reportToEdit?.createdAt || new Date().toISOString(), 
+                      totalValue: itemsList.reduce((acc, item) => acc + (Math.ceil(((item.km || 0) * valorPorKm) * 100) / 100) + (item.toll || 0) + (item.food || 0) + (item.components || 0) + (item.others || 0), 0)
+                  }); 
+                  setIsConfirmEfetivarHistoricoModal(true); 
                 }} className="flex-1 md:flex-none px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-xs shadow-lg hover:bg-indigo-700 flex items-center justify-center gap-2"><CheckCircleIcon className="w-4 h-4" /> Efetivar reembolso</button>
               </div>
             )}
           </div>
+          
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
             <SectionTitle><span className="text-[11px] font-black text-gray-400 mr-1">01.</span> Dados do solicitante</SectionTitle>
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
               <div className="md:col-span-4"><FormLabel>Solicitante</FormLabel><div className="flex items-center gap-3 p-2 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-100"><div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-black text-[10px]">{solicitante.substring(0, 1).toUpperCase()}</div><span className="text-xs font-black text-gray-700 dark:text-gray-200">{solicitante}</span></div></div>
-              <div className="md:col-span-4"><FormLabel>Setor / obra</FormLabel><input className={`w-full rounded-lg border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 text-xs font-bold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all disabled:bg-gray-50 dark:disabled:bg-gray-900/50 disabled:text-gray-400`} value={setor} onChange={(e:any) => setSetor(e.target.value)} disabled={isReadOnly} placeholder="Ex: Obra Centro SP" /></div>
-              <div className="md:col-span-4"><FormLabel>Período de referência</FormLabel><div className="flex items-center gap-2"><input className={`w-full rounded-lg border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 text-xs font-bold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all disabled:bg-gray-50 dark:disabled:bg-gray-900/50 disabled:text-gray-400`} type="date" value={periodStart} onChange={(e:any) => setPeriodStart(e.target.value)} disabled={isReadOnly} /><span className="text-gray-300 font-bold">-</span><input className={`w-full rounded-lg border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 text-xs font-bold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all disabled:bg-gray-50 dark:disabled:bg-gray-900/50 disabled:text-gray-400`} type="date" value={periodEnd} onChange={(e:any) => setPeriodEnd(e.target.value)} disabled={isReadOnly} /></div></div>
+              <div className="md:col-span-4"><FormLabel>Setor / obra</FormLabel><input className={`w-full rounded-lg border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2.5 text-xs font-bold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all disabled:bg-gray-50 dark:disabled:bg-gray-900/50 disabled:text-gray-400`} value={setor} onChange={(e:any) => setSetor(e.target.value)} disabled={isReadOnly} placeholder="Ex: Obra Centro SP" /></div>
+              <div className="md:col-span-4"><FormLabel>Período de referência</FormLabel><div className="flex items-center gap-2"><input className={`w-full rounded-lg border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2.5 text-xs font-bold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all disabled:bg-gray-50 dark:disabled:bg-gray-900/50 disabled:text-gray-400`} type="date" value={periodStart} onChange={(e:any) => setPeriodStart(e.target.value)} disabled={isReadOnly} /><span className="text-gray-300 font-bold">-</span><input className={`w-full rounded-lg border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2.5 text-xs font-bold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 transition-all disabled:bg-gray-50 dark:disabled:bg-gray-900/50 disabled:text-gray-400`} type="date" value={periodEnd} onChange={(e:any) => setPeriodEnd(e.target.value)} disabled={isReadOnly} /></div></div>
             </div>
           </div>
+
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
             <div className="p-5 border-b border-gray-50 dark:bg-gray-800/50 flex justify-between items-center"><h3 className="text-xs font-black text-gray-800 dark:text-white flex items-center gap-2 tracking-tight"><TableIcon className="w-4 h-4 text-indigo-600" /> Detalhamento de gastos</h3><div className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-[9px] font-black border border-indigo-100">Custo km: R$ {valorPorKm.toFixed(2)}</div></div>
             <div className="overflow-x-auto">
@@ -704,57 +725,58 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
             </div>
             {!isReadOnly && (<div className="p-4 bg-gray-50/30"><button onClick={() => setItems([...items, { id: Date.now().toString(), date: '', description: '', km: 0, toll: 0, food: 0, components: 0, others: 0 }])} className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-100 text-gray-400 hover:text-indigo-600 hover:border-indigo-100 transition-all rounded-xl font-black text-[10px] tracking-tight"><PlusIcon className="w-4 h-4" /> Adicionar linha de gasto</button></div>)}
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6"><div className="lg:col-span-7 bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-700"><SectionTitle color="bg-amber-500"><span className="text-[11px] font-black text-gray-400 mr-1">02.</span> Comprovantes e anexos</SectionTitle><div className="grid grid-cols-3 sm:grid-cols-4 gap-3">{attachments.map((file, idx) => { const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.data.startsWith('data:application/pdf'); return (
-            <div key={idx} className="group relative aspect-square bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden shadow-sm flex items-center justify-center">
-                {isPdf ? (
-                    <div className="flex flex-col items-center gap-1 p-2 text-center">
-                        <div className="p-2 bg-red-100 dark:bg-red-900/40 rounded-lg text-red-600 dark:text-red-400">
-                            <DocumentReportIcon className="w-8 h-8" />
-                        </div>
-                        <span className="text-[8px] font-black text-gray-500 dark:text-gray-400 truncate max-w-full px-1">{file.name}</span>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="lg:col-span-7 bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
+                <SectionTitle color="bg-amber-500"><span className="text-[11px] font-black text-gray-400 mr-1">02.</span> Comprovantes e anexos</SectionTitle>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                    {attachments.map((file, idx) => { 
+                        const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.data.startsWith('data:application/pdf'); 
+                        return (
+                            <div key={idx} className="group relative aspect-square bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden shadow-sm flex items-center justify-center">
+                                {isPdf ? (
+                                    <div className="flex flex-col items-center gap-1 p-2 text-center">
+                                        <div className="p-2 bg-red-100 dark:bg-red-900/40 rounded-lg text-red-600 dark:text-red-400">
+                                            <DocumentReportIcon className="w-8 h-8" />
+                                        </div>
+                                        <span className="text-[8px] font-black text-gray-500 dark:text-gray-400 truncate max-w-full px-1">{file.name}</span>
+                                    </div>
+                                ) : (
+                                    <img src={file.data} className="w-full h-full object-cover transition-transform group-hover:scale-110" alt={file.name} />
+                                )}
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                    <button onClick={() => handleViewFile(file)} className="p-1.5 bg-white text-gray-900 rounded-full shadow-lg hover:scale-110 transition-transform">
+                                        <EyeIcon className="w-4 h-4" />
+                                    </button>
+                                    {!isReadOnly && <button onClick={() => setAttachments(p => p.filter((_, i) => i !== idx))} className="p-1.5 bg-red-600 text-white rounded-full shadow-lg hover:scale-110 transition-transform">
+                                        <TrashIcon className="w-4 h-4" />
+                                    </button>}
+                                </div>
+                            </div>
+                        );
+                    })}
+                    {!isReadOnly && (
+                        <button onClick={() => attachmentInputRef.current?.click()} className="aspect-square flex flex-col items-center justify-center border-2 border-dashed border-indigo-100 rounded-xl text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all">
+                            <UploadIcon className="w-6 h-6 mb-1" />
+                            <span className="text-[9px] font-black tracking-tighter">Anexar</span>
+                        </button>
+                    )}
+                </div>
+                <input type="file" multiple className="hidden" ref={attachmentInputRef} accept="image/*,application/pdf" onChange={e => { const files = e.target.files; if (!files) return; const filesArray = Array.from(files) as File[]; filesArray.forEach(file => { const reader = new FileReader(); reader.onload = (ev) => { const result = ev.target?.result; if (typeof result === 'string') { setAttachments(prev => [...prev, { name: file.name, data: result }]); } }; reader.readAsDataURL(file); }); e.target.value = ''; }} />
+            </div>
+            <div className="lg:col-span-5">
+                <div className="bg-indigo-600 rounded-xl p-6 text-white shadow-xl shadow-indigo-100 dark:shadow-none sticky top-6">
+                    <h3 className="text-sm font-black mb-6 flex items-center gap-2 tracking-tight opacity-80"><DollarIcon className="w-4 h-4" /> Resumo financeiro</h3>
+                    <div className="space-y-3.5 mb-6">
+                        {[{ label: "Total em Km", val: (items || []).reduce((acc, item) => acc + (Math.ceil(((item.km || 0) * valorPorKm) * 100) / 100), 0) }, { label: "Total em Pedágios", val: (items || []).reduce((acc, item) => acc + (item.toll || 0), 0) }, { label: "Total Alimentação", val: (items || []).reduce((acc, item) => acc + (item.food || 0), 0) }, { label: "Compra de Componentes", val: (items || []).reduce((acc, item) => acc + (item.components || 0), 0) }, { label: "Outros Custos", val: (items || []).reduce((acc, item) => acc + (item.others || 0), 0) }].map(row => (<div key={row.label} className="flex justify-between items-center text-[11px] font-medium border-b border-white/10 pb-2.5 last:border-0 last:pb-0"><span className="opacity-70">{row.label}</span><span className="font-black tracking-tight">{formatCurrency(row.val)}</span></div>))}
                     </div>
-                ) : (
-                    <img src={file.data} className="w-full h-full object-cover transition-transform group-hover:scale-110" alt={file.name} />
-                )}
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                    <button onClick={() => handleViewFile(file)} className="p-1.5 bg-white text-gray-900 rounded-full shadow-lg hover:scale-110 transition-transform">
-                        <EyeIcon className="w-4 h-4" />
-                    </button>
-                    {!isReadOnly && <button onClick={() => setAttachments(p => p.filter((_, i) => i !== idx))} className="p-1.5 bg-red-600 text-white rounded-full shadow-lg hover:scale-110 transition-transform">
-                        <TrashIcon className="w-4 h-4" />
-                    </button>}
+                    <div className="pt-5 border-t border-white/20">
+                        <p className="text-[10px] font-black tracking-tight opacity-60 mb-1">Valor total a receber</p>
+                        <p className="text-3xl font-black tracking-tighter leading-none">{formatCurrency((items || []).reduce((acc, item) => acc + (Math.ceil(((item.km || 0) * valorPorKm) * 100) / 100) + (item.toll || 0) + (item.food || 0) + (item.components || 0) + (item.others || 0), 0))}</p>
+                    </div>
                 </div>
             </div>
-            );})}{!isReadOnly && (<button onClick={() => attachmentInputRef.current?.click()} className="aspect-square flex flex-col items-center justify-center border-2 border-dashed border-indigo-100 rounded-xl text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"><UploadIcon className="w-6 h-6 mb-1" /><span className="text-[9px] font-black tracking-tighter">Anexar</span></button>)}</div><input type="file" multiple className="hidden" ref={attachmentInputRef} accept="image/*,application/pdf" onChange={e => { const files = e.target.files; if (!files) return; const filesArray = Array.from(files) as File[]; filesArray.forEach(file => { const reader = new FileReader(); reader.onload = (ev) => { const result = ev.target?.result; if (typeof result === 'string') { setAttachments(prev => [...prev, { name: file.name, data: result }]); } }; reader.readAsDataURL(file); }); e.target.value = ''; }} /></div><div className="lg:col-span-5"><div className="bg-indigo-600 rounded-xl p-6 text-white shadow-xl shadow-indigo-100 dark:shadow-none sticky top-6"><h3 className="text-sm font-black mb-6 flex items-center gap-2 tracking-tight opacity-80"><DollarIcon className="w-4 h-4" /> Resumo financeiro</h3><div className="space-y-3.5 mb-6">{[{ label: "Total em Km", val: (items || []).reduce((acc, item) => acc + (Math.ceil(((item.km || 0) * valorPorKm) * 100) / 100), 0) }, { label: "Total em Pedágios", val: (items || []).reduce((acc, item) => acc + (item.toll || 0), 0) }, { label: "Total Alimentação", val: (items || []).reduce((acc, item) => acc + (item.food || 0), 0) }, { label: "Compra de Componentes", val: (items || []).reduce((acc, item) => acc + (item.components || 0), 0) }, { label: "Outros Custos", val: (items || []).reduce((acc, item) => acc + (item.others || 0), 0) }].map(row => (<div key={row.label} className="flex justify-between items-center text-[11px] font-medium border-b border-white/10 pb-2.5 last:border-0 last:pb-0"><span className="opacity-70">{row.label}</span><span className="font-black tracking-tight">{formatCurrency(row.val)}</span></div>))}</div><div className="pt-5 border-t border-white/20"><p className="text-[10px] font-black tracking-tight opacity-60 mb-1">Valor total a receber</p><p className="text-3xl font-black tracking-tighter leading-none">{formatCurrency((items || []).reduce((acc, item) => acc + (Math.ceil(((item.km || 0) * valorPorKm) * 100) / 100) + (item.toll || 0) + (item.food || 0) + (item.components || 0) + (item.others || 0), 0))}</p></div></div></div></div>
-
-          {hdPhoto && (
-            <div 
-                className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in"
-                onClick={() => setHdPhoto(null)}
-            >
-                <div className="relative max-w-5xl w-full h-full flex flex-col items-center justify-center gap-4">
-                    <button 
-                        className="absolute top-0 right-0 p-3 text-white hover:text-indigo-400 transition-colors z-[110]"
-                        onClick={(e) => { e.stopPropagation(); setHdPhoto(null); }}
-                    >
-                        <XCircleIcon className="w-10 h-10" />
-                    </button>
-                    
-                    <div className="flex-1 w-full flex items-center justify-center overflow-hidden">
-                        <img 
-                            src={hdPhoto} 
-                            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl animate-zoom-in" 
-                            alt="Visualização HD" 
-                            onClick={(e) => e.stopPropagation()}
-                        />
-                    </div>
-
-                    <div className="bg-white/10 px-6 py-2 rounded-full backdrop-blur-md">
-                        <p className="text-white text-[11px] font-black tracking-widest uppercase">Visualização em Alta Definição</p>
-                    </div>
-                </div>
-            </div>
-          )}
+          </div>
       </div>
     );
   };
@@ -762,8 +784,72 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
   return (
     <>
         {renderContent()}
-        {isConfirmEfetivarHistoricoModal && (<Modal title="Confirmar efetivação" onClose={() => setIsConfirmEfetivarHistoricoModal(false)}><div className="text-center p-4 space-y-4"><CheckCircleIcon className="w-12 h-12 text-green-500 mx-auto" /><h3 className="text-sm font-bold text-gray-800">Deseja efetivar o Reembolso?</h3><div className="flex gap-3 mt-4"><button onClick={() => setIsConfirmEfetivarHistoricoModal(false)} className="flex-1 py-2 bg-gray-100 rounded-lg text-xs font-bold">Não</button><button onClick={handleEfetivarHistorico} className="flex-1 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold">Sim</button></div></div></Modal>)}
-        {isSuccessModalOpen && (<Modal title="" onClose={handleSuccessModalClose}><div className="text-center py-6 space-y-4"><div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto animate-bounce"><CheckCircleIcon className="w-10 h-10" /></div><h3 className="text-lg font-black text-gray-900 tracking-tight">Concluído!</h3><p className="text-xs font-bold text-gray-500">{modalMessage}</p><button onClick={handleSuccessModalClose} className="w-full mt-4 py-3 bg-gray-900 text-white rounded-xl font-bold text-xs">OK</button></div></Modal>)}
+        {isConfirmEfetivarHistoricoModal && (
+            <Modal title="Confirmar efetivação" onClose={() => setIsConfirmEfetivarHistoricoModal(false)}>
+                <div className="text-center p-4 space-y-4">
+                    <CheckCircleIcon className="w-12 h-12 text-green-500 mx-auto" />
+                    <h3 className="text-sm font-bold text-gray-800 dark:text-white">Deseja efetivar o Reembolso?</h3>
+                    <p className="text-[10px] text-gray-500">Ao efetivar, o status mudará para 'Transferido' e a edição será bloqueada.</p>
+                    <div className="flex gap-3 mt-4">
+                        <button onClick={() => setIsConfirmEfetivarHistoricoModal(false)} className="flex-1 py-2 bg-gray-100 rounded-lg text-xs font-bold">Não</button>
+                        <button onClick={handleEfetivarHistorico} disabled={isLoading} className="flex-1 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow-lg">
+                            {isLoading ? 'Salvando...' : 'Sim, Efetivar'}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+        )}
+        {isConfirmEfetivarStatusModal && (
+            <Modal title="Aprovar para Pagamento" onClose={() => setIsConfirmEfetivarStatusModal(false)}>
+                <div className="text-center p-4 space-y-4">
+                    <DollarIcon className="w-12 h-12 text-indigo-600 mx-auto" />
+                    <h3 className="text-sm font-bold text-gray-800 dark:text-white">Deseja aprovar este reembolso?</h3>
+                    <p className="text-[10px] text-gray-500">Esta ação criará um lançamento no Financeiro para pagamento em 7 dias.</p>
+                    <div className="flex gap-3 mt-4">
+                        <button onClick={() => setIsConfirmEfetivarStatusModal(false)} className="flex-1 py-2 bg-gray-100 rounded-lg text-xs font-bold">Não</button>
+                        <button onClick={handleEfetivarStatus} disabled={isLoading} className="flex-1 py-2 bg-green-600 text-white rounded-lg text-xs font-bold shadow-lg">
+                            {isLoading ? 'Processando...' : 'Sim, Aprovar'}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+        )}
+        {isCancelModalOpen && (
+            <Modal title="Cancelar Reembolso" onClose={() => setIsCancelModalOpen(false)}>
+                <div className="space-y-4">
+                    <div>
+                        <FormLabel>Motivo do cancelamento *</FormLabel>
+                        <textarea value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} className="w-full rounded-lg border-gray-200 bg-gray-50 p-3 text-xs font-bold outline-none focus:ring-2 focus:ring-red-500/20" placeholder="Explique o motivo..." rows={4} />
+                    </div>
+                    <div className="flex gap-3">
+                        <button onClick={() => setIsCancelModalOpen(false)} className="flex-1 py-2 bg-gray-100 rounded-lg text-xs font-bold">Voltar</button>
+                        <button onClick={handleCancelarStatus} disabled={isLoading || !cancelReason.trim()} className="flex-1 py-2 bg-red-600 text-white rounded-xl font-bold text-xs shadow-lg">
+                            {isLoading ? 'Processando...' : 'Confirmar'}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+        )}
+        {isSuccessModalOpen && (
+            <Modal title="" onClose={handleSuccessModalClose}>
+                <div className="text-center py-6 space-y-4">
+                    <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto animate-bounce"><CheckCircleIcon className="w-10 h-10" /></div>
+                    <h3 className="text-lg font-black text-gray-900 tracking-tight">Concluído!</h3>
+                    <p className="text-xs font-bold text-gray-500">{modalMessage}</p>
+                    <button onClick={handleSuccessModalClose} className="w-full mt-4 py-3 bg-gray-900 text-white rounded-xl font-bold text-xs">OK</button>
+                </div>
+            </Modal>
+        )}
+        {hdPhoto && (
+            <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setHdPhoto(null)}>
+                <div className="relative max-w-5xl w-full h-full flex flex-col items-center justify-center gap-4">
+                    <button className="absolute top-0 right-0 p-3 text-white hover:text-indigo-400 z-[110]" onClick={(e) => { e.stopPropagation(); setHdPhoto(null); }}><XCircleIcon className="w-10 h-10" /></button>
+                    <div className="flex-1 w-full flex items-center justify-center overflow-hidden">
+                        <img src={hdPhoto} className="max-w-full max-h-full object-contain rounded-lg shadow-2xl animate-zoom-in" alt="Visualização HD" onClick={(e) => e.stopPropagation()} />
+                    </div>
+                </div>
+            </div>
+        )}
     </>
   );
 };
