@@ -1,7 +1,8 @@
+
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { ChartPieIcon, TableIcon, DollarIcon, TrendUpIcon, PrinterIcon, CalendarIcon, FilterIcon, TrashIcon, UsersIcon, SearchIcon, ChevronDownIcon, CheckCircleIcon, EditIcon, SaveIcon, XCircleIcon } from '../assets/icons';
+import { ChartPieIcon, TableIcon, DollarIcon, TrendUpIcon, PrinterIcon, CalendarIcon, FilterIcon, TrashIcon, UsersIcon, SearchIcon, ChevronDownIcon, CheckCircleIcon, EditIcon, SaveIcon, XCircleIcon, ClockIcon } from '../assets/icons';
 import DashboardCard from '../components/DashboardCard';
-import type { SalesSummaryItem, User } from '../types';
+import type { SalesSummaryItem, User, SavedOrcamento } from '../types';
 import { dataService } from '../services/dataService';
 
 const formatCurrency = (value: number) => {
@@ -14,7 +15,6 @@ const formatPercent = (value: number) => {
     return `${value.toFixed(2).replace('.', ',')}%`;
 };
 
-// Função para formatar texto em Sentence Case
 const toSentenceCase = (str: string) => {
     if (!str) return '';
     const clean = str.toLowerCase();
@@ -22,9 +22,9 @@ const toSentenceCase = (str: string) => {
 };
 
 const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
-    
     const [salesData, setSalesData] = useState<SalesSummaryItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isSyncing, setIsSyncing] = useState(false);
     
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
@@ -32,36 +32,35 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const [isSupplierDropdownOpen, setIsSupplierDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
-    // Estado para controlar a edição inline
     const [editingCell, setEditingCell] = useState<{ id: number, field: 'invoicedTax' | 'bankFees' } | null>(null);
     const [tempValue, setTempValue] = useState<string>('');
 
     const ADMIN_PROFILE_ID = '001';
 
+    const loadData = async () => {
+        setIsLoading(true);
+        const isAdmin = currentUser.profileId === ADMIN_PROFILE_ID;
+        // Buscamos todos os registros de resumo de vendas vinculados ao usuário ou todos se admin
+        const data = await dataService.getAll<SalesSummaryItem>('sales_summary', currentUser.id, isAdmin);
+        // Filtramos apenas os que estão com status de venda fechada
+        const salesToShow = data.filter(item => {
+            const status = (item.status || '').trim().toLowerCase();
+            return status === 'aprovado' || status === 'finalizado';
+        });
+        setSalesData(salesToShow);
+        setIsLoading(false);
+    };
+
     useEffect(() => {
-        const loadData = async () => {
-            setIsLoading(true);
-            const isAdmin = currentUser.profileId === ADMIN_PROFILE_ID;
-            const data = await dataService.getAll<SalesSummaryItem>('sales_summary', currentUser.id, isAdmin);
-            const salesToShow = data.filter(item => ['Aprovado', 'Finalizado'].includes(item.status || ''));
-            setSalesData(salesToShow);
-            setIsLoading(false);
-        };
         loadData();
 
         const date = new Date();
-        const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
-        const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-        
-        const formatDate = (d: Date) => {
-            const year = d.getFullYear();
-            const month = String(d.getMonth() + 1).padStart(2, '0');
-            const day = String(d.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        };
+        // Filtro padrão a partir de 2023 para garantir que nada se perca
+        const start = '2023-01-01';
+        const end = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
 
-        setStartDate(formatDate(firstDay));
-        setEndDate(formatDate(lastDay));
+        setStartDate(start);
+        setEndDate(end);
 
         const handleClickOutside = (event: MouseEvent) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -71,6 +70,79 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [currentUser]);
+
+    const handleSyncBudgets = async () => {
+        if (!confirm("Isso irá verificar todos os seus orçamentos e garantir que os aprovados apareçam aqui. Deseja continuar?")) return;
+        
+        setIsSyncing(true);
+        try {
+            const isAdmin = currentUser.profileId === ADMIN_PROFILE_ID;
+            const budgets = await dataService.getAll<SavedOrcamento>('orcamentos', currentUser.id, isAdmin);
+            
+            // Filtro robusto de aprovados e finalizados
+            const approvedBudgets = budgets.filter(b => {
+                const s = (b.status || '').trim().toLowerCase();
+                return s === 'aprovado' || s === 'finalizado';
+            });
+            
+            let syncCount = 0;
+            for (const budget of approvedBudgets) {
+                // Tenta pegar a variante principal ou os dados da raiz
+                let variant = budget.variants?.find(v => v.isPrincipal) || budget.variants?.[0];
+                const fs = variant?.formState || budget.formState;
+                const calc = variant?.calculated || budget.calculated;
+
+                if (fs && calc) {
+                    const thirdPartyInstallation = (Number(fs.terceiroInstalacaoQtd) || 0) * (Number(fs.terceiroInstalacaoCusto) || 0);
+
+                    // Usamos o budget.id como ID do resumo para garantir 1:1
+                    const saleItem: SalesSummaryItem = {
+                        id: budget.id, // ID Unificado
+                        orcamentoId: budget.id,
+                        owner_id: budget.owner_id,
+                        clientName: fs.nomeCliente || 'Cliente sem nome',
+                        date: fs.dataOrcamento || budget.savedAt.split('T')[0],
+                        closedValue: Number(calc.precoVendaFinal) || 0,
+                        systemCost: Number(calc.valorVendaSistema) || 0,
+                        supplier: fs.fornecedor || 'N/A',
+                        visitaTecnica: Number(fs.visitaTecnicaCusto) || 0,
+                        homologation: Number(fs.projetoHomologacaoCusto) || 0,
+                        installation: thirdPartyInstallation,
+                        travelCost: Number(fs.custoViagem) || 0,
+                        adequationCost: Number(fs.adequacaoLocalCusto) || 0,
+                        materialCost: Number(calc.totalEstrutura) || 0,
+                        invoicedTax: Number(calc.nfServicoValor) || 0,
+                        commission: Number(calc.comissaoVendasValor) || 0,
+                        bankFees: 0,
+                        totalCost: 0,
+                        netProfit: 0,
+                        finalMargin: 0,
+                        status: budget.status
+                    };
+
+                    const extraCosts = 
+                        saleItem.visitaTecnica + saleItem.homologation + saleItem.installation + 
+                        saleItem.travelCost + saleItem.adequationCost + saleItem.materialCost + 
+                        saleItem.invoicedTax + saleItem.commission + saleItem.bankFees;
+
+                    saleItem.totalCost = extraCosts;
+                    saleItem.netProfit = saleItem.closedValue - saleItem.systemCost - extraCosts;
+                    saleItem.finalMargin = saleItem.closedValue > 0 ? (saleItem.netProfit / saleItem.closedValue) * 100 : 0;
+
+                    await dataService.save('sales_summary', saleItem);
+                    syncCount++;
+                }
+            }
+            
+            await loadData();
+            alert(`${syncCount} registros sincronizados com sucesso.`);
+        } catch (e) {
+            console.error("Erro na sincronização:", e);
+            alert("Ocorreu um erro ao sincronizar os dados. Verifique o console.");
+        } finally {
+            setIsSyncing(false);
+        }
+    };
 
     const suppliersList = useMemo(() => {
         const unique = new Set<string>();
@@ -133,7 +205,7 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     };
 
     const filteredSalesData = useMemo(() => {
-        return [...salesData].sort((a, b) => a.date.localeCompare(b.date)).filter(item => {
+        return [...salesData].sort((a, b) => b.date.localeCompare(a.date)).filter(item => {
             if (startDate && item.date < startDate) return false;
             if (endDate && item.date > endDate) return false;
             if (selectedSuppliers.length > 0) {
@@ -217,14 +289,13 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
         document.body.removeChild(link);
     };
 
-    const handleClearFilters = () => { setStartDate(''); setEndDate(''); setSelectedSuppliers([]); };
+    const handleClearFilters = () => { setStartDate('2023-01-01'); setEndDate(new Date().toISOString().split('T')[0]); setSelectedSuppliers([]); };
 
     if (isLoading) return <div className="flex justify-center p-10"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div></div>;
 
     const thClass = "px-2 py-3 border-b border-gray-200 dark:border-gray-600 text-[9px] font-bold text-gray-600 dark:text-gray-300 text-center whitespace-nowrap";
     const tdClass = "px-2 py-2 border-b border-gray-100 dark:border-gray-700 text-[10px] text-gray-700 dark:text-gray-300 text-right whitespace-nowrap";
 
-    // Componente para a célula editável
     const EditableCell = ({ item, field }: { item: SalesSummaryItem, field: 'invoicedTax' | 'bankFees' }) => {
         const isEditing = editingCell?.id === item.id && editingCell?.field === field;
         const value = item[field] || 0;
@@ -244,20 +315,8 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                         }}
                     />
                     <div className="flex flex-col gap-0.5">
-                        <button 
-                            onClick={() => handleSaveEdit(item.id, field)}
-                            className="p-0.5 bg-green-500 text-white rounded hover:bg-green-600 transition-colors shadow-sm"
-                            title="Salvar"
-                        >
-                            <CheckCircleIcon className="w-3 h-3" />
-                        </button>
-                        <button 
-                            onClick={handleCancelEdit}
-                            className="p-0.5 bg-gray-400 text-white rounded hover:bg-gray-500 transition-colors shadow-sm"
-                            title="Cancelar"
-                        >
-                            <XCircleIcon className="w-3 h-3" />
-                        </button>
+                        <button onClick={() => handleSaveEdit(item.id, field)} className="p-0.5 bg-green-500 text-white rounded hover:bg-green-600 transition-colors shadow-sm" title="Salvar"><CheckCircleIcon className="w-3 h-3" /></button>
+                        <button onClick={handleCancelEdit} className="p-0.5 bg-gray-400 text-white rounded hover:bg-gray-500 transition-colors shadow-sm" title="Cancelar"><XCircleIcon className="w-3 h-3" /></button>
                     </div>
                 </div>
             );
@@ -266,13 +325,7 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
         return (
             <div className="flex items-center justify-end gap-2 group min-w-[100px]">
                 <span className="font-bold text-indigo-700 dark:text-indigo-400">{formatCurrency(value)}</span>
-                <button 
-                    onClick={() => handleStartEdit(item, field)}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded transition-all"
-                    title="Editar campo"
-                >
-                    <EditIcon className="w-3.5 h-3.5" />
-                </button>
+                <button onClick={() => handleStartEdit(item, field)} className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded transition-all" title="Editar campo"><EditIcon className="w-3.5 h-3.5" /></button>
             </div>
         );
     };
@@ -295,11 +348,7 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                         >
                             <div className="flex items-center gap-2 truncate">
                                 <FilterIcon className="w-4 h-4 text-gray-400" />
-                                <span>
-                                    {selectedSuppliers.length === 0 
-                                        ? 'Todos os fornecedores' 
-                                        : `${selectedSuppliers.length} selecionado(s)`}
-                                </span>
+                                <span>{selectedSuppliers.length === 0 ? 'Todos os fornecedores' : `${selectedSuppliers.length} selecionado(s)`}</span>
                             </div>
                             <ChevronDownIcon className={`w-4 h-4 transition-transform ${isSupplierDropdownOpen ? 'rotate-180' : ''}`} />
                         </button>
@@ -309,19 +358,8 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                                 {suppliersList.length > 0 ? (
                                     suppliersList.map(sup => (
                                         <label key={sup} className="flex items-center px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer group">
-                                            <input 
-                                                type="checkbox" 
-                                                className="hidden"
-                                                checked={selectedSuppliers.includes(sup)}
-                                                onChange={() => toggleSupplierSelection(sup)}
-                                            />
-                                            <div className={`w-4 h-4 rounded border mr-3 flex items-center justify-center transition-all ${
-                                                selectedSuppliers.includes(sup) 
-                                                ? 'bg-indigo-600 border-indigo-600' 
-                                                : 'border-gray-300'
-                                            }`}>
-                                                {selectedSuppliers.includes(sup) && <CheckCircleIcon className="w-3.5 h-3.5 text-white" />}
-                                            </div>
+                                            <input type="checkbox" className="hidden" checked={selectedSuppliers.includes(sup)} onChange={() => toggleSupplierSelection(sup)} />
+                                            <div className={`w-4 h-4 rounded border mr-3 flex items-center justify-center transition-all ${selectedSuppliers.includes(sup) ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300'}`}>{selectedSuppliers.includes(sup) && <CheckCircleIcon className="w-3.5 h-3.5 text-white" />}</div>
                                             <span className="text-xs font-bold text-gray-700 dark:text-gray-300">{sup}</span>
                                         </label>
                                     ))
@@ -332,11 +370,17 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                         )}
                     </div>
                 </div>
-                {(startDate || endDate || selectedSuppliers.length > 0) && (
-                    <button onClick={handleClearFilters} className="px-3 py-2 text-sm text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors flex items-center gap-1 whitespace-nowrap">
-                        <TrashIcon className="w-4 h-4" /> Limpar filtros
+                <div className="flex items-center gap-2">
+                    <button onClick={handleSyncBudgets} disabled={isSyncing} className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-lg border transition-all ${isSyncing ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100'}`}>
+                        {isSyncing ? <ClockIcon className="w-4 h-4 animate-spin" /> : <ClockIcon className="w-4 h-4" />}
+                        {isSyncing ? 'Sincronizando...' : 'Sincronizar orçamentos'}
                     </button>
-                )}
+                    {(startDate !== '2023-01-01' || selectedSuppliers.length > 0) && (
+                        <button onClick={handleClearFilters} className="px-3 py-2 text-sm text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors flex items-center gap-1 whitespace-nowrap">
+                            <TrashIcon className="w-4 h-4" /> Limpar filtros
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 print:hidden">
@@ -355,10 +399,10 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                     </div>
                     <div className="flex gap-2 print:hidden">
                         <button onClick={handleExportExcel} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors shadow-sm font-bold text-xs">
-                            <TableIcon className="w-5 h-5" /> Exportar para Excel
+                            <TableIcon className="w-5 h-5" /> Exportar
                         </button>
                         <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-md hover:bg-gray-50 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 transition-colors shadow-sm font-bold text-xs">
-                            <PrinterIcon className="w-5 h-5" /> Imprimir relatório
+                            <PrinterIcon className="w-5 h-5" /> Imprimir
                         </button>
                     </div>
                 </div>
@@ -424,7 +468,7 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                                     </td>
                                 </tr>
                             )) : (
-                                <tr><td colSpan={19} className="px-6 py-12 text-center text-gray-400 italic">Nenhum registro encontrado para os filtros selecionados.</td></tr>
+                                <tr><td colSpan={19} className="px-6 py-12 text-center text-gray-400 italic">Nenhum registro encontrado. Se você tem orçamentos aprovados que não aparecem, clique em "Sincronizar orçamentos".</td></tr>
                             )}
                         </tbody>
                     </table>

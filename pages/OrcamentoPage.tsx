@@ -115,18 +115,13 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
       const orcamento = orcamentos.find(o => o.id === id);
       if (!orcamento) return;
 
-      // 1. Feedback visual imediato (Optimistic Update)
       setOrcamentos(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o));
 
       try {
-          // 2. Salva o status do orçamento no banco de dados primeiro
-          // Isso garante que mesmo se as automações falharem, o status principal foi trocado
           let updatedOrcamento = { ...orcamento, status: newStatus };
           await dataService.save('orcamentos', updatedOrcamento);
 
-          // 3. Processa automações em blocos Try/Catch isolados
           if (newStatus === 'Aprovado' || newStatus === 'Finalizado') {
-              // --- Automação Resumo de Vendas ---
               try {
                   const currentSales = await dataService.getAll<SalesSummaryItem>('sales_summary');
                   let variant = orcamento.variants?.find(v => v.isPrincipal) || orcamento.variants?.[0] || { formState: orcamento.formState, calculated: orcamento.calculated };
@@ -134,41 +129,49 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                   if (variant.formState && variant.calculated) {
                       const fs = variant.formState;
                       const calc = variant.calculated;
-                      const thirdPartyInstallation = (fs.terceiroInstalacaoQtd || 0) * (fs.terceiroInstalacaoCusto || 0);
+                      const thirdPartyInstallation = (Number(fs.terceiroInstalacaoQtd) || 0) * (Number(fs.terceiroInstalacaoCusto) || 0);
+
+                      const existing = currentSales.find(s => s.orcamentoId === orcamento.id);
 
                       const saleItem: SalesSummaryItem = {
-                          id: Date.now(),
+                          id: orcamento.id, // Sincroniza ID para ser igual ao do Orçamento
                           orcamentoId: orcamento.id,
                           owner_id: orcamento.owner_id,
                           clientName: fs.nomeCliente || 'Cliente sem nome',
                           date: fs.dataOrcamento || orcamento.savedAt.split('T')[0],
-                          closedValue: calc.precoVendaFinal || 0,
-                          systemCost: calc.valorVendaSistema || 0,
+                          closedValue: Number(calc.precoVendaFinal) || 0,
+                          systemCost: Number(calc.valorVendaSistema) || 0,
                           supplier: fs.fornecedor || 'N/A',
-                          visitaTecnica: fs.visitaTecnicaCusto || 0,
-                          homologation: fs.projetoHomologacaoCusto || 0,
+                          visitaTecnica: Number(fs.visitaTecnicaCusto) || 0,
+                          homologation: Number(fs.projetoHomologacaoCusto) || 0,
                           installation: thirdPartyInstallation,
-                          travelCost: fs.custoViagem || 0,
-                          adequationCost: fs.adequacaoLocalCusto || 0,
-                          materialCost: calc.totalEstrutura || 0,
-                          invoicedTax: calc.nfServicoValor || 0,
-                          commission: calc.comissaoVendasValor || 0,
-                          bankFees: 0,
-                          totalCost: (fs.visitaTecnicaCusto || 0) + (fs.projetoHomologacaoCusto || 0) + thirdPartyInstallation + (fs.custoViagem || 0) + (fs.adequacaoLocalCusto || 0) + (calc.totalEstrutura || 0) + (calc.nfServicoValor || 0) + (calc.comissaoVendasValor || 0),
-                          netProfit: calc.lucroLiquido || 0,
-                          finalMargin: calc.margemLiquida || 0,
+                          travelCost: Number(fs.custoViagem) || 0,
+                          adequationCost: Number(fs.adequacaoLocalCusto) || 0,
+                          materialCost: Number(calc.totalEstrutura) || 0,
+                          invoicedTax: existing ? Number(existing.invoicedTax) : (Number(calc.nfServicoValor) || 0),
+                          commission: Number(calc.comissaoVendasValor) || 0,
+                          bankFees: existing ? Number(existing.bankFees) : 0,
+                          totalCost: 0, 
+                          netProfit: 0,
+                          finalMargin: 0,
                           status: newStatus
                       };
 
-                      const existing = currentSales.find(s => s.orcamentoId === orcamento.id);
-                      if (existing) await dataService.save('sales_summary', { ...saleItem, id: existing.id, status: newStatus });
-                      else await dataService.save('sales_summary', saleItem);
+                      const extraCosts = 
+                          saleItem.visitaTecnica + saleItem.homologation + saleItem.installation + 
+                          saleItem.travelCost + saleItem.adequationCost + saleItem.materialCost + 
+                          saleItem.invoicedTax + Number(calc.comissaoVendasValor || 0) + saleItem.bankFees;
+
+                      saleItem.totalCost = extraCosts;
+                      saleItem.netProfit = saleItem.closedValue - saleItem.systemCost - extraCosts;
+                      saleItem.finalMargin = saleItem.closedValue > 0 ? (saleItem.netProfit / saleItem.closedValue) * 100 : 0;
+
+                      await dataService.save('sales_summary', saleItem);
                   }
               } catch (err) {
                   console.warn("Automação Resumo de Vendas falhou:", err);
               }
 
-              // --- Automação Lavagem de Placas (Apenas se finalizado) ---
               if (newStatus === 'Finalizado' && !orcamento.lavagem_cadastrada) {
                   try {
                       let variant = orcamento.variants?.find(v => v.isPrincipal) || orcamento.variants?.[0] || { formState: orcamento.formState, calculated: orcamento.calculated };
@@ -183,7 +186,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                           address_number: '',
                           complement: '',
                           city: fs.cidade || '',
-                          plates_count: (fs.terceiroInstalacaoQtd) || (variant.calculated?.placasQtd) || 0,
+                          plates_count: Number(fs.terceiroInstalacaoQtd) || Number(variant.calculated?.placasQtd) || 0,
                           phone: fs.telefoneTitular || '',
                           observations: `Importado automaticamente em ${new Date().toLocaleDateString('pt-BR')}.`,
                           installation_end_date: new Date().toISOString().split('T')[0]
@@ -191,7 +194,6 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                       
                       await dataService.save('lavagem_clients', newWashClient);
                       updatedOrcamento.lavagem_cadastrada = true;
-                      // Salva a flag de lavagem no orçamento
                       await dataService.save('orcamentos', updatedOrcamento);
                       setOrcamentos(prev => prev.map(o => o.id === id ? updatedOrcamento : o));
                   } catch (err) {
@@ -199,7 +201,6 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                   }
               }
           } else {
-              // Remove do resumo de vendas se o status mudar de Aprovado para outro
               try {
                   const currentSales = await dataService.getAll<SalesSummaryItem>('sales_summary');
                   const saleToRemove = currentSales.find(s => s.orcamentoId === id);
@@ -210,8 +211,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
           }
       } catch (e) {
           console.error("Erro crítico ao trocar status:", e);
-          alert("Erro ao salvar no banco. Verifique se as tabelas existem.");
-          loadData(); // Reverte para os dados do servidor
+          loadData(); 
       }
   };
 
@@ -317,7 +317,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                                 {users.map(user => (
                                     <label key={user.id} className="flex items-center px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-900/40 cursor-pointer group transition-colors">
                                         <input type="checkbox" className="hidden" checked={selectedUsers.includes(String(user.id))} onChange={() => toggleUserFilter(String(user.id))} />
-                                        <div className={`w-4.5 h-4.5 rounded border mr-3 flex items-center justify-center transition-all ${selectedUsers.includes(String(user.id)) ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300 dark:border-gray-600'}`}>{selectedUsers.includes(String(user.id)) && <CheckCircleIcon className="w-3.5 h-3.5 text-white" />}</div>
+                                        <div className={`w-4.5 h-4.5 rounded border mr-3 flex items-center justify-center transition-all ${selectedUsers.includes(String(user.id)) ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300'}`}>{selectedUsers.includes(String(user.id)) && <CheckCircleIcon className="w-3.5 h-3.5 text-white" />}</div>
                                         <span className={`text-xs font-bold ${selectedUsers.includes(String(user.id)) ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-600 dark:text-gray-300'}`}>{user.name}</span>
                                     </label>
                                 ))}
