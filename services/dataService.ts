@@ -1,3 +1,4 @@
+
 import { supabase } from '../supabaseClient';
 
 interface IDataService {
@@ -9,11 +10,19 @@ interface IDataService {
 
 class SupabaseDataService implements IDataService {
     
+    private getLocal<T>(collection: string): T[] {
+        const data = localStorage.getItem(`orner_cache_${collection}`);
+        return data ? JSON.parse(data) : [];
+    }
+
+    private setLocal<T>(collection: string, data: T[]): void {
+        localStorage.setItem(`orner_cache_${collection}`, JSON.stringify(data));
+    }
+
     async getAll<T>(collection: string, userId?: string, isAdmin?: boolean): Promise<T[]> {
         try {
             let query = supabase.from(collection).select('*');
             
-            // Lista de coleções que devem ser privadas ao criador (não admin)
             const privateCollections = [
                 'orcamentos', 
                 'financial_transactions', 
@@ -32,63 +41,95 @@ class SupabaseDataService implements IDataService {
             const { data, error } = await query;
             
             if (error) {
-                console.error(`[SUPABASE] Erro retornado em ${collection}:`, error.message);
-                return [];
+                console.warn(`[SUPABASE] Erro em ${collection}, usando cache local:`, error.message);
+                return this.getLocal<T>(collection);
             }
 
+            // Atualiza o cache local com os dados mais recentes do servidor
+            if (data) this.setLocal(collection, data);
             return (data as T[]) || [];
+
         } catch (e: any) {
-            // Captura erros de rede como "Failed to fetch"
-            console.error(`[SUPABASE] Erro de rede/conexão ao buscar em ${collection}:`, e.message || e);
-            return [];
+            console.error(`[OFFLINE MODE] Usando dados locais para ${collection}. Motivo:`, e.message || e);
+            return this.getLocal<T>(collection);
         }
     }
 
     async save<T extends { id: string | number }>(collection: string, item: T): Promise<T> {
-        const cleanItem = Object.fromEntries(
-            Object.entries(item).filter(([_, v]) => v !== undefined)
-        );
-
-        const { data, error } = await supabase
-            .from(collection)
-            .upsert(cleanItem)
-            .select()
-            .single();
-
-        if (error) {
-            console.error(`[SUPABASE] Erro ao salvar em ${collection}:`, error.message || error);
-            throw error;
+        // 1. Salva no Cache Local Primeiro (Segurança)
+        const localData = this.getLocal<T>(collection);
+        const index = localData.findIndex(i => String(i.id) === String(item.id));
+        if (index > -1) {
+            localData[index] = { ...localData[index], ...item };
+        } else {
+            localData.push(item);
         }
+        this.setLocal(collection, localData);
 
-        return data as T;
+        // 2. Tenta sincronizar com Supabase
+        try {
+            const cleanItem = Object.fromEntries(
+                Object.entries(item).filter(([_, v]) => v !== undefined)
+            );
+
+            const { data, error } = await supabase
+                .from(collection)
+                .upsert(cleanItem)
+                .select()
+                .single();
+
+            if (error) throw error;
+            return data as T;
+        } catch (e: any) {
+            console.warn(`[OFFLINE SAVE] ${collection} salva apenas localmente. Erro:`, e.message);
+            return item;
+        }
     }
 
     async saveAll<T extends { id: string | number }>(collection: string, items: T[]): Promise<T[]> {
-        const { data, error } = await supabase
-            .from(collection)
-            .upsert(items)
-            .select();
+        // 1. Salva no Cache Local
+        const localData = this.getLocal<T>(collection);
+        items.forEach(item => {
+            const index = localData.findIndex(i => String(i.id) === String(item.id));
+            if (index > -1) localData[index] = { ...localData[index], ...item };
+            else localData.push(item);
+        });
+        this.setLocal(collection, localData);
 
-        if (error) {
-            console.error(`[SUPABASE] Erro ao salvar lote em ${collection}:`, error.message || error);
-            throw error;
+        // 2. Tenta sincronizar
+        try {
+            const { data, error } = await supabase
+                .from(collection)
+                .upsert(items)
+                .select();
+
+            if (error) throw error;
+            return data as T[];
+        } catch (e: any) {
+            console.warn(`[OFFLINE BATCH SAVE] ${collection} salvo apenas localmente.`);
+            return items;
         }
-
-        return data as T[];
     }
 
     async delete(collection: string, id: string | number): Promise<boolean> {
-        const { error } = await supabase
-            .from(collection)
-            .delete()
-            .eq('id', id);
+        // 1. Remove do Cache Local
+        const localData = this.getLocal<any>(collection);
+        const filtered = localData.filter(i => String(i.id) !== String(id));
+        this.setLocal(collection, filtered);
 
-        if (error) {
-            console.error(`[SUPABASE] Erro ao deletar em ${collection}:`, error.message || error);
-            return false;
+        // 2. Tenta remover do Supabase
+        try {
+            const { error } = await supabase
+                .from(collection)
+                .delete()
+                .eq('id', id);
+
+            if (error) throw error;
+            return true;
+        } catch (e: any) {
+            console.warn(`[OFFLINE DELETE] ${collection} removido apenas localmente.`);
+            return true;
         }
-
-        return true;
     }
 }
 
