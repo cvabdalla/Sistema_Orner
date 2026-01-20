@@ -370,8 +370,14 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                 travel_cost: Number(launchServiceForm.travelCost || 0),
                 created_at: launchDate.toISOString()
             });
+            
             const categories = await dataService.getAll<FinancialCategory>('financial_categories');
-            let categoryId = categories.find(c => c.name === 'Receita de Vendas' || c.type === 'receita')?.id || '';
+            // Busca categoria específica solicitada ou fallback inteligente
+            const targetCategoryName = "Receita de Mão de Obra – Lavagem";
+            let categoryId = categories.find(c => c.name === targetCategoryName)?.id || 
+                             categories.find(c => c.name.toLowerCase().includes('lavagem') && c.type === 'receita')?.id ||
+                             categories.find(c => c.name === 'Receita de Vendas' || c.type === 'receita')?.id || '';
+            
             await dataService.save('financial_transactions', {
                 id: `tx-wash-${Date.now()}`,
                 owner_id: currentUser.id,
@@ -379,13 +385,13 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                 amount: contractTotal,
                 type: 'receita',
                 dueDate: launchDate.toISOString().split('T')[0],
-                paymentDate: launchDate.toISOString().split('T')[0],
+                launchDate: launchDate.toISOString().split('T')[0],
                 categoryId: categoryId,
-                status: 'pago'
+                status: 'pendente' // Lançado como pendente conforme solicitado
             });
             await loadData();
             setIsLaunchServiceModalOpen(false);
-            alert("Plano vinculado e histórico registrado!");
+            alert("Plano vinculado e histórico financeiro lançado (Pendente)!");
         } finally { setIsSaving(false); }
     };
 
