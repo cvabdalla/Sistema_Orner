@@ -106,6 +106,28 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         return allStockItems.filter(i => currentDataIds.includes(String(i.id)));
     }, [allStockItems, formState.fixedItemsData]);
 
+    // Novo memo para unificar e ordenar alfabeticamente os itens da tabela
+    const combinedSortedItems = useMemo(() => {
+        const fromStock = selectedStockTableItems.map(item => ({
+            ...item,
+            id: String(item.id),
+            isFromStock: true,
+            // Recupera os dados de qty, cost e markup do formState
+            itemData: (formState.fixedItemsData || {})[String(item.id)] || { 
+                qty: 0, 
+                cost: item.averagePrice || 0,
+                markup: 0 
+            }
+        }));
+
+        const fromExternal = (formState.offStockItems || []).map(item => ({
+            ...item,
+            isFromStock: false
+        }));
+
+        return [...fromStock, ...fromExternal].sort((a, b) => a.name.localeCompare(b.name));
+    }, [selectedStockTableItems, formState.offStockItems, formState.fixedItemsData]);
+
     const availableStockToAdd = useMemo(() => {
         const currentDataIds = Object.keys(formState.fixedItemsData || {});
         return allStockItems.filter(i => !currentDataIds.includes(String(i.id)));
@@ -192,7 +214,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         const itemData = currentData[itemId] || { 
             qty: 0, 
             cost: stockItem?.averagePrice || 0,
-            markup: 0
+            markup: 0 
         };
         
         const updatedFormState = {
@@ -665,14 +687,11 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                    {selectedStockTableItems.map((item) => {
+                                    {combinedSortedItems.map((item) => {
                                         const itemId = String(item.id);
-                                        const isManualStock = !item.isFixedInBudget;
-                                        const data = (formState.fixedItemsData || {})[itemId] || { 
-                                            qty: 0, 
-                                            cost: item.averagePrice || 0,
-                                            markup: 0 
-                                        };
+                                        const isFromStock = item.isFromStock;
+                                        const data = isFromStock ? item.itemData : item;
+                                        
                                         const n_qty = parseNumber(data.qty);
                                         const n_cost = parseNumber(data.cost);
                                         const n_markup = parseNumber(data.markup);
@@ -680,10 +699,14 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                         const totalItemValue = n_qty * effectiveUnitCost;
 
                                         return (
-                                            <tr key={`stock-${itemId}`} className="hover:bg-indigo-50 dark:hover:bg-indigo-900/10 transition-colors">
-                                                <td className={`px-6 py-2 font-bold ${isManualStock ? 'text-indigo-600' : 'text-gray-700 dark:text-gray-200'}`}>
+                                            <tr key={`${isFromStock ? 'stock' : 'off'}-${itemId}`} className={`transition-colors ${!isFromStock ? 'bg-amber-50/50 dark:bg-amber-900/10 border-l-4 border-l-amber-400 hover:bg-amber-100/50' : 'hover:bg-indigo-50 dark:hover:bg-indigo-900/10'}`}>
+                                                <td className={`px-6 py-2 font-bold ${!isFromStock ? 'text-amber-800 dark:text-amber-200' : (item.isFixedInBudget ? 'text-gray-700 dark:text-gray-200' : 'text-indigo-600')}`}>
                                                     <div className="flex items-center gap-2">
-                                                        {isManualStock && <span className="text-[9px] bg-indigo-100 px-1.5 py-0.5 rounded font-black">Manual</span>}
+                                                        {!isFromStock ? (
+                                                            <span className="text-[9px] bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded font-black whitespace-nowrap">Externo</span>
+                                                        ) : (
+                                                            !item.isFixedInBudget && <span className="text-[9px] bg-indigo-100 px-1.5 py-0.5 rounded font-black whitespace-nowrap">Manual</span>
+                                                        )}
                                                         {item.name}
                                                     </div>
                                                 </td>
@@ -692,13 +715,27 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                                         type="text" 
                                                         inputMode="decimal"
                                                         value={data.qty} 
-                                                        onChange={(e) => handleStockItemDataChange(itemId, 'qty', e.target.value)} 
+                                                        onChange={(e) => isFromStock 
+                                                            ? handleStockItemDataChange(itemId, 'qty', e.target.value)
+                                                            : handleOffStockItemChange(itemId, 'qty', e.target.value)
+                                                        } 
                                                         disabled={isReadOnly} 
-                                                        className="w-full text-center bg-transparent border-b border-gray-300 focus:border-indigo-600 outline-none py-1 font-semibold" 
+                                                        className={`w-full text-center bg-transparent border-b outline-none py-1 font-semibold ${!isFromStock ? 'border-amber-300 focus:border-amber-600' : 'border-gray-300 focus:border-indigo-600'}`} 
                                                     />
                                                 </td>
-                                                <td className="px-6 py-2 text-right text-gray-500 font-medium">
-                                                    {formatCurrency(n_cost)}
+                                                <td className={`px-6 py-2 text-right font-medium ${!isFromStock ? 'text-amber-600' : 'text-gray-500'}`}>
+                                                    {!isFromStock ? (
+                                                        <input 
+                                                            type="text" 
+                                                            inputMode="decimal"
+                                                            value={data.cost} 
+                                                            onChange={(e) => handleOffStockItemChange(itemId, 'cost', e.target.value)} 
+                                                            disabled={isReadOnly} 
+                                                            className="w-full text-right bg-transparent border-none focus:ring-0 p-1 text-[10px]" 
+                                                        />
+                                                    ) : (
+                                                        formatCurrency(n_cost)
+                                                    )}
                                                 </td>
                                                 <td className="px-6 py-2">
                                                     <div className="flex items-center justify-center gap-1">
@@ -706,21 +743,24 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                                             type="text" 
                                                             inputMode="decimal"
                                                             value={data.markup} 
-                                                            onChange={(e) => handleStockItemDataChange(itemId, 'markup', e.target.value)} 
+                                                            onChange={(e) => isFromStock 
+                                                                ? handleStockItemDataChange(itemId, 'markup', e.target.value)
+                                                                : handleOffStockItemChange(itemId, 'markup', e.target.value)
+                                                            } 
                                                             disabled={isReadOnly} 
-                                                            className="w-12 text-center bg-transparent border-b border-indigo-300 focus:border-indigo-600 outline-none py-1 font-bold text-indigo-600" 
+                                                            className={`w-12 text-center bg-transparent border-b outline-none py-1 font-bold ${!isFromStock ? 'border-amber-300 focus:border-amber-600 text-amber-700' : 'border-indigo-300 focus:border-indigo-600 text-indigo-600'}`} 
                                                         />
-                                                        <span className="text-[10px] font-bold text-indigo-400">%</span>
+                                                        <span className={`text-[10px] font-bold ${!isFromStock ? 'text-amber-500' : 'text-indigo-400'}`}>%</span>
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-2 text-right font-bold text-indigo-600 dark:text-indigo-400">
+                                                <td className={`px-6 py-2 text-right font-bold ${!isFromStock ? 'text-amber-700 dark:text-amber-300' : 'text-indigo-600 dark:text-indigo-400'}`}>
                                                     {formatCurrency(totalItemValue)}
                                                 </td>
                                                 {!isReadOnly && (
                                                     <td className="px-4 text-center">
                                                         <button 
                                                             type="button"
-                                                            onClick={() => removeStockManualItem(itemId)}
+                                                            onClick={() => isFromStock ? removeStockManualItem(itemId) : removeOffStockItem(itemId)}
                                                             className="text-red-400 hover:text-red-600 transition-colors"
                                                             title="Remover item"
                                                         >
@@ -732,74 +772,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                         );
                                     })}
 
-                                    {(formState.offStockItems || []).map((item) => {
-                                        const n_qty = parseNumber(item.qty);
-                                        const n_cost = parseNumber(item.cost);
-                                        const n_markup = parseNumber(item.markup);
-                                        const effectiveUnitCost = n_cost * (1 + (n_markup / 100));
-                                        const totalItemValue = n_qty * effectiveUnitCost;
-
-                                        return (
-                                            <tr key={item.id} className="bg-amber-50/50 dark:bg-amber-900/10 hover:bg-amber-100/50 transition-colors border-l-4 border-l-amber-400">
-                                                <td className="px-6 py-2 font-bold text-amber-800 dark:text-amber-200">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-[9px] bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded font-black">Externo</span>
-                                                        {item.name}
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-2">
-                                                    <input 
-                                                        type="text" 
-                                                        inputMode="decimal"
-                                                        value={item.qty} 
-                                                        onChange={(e) => handleOffStockItemChange(item.id, 'qty', e.target.value)} 
-                                                        disabled={isReadOnly} 
-                                                        className="w-full text-center bg-transparent border-b border-amber-300 focus:border-amber-600 outline-none py-1 font-semibold" 
-                                                    />
-                                                </td>
-                                                <td className="px-6 py-2 text-right text-amber-600 font-medium">
-                                                    <input 
-                                                        type="text" 
-                                                        inputMode="decimal"
-                                                        value={item.cost} 
-                                                        onChange={(e) => handleOffStockItemChange(item.id, 'cost', e.target.value)} 
-                                                        disabled={isReadOnly} 
-                                                        className="w-full text-right bg-transparent border-none focus:ring-0 p-1 text-[10px]" 
-                                                    />
-                                                </td>
-                                                <td className="px-6 py-2">
-                                                    <div className="flex items-center justify-center gap-1">
-                                                        <input 
-                                                            type="text" 
-                                                            inputMode="decimal"
-                                                            value={item.markup} 
-                                                            onChange={(e) => handleOffStockItemChange(item.id, 'markup', e.target.value)} 
-                                                            disabled={isReadOnly} 
-                                                            className="w-12 text-center bg-transparent border-b border-amber-300 focus:border-amber-600 outline-none py-1 font-bold text-amber-700" 
-                                                        />
-                                                        <span className="text-[10px] font-bold text-amber-500">%</span>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-2 text-right font-bold text-amber-700 dark:text-amber-300">
-                                                    {formatCurrency(totalItemValue)}
-                                                </td>
-                                                {!isReadOnly && (
-                                                    <td className="px-4 text-center">
-                                                        <button 
-                                                            type="button"
-                                                            onClick={() => removeOffStockItem(item.id)}
-                                                            className="text-red-400 hover:text-red-600 transition-colors"
-                                                            title="Remover item externo"
-                                                        >
-                                                            <TrashIcon className="w-4 h-4" />
-                                                        </button>
-                                                    </td>
-                                                )}
-                                            </tr>
-                                        );
-                                    })}
-
-                                    {(selectedStockTableItems.length === 0 && (formState.offStockItems || []).length === 0) && (
+                                    {combinedSortedItems.length === 0 && (
                                         <tr>
                                             <td colSpan={6} className="px-6 py-12 text-center text-gray-400 italic text-xs">
                                                 Nenhum item configurado. <br/>
@@ -872,13 +845,13 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                         <div className="flex bg-gray-100 dark:bg-gray-700/50 p-1 rounded-xl mb-4 border border-gray-200 dark:border-gray-600">
                             <button 
                                 onClick={() => setAddItemTab('estoque')}
-                                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${addItemTab === 'estoque' ? 'bg-white dark:bg-gray-800 text-indigo-600 shadow-sm border border-gray-100' : 'text-gray-500'}`}
+                                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${addItemTab === 'estoque' ? 'bg-white dark:bg-gray-800 text-indigo-600 shadow-sm border border-gray-100' : 'text-gray-500 dark:text-gray-400'}`}
                             >
                                 Do estoque
                             </button>
                             <button 
                                 onClick={() => setAddItemTab('manual')}
-                                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${addItemTab === 'manual' ? 'bg-white dark:bg-gray-800 text-amber-600 shadow-sm border border-gray-100' : 'text-gray-500'}`}
+                                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${addItemTab === 'manual' ? 'bg-white dark:bg-gray-800 text-amber-600 shadow-sm border border-gray-100' : 'text-gray-500 dark:text-gray-400'}`}
                             >
                                 Fora do estoque
                             </button>
