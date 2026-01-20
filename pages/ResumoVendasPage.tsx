@@ -21,6 +21,25 @@ const toSentenceCase = (str: string) => {
     return clean.charAt(0).toUpperCase() + clean.slice(1);
 };
 
+/**
+ * Converte strings financeiras (BR) em números de forma ultra robusta.
+ * Remove R$, espaços, pontos de milhar e trata a vírgula decimal.
+ */
+const parseSafeNumber = (val: any): number => {
+    if (typeof val === 'number') return val;
+    if (!val) return 0;
+    
+    // Converte para string e limpa caracteres não numéricos exceto vírgula e ponto
+    const clean = String(val)
+        .replace(/R\$/g, '')      // Remove R$
+        .replace(/\s/g, '')       // Remove espaços
+        .replace(/\./g, '')       // Remove pontos de milhar
+        .replace(',', '.');       // Troca vírgula decimal por ponto
+        
+    const parsed = parseFloat(clean);
+    return isNaN(parsed) ? 0 : parsed;
+};
+
 const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const [salesData, setSalesData] = useState<SalesSummaryItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -40,9 +59,7 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const loadData = async () => {
         setIsLoading(true);
         const isAdmin = currentUser.profileId === ADMIN_PROFILE_ID;
-        // Buscamos todos os registros de resumo de vendas vinculados ao usuário ou todos se admin
         const data = await dataService.getAll<SalesSummaryItem>('sales_summary', currentUser.id, isAdmin);
-        // Filtramos apenas os que estão com status de venda fechada
         const salesToShow = data.filter(item => {
             const status = (item.status || '').trim().toLowerCase();
             return status === 'aprovado' || status === 'finalizado';
@@ -53,12 +70,9 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
 
     useEffect(() => {
         loadData();
-
         const date = new Date();
-        // Filtro padrão a partir de 2023 para garantir que nada se perca
         const start = '2023-01-01';
         const end = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
-
         setStartDate(start);
         setEndDate(end);
 
@@ -79,7 +93,6 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
             const isAdmin = currentUser.profileId === ADMIN_PROFILE_ID;
             const budgets = await dataService.getAll<SavedOrcamento>('orcamentos', currentUser.id, isAdmin);
             
-            // Filtro robusto de aprovados e finalizados
             const approvedBudgets = budgets.filter(b => {
                 const s = (b.status || '').trim().toLowerCase();
                 return s === 'aprovado' || s === 'finalizado';
@@ -87,32 +100,30 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
             
             let syncCount = 0;
             for (const budget of approvedBudgets) {
-                // Tenta pegar a variante principal ou os dados da raiz
                 let variant = budget.variants?.find(v => v.isPrincipal) || budget.variants?.[0];
                 const fs = variant?.formState || budget.formState;
                 const calc = variant?.calculated || budget.calculated;
 
                 if (fs && calc) {
-                    const thirdPartyInstallation = (Number(fs.terceiroInstalacaoQtd) || 0) * (Number(fs.terceiroInstalacaoCusto) || 0);
+                    const thirdPartyInstallation = parseSafeNumber(fs.terceiroInstalacaoQtd) * parseSafeNumber(fs.terceiroInstalacaoCusto);
 
-                    // Usamos o budget.id como ID do resumo para garantir 1:1
                     const saleItem: SalesSummaryItem = {
-                        id: budget.id, // ID Unificado
+                        id: budget.id,
                         orcamentoId: budget.id,
                         owner_id: budget.owner_id,
                         clientName: fs.nomeCliente || 'Cliente sem nome',
                         date: fs.dataOrcamento || budget.savedAt.split('T')[0],
-                        closedValue: Number(calc.precoVendaFinal) || 0,
-                        systemCost: Number(calc.valorVendaSistema) || 0,
+                        closedValue: parseSafeNumber(calc.precoVendaFinal),
+                        systemCost: parseSafeNumber(calc.valorVendaSistema),
                         supplier: fs.fornecedor || 'N/A',
-                        visitaTecnica: Number(fs.visitaTecnicaCusto) || 0,
-                        homologation: Number(fs.projetoHomologacaoCusto) || 0,
+                        visitaTecnica: parseSafeNumber(fs.visitaTecnicaCusto),
+                        homologation: parseSafeNumber(fs.projetoHomologacaoCusto),
                         installation: thirdPartyInstallation,
-                        travelCost: Number(fs.custoViagem) || 0,
-                        adequationCost: Number(fs.adequacaoLocalCusto) || 0,
-                        materialCost: Number(calc.totalEstrutura) || 0,
-                        invoicedTax: Number(calc.nfServicoValor) || 0,
-                        commission: Number(calc.comissaoVendasValor) || 0,
+                        travelCost: parseSafeNumber(fs.custoViagem),
+                        adequationCost: parseSafeNumber(fs.adequacaoLocalCusto),
+                        materialCost: parseSafeNumber(calc.totalEstrutura),
+                        invoicedTax: parseSafeNumber(calc.nfServicoValor),
+                        commission: parseSafeNumber(calc.comissaoVendasValor),
                         bankFees: 0,
                         totalCost: 0,
                         netProfit: 0,
@@ -121,12 +132,12 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                     };
 
                     const extraCosts = 
-                        saleItem.visitaTecnica + saleItem.homologation + saleItem.installation + 
-                        saleItem.travelCost + saleItem.adequationCost + saleItem.materialCost + 
-                        saleItem.invoicedTax + saleItem.commission + saleItem.bankFees;
+                        (saleItem.visitaTecnica || 0) + (saleItem.homologation || 0) + (saleItem.installation || 0) + 
+                        (saleItem.travelCost || 0) + (saleItem.adequationCost || 0) + (saleItem.materialCost || 0) + 
+                        (saleItem.invoicedTax || 0) + (saleItem.commission || 0) + (saleItem.bankFees || 0);
 
                     saleItem.totalCost = extraCosts;
-                    saleItem.netProfit = saleItem.closedValue - saleItem.systemCost - extraCosts;
+                    saleItem.netProfit = (saleItem.closedValue || 0) - (saleItem.systemCost || 0) - extraCosts;
                     saleItem.finalMargin = saleItem.closedValue > 0 ? (saleItem.netProfit / saleItem.closedValue) * 100 : 0;
 
                     await dataService.save('sales_summary', saleItem);
@@ -138,7 +149,7 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
             alert(`${syncCount} registros sincronizados com sucesso.`);
         } catch (e) {
             console.error("Erro na sincronização:", e);
-            alert("Ocorreu um erro ao sincronizar os dados. Verifique o console.");
+            alert("Ocorreu um erro ao sincronizar os dados.");
         } finally {
             setIsSyncing(false);
         }
@@ -163,8 +174,7 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     };
 
     const handleSaveEdit = async (id: number, field: string) => {
-        const numValue = parseFloat(tempValue.replace(',', '.'));
-        const safeValue = isNaN(numValue) ? 0 : numValue;
+        const safeValue = parseSafeNumber(tempValue);
 
         const updatedData = salesData.map(item => {
             if (item.id === id) {

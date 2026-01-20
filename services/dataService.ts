@@ -11,12 +11,42 @@ interface IDataService {
 class SupabaseDataService implements IDataService {
     
     private getLocal<T>(collection: string): T[] {
-        const data = localStorage.getItem(`orner_cache_${collection}`);
-        return data ? JSON.parse(data) : [];
+        try {
+            const data = localStorage.getItem(`orner_cache_${collection}`);
+            return data ? JSON.parse(data) : [];
+        } catch (e) {
+            console.error(`Erro ao ler cache de ${collection}:`, e);
+            return [];
+        }
     }
 
     private setLocal<T>(collection: string, data: T[]): void {
-        localStorage.setItem(`orner_cache_${collection}`, JSON.stringify(data));
+        try {
+            localStorage.setItem(`orner_cache_${collection}`, JSON.stringify(data));
+        } catch (e: any) {
+            // Verifica se o erro é de falta de espaço (QuotaExceededError)
+            if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22) {
+                console.warn(`[CACHE] Limite de armazenamento atingido ao salvar ${collection}. Tentando liberar espaço...`);
+                
+                // Estratégia de limpeza: Remove caches de outras coleções grandes para tentar salvar a atual
+                const largeCollections = ['checklist_checkin', 'checklist_checkout', 'checklist_manutencao', 'expense_reports'];
+                largeCollections.forEach(c => {
+                    if (c !== collection) {
+                        localStorage.removeItem(`orner_cache_${c}`);
+                    }
+                });
+
+                // Tenta salvar novamente após a limpeza
+                try {
+                    localStorage.setItem(`orner_cache_${collection}`, JSON.stringify(data));
+                } catch (retryError) {
+                    console.error(`[CACHE] Falha crítica: ${collection} é muito grande para o LocalStorage, mesmo após limpeza.`);
+                    // Não lançamos o erro para não quebrar o fluxo da aplicação
+                }
+            } else {
+                console.error(`Erro desconhecido ao salvar cache de ${collection}:`, e);
+            }
+        }
     }
 
     async getAll<T>(collection: string, userId?: string, isAdmin?: boolean): Promise<T[]> {
@@ -31,7 +61,10 @@ class SupabaseDataService implements IDataService {
                 'sales_summary',
                 'lavagem_clients',
                 'lavagem_packages',
-                'lavagem_records'
+                'lavagem_records',
+                'checklist_checkin',
+                'checklist_checkout',
+                'checklist_manutencao'
             ];
 
             if (!isAdmin && userId && privateCollections.includes(collection)) {
@@ -45,8 +78,11 @@ class SupabaseDataService implements IDataService {
                 return this.getLocal<T>(collection);
             }
 
-            // Atualiza o cache local com os dados mais recentes do servidor
-            if (data) this.setLocal(collection, data);
+            // Atualiza o cache local de forma segura
+            if (data) {
+                this.setLocal(collection, data);
+            }
+            
             return (data as T[]) || [];
 
         } catch (e: any) {

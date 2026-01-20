@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import type { ChecklistEntry, StockItem, StockMovement, PurchaseRequest, CheckListPageProps, SavedOrcamento } from '../types';
 import { 
@@ -245,6 +246,14 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<'Todos' | 'Aberto' | 'Efetivado' | 'Perdido' | 'Finalizado'>('Todos');
 
+    // Sincroniza o estado interno quando a aba/view muda no Sidebar
+    useEffect(() => {
+        setActiveFormType(view);
+        setForm(getInitialForm(view));
+        setEntries([]); // Limpa lista anterior para carregar a nova
+        loadData();
+    }, [view]);
+
     const loadData = async () => {
         setIsLoading(true);
         const isAdmin = String(currentUser.profileId) === ADMIN_PROFILE_ID;
@@ -273,8 +282,6 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
             setAllCheckins(processedAllCheckins);
         } catch (e) { console.error(e); } finally { setIsLoading(false); }
     };
-
-    useEffect(() => { loadData(); }, [currentUser, view]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -724,38 +731,49 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser }) => {
                 <div className="flex items-center gap-2"><FilterIcon className="w-4 h-4 text-gray-400" /><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)} className="bg-gray-50 dark:bg-gray-700/50 border-none rounded-lg py-2 pl-3 pr-8 text-sm font-semibold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"><option value="Todos">Todos status</option><option value="Aberto">Abertos</option><option value="Efetivado">Efetivados</option><option value="Finalizado">Finalizados</option><option value="Perdido">Perdedos</option></select></div>
             </div>
 
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="min-w-full text-left text-sm">
-                        <thead className="bg-gray-50 dark:bg-gray-700 font-bold text-[11px] text-gray-500 border-b">
-                            <tr><th className="px-6 py-4 text-center">Data</th><th className="px-6 py-4">Projeto / cliente</th><th className="px-6 py-4">Responsável</th><th className="px-6 py-4 text-center">Status</th><th className="px-6 py-4 text-right">Ações</th></tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                            {filteredEntries.map(entry => (
-                                <tr key={entry.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                                    <td className="px-6 py-4 text-gray-500 font-semibold text-center whitespace-nowrap">{entry.date ? new Date(entry.date).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : '---'}</td>
-                                    <td className="px-6 py-4 font-bold text-gray-900 dark:text-white text-xs">{entry.project}</td>
-                                    <td className="px-6 py-4 text-gray-500 text-xs font-medium">{entry.responsible}</td>
-                                    <td className="px-6 py-4 text-center"><span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${(entry.status || 'Aberto').toLowerCase() === 'efetivado' ? 'bg-green-100 text-green-700' : (entry.status || 'Aberto').toLowerCase() === 'finalizado' ? 'bg-purple-100 text-purple-700' : (entry.status || 'Aberto').toLowerCase() === 'perdido' ? 'bg-red-100 text-red-700' : 'bg-blue-50 text-blue-600'}`}>{entry.status || 'Aberto'}</span></td>
-                                    <td className="px-6 py-4 text-right space-x-2 whitespace-nowrap">
-                                        <button onClick={() => handleView(entry)} className="p-1.5 text-gray-400 hover:text-blue-600" title="Visualizar formulário"><EyeIcon className="w-5 h-5"/></button>
-                                        {(entry.status || 'Aberto').toLowerCase() === 'aberto' && (
-                                            <>
-                                                <button onClick={() => handleEdit(entry)} className="p-1.5 text-gray-400 hover:text-indigo-600" title="Editar informações">
-                                                    <EditIcon className="w-5 h-5"/>
-                                                </button>
-                                                <button onClick={() => handleOpenStatus(entry)} className="p-1.5 text-gray-400 hover:text-green-600" title={entry.type === 'checkin' ? "Confirmar venda" : "Finalizar obra/serviço"}>
-                                                    <CheckCircleIcon className="w-5 h-5"/>
-                                                </button>
-                                            </>
-                                        )}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+            {isLoading ? (
+                <div className="flex justify-center p-20">
+                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
                 </div>
-            </div>
+            ) : (
+                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full text-left text-sm">
+                            <thead className="bg-gray-50 dark:bg-gray-700 font-bold text-[11px] text-gray-500 border-b">
+                                <tr><th className="px-6 py-4 text-center">Data</th><th className="px-6 py-4">Projeto / cliente</th><th className="px-6 py-4">Responsável</th><th className="px-6 py-4 text-center">Status</th><th className="px-6 py-4 text-right">Ações</th></tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                {filteredEntries.map(entry => (
+                                    <tr key={entry.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                                        <td className="px-6 py-4 text-gray-500 font-semibold text-center whitespace-nowrap">{entry.date ? new Date(entry.date).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : '---'}</td>
+                                        <td className="px-6 py-4 font-bold text-gray-900 dark:text-white text-xs">{entry.project}</td>
+                                        <td className="px-6 py-4 text-gray-500 text-xs font-medium">{entry.responsible}</td>
+                                        <td className="px-6 py-4 text-center"><span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${(entry.status || 'Aberto').toLowerCase() === 'efetivado' ? 'bg-green-100 text-green-700' : (entry.status || 'Aberto').toLowerCase() === 'finalizado' ? 'bg-purple-100 text-purple-700' : (entry.status || 'Aberto').toLowerCase() === 'perdido' ? 'bg-red-100 text-red-700' : 'bg-blue-50 text-blue-600'}`}>{entry.status || 'Aberto'}</span></td>
+                                        <td className="px-6 py-4 text-right space-x-2 whitespace-nowrap">
+                                            <button onClick={() => handleView(entry)} className="p-1.5 text-gray-400 hover:text-blue-600" title="Visualizar formulário"><EyeIcon className="w-5 h-5"/></button>
+                                            {(entry.status || 'Aberto').toLowerCase() === 'aberto' && (
+                                                <>
+                                                    <button onClick={() => handleEdit(entry)} className="p-1.5 text-gray-400 hover:text-indigo-600" title="Editar informações">
+                                                        <EditIcon className="w-5 h-5"/>
+                                                    </button>
+                                                    <button onClick={() => handleOpenStatus(entry)} className="p-1.5 text-gray-400 hover:text-green-600" title={entry.type === 'checkin' ? "Confirmar venda" : "Finalizar obra/serviço"}>
+                                                        <CheckCircleIcon className="w-5 h-5"/>
+                                                    </button>
+                                                </>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                                {filteredEntries.length === 0 && (
+                                    <tr>
+                                        <td colSpan={5} className="px-6 py-12 text-center text-gray-400 italic font-bold">Nenhum registro encontrado.</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
 
             {isStatusModalOpen && statusTargetEntry && (
                 <Modal title={statusTargetEntry.type === 'checkin' ? "Confirmar venda" : "Finalizar serviço"} onClose={() => setStatusModalOpen(false)} maxWidth="max-w-sm">

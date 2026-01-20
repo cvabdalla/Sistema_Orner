@@ -17,6 +17,25 @@ const toSentenceCase = (str: string) => {
     return clean.charAt(0).toUpperCase() + clean.slice(1);
 };
 
+/**
+ * Converte strings financeiras (BR) em números de forma ultra robusta.
+ * Remove R$, espaços, pontos de milhar e trata a vírgula decimal.
+ */
+const parseSafeNumber = (val: any): number => {
+    if (typeof val === 'number') return val;
+    if (!val) return 0;
+    
+    // Converte para string e limpa caracteres não numéricos exceto vírgula e ponto
+    const clean = String(val)
+        .replace(/R\$/g, '')      // Remove R$
+        .replace(/\s/g, '')       // Remove espaços
+        .replace(/\./g, '')       // Remove pontos de milhar
+        .replace(',', '.');       // Troca vírgula decimal por ponto
+        
+    const parsed = parseFloat(clean);
+    return isNaN(parsed) ? 0 : parsed;
+};
+
 const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, currentUser }) => {
   const [orcamentos, setOrcamentos] = useState<SavedOrcamento[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -129,28 +148,28 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                   if (variant.formState && variant.calculated) {
                       const fs = variant.formState;
                       const calc = variant.calculated;
-                      const thirdPartyInstallation = (Number(fs.terceiroInstalacaoQtd) || 0) * (Number(fs.terceiroInstalacaoCusto) || 0);
+                      const thirdPartyInstallation = parseSafeNumber(fs.terceiroInstalacaoQtd) * parseSafeNumber(fs.terceiroInstalacaoCusto);
 
                       const existing = currentSales.find(s => s.orcamentoId === orcamento.id);
 
                       const saleItem: SalesSummaryItem = {
-                          id: orcamento.id, // Sincroniza ID para ser igual ao do Orçamento
+                          id: orcamento.id,
                           orcamentoId: orcamento.id,
                           owner_id: orcamento.owner_id,
                           clientName: fs.nomeCliente || 'Cliente sem nome',
                           date: fs.dataOrcamento || orcamento.savedAt.split('T')[0],
-                          closedValue: Number(calc.precoVendaFinal) || 0,
-                          systemCost: Number(calc.valorVendaSistema) || 0,
+                          closedValue: parseSafeNumber(calc.precoVendaFinal),
+                          systemCost: parseSafeNumber(calc.valorVendaSistema),
                           supplier: fs.fornecedor || 'N/A',
-                          visitaTecnica: Number(fs.visitaTecnicaCusto) || 0,
-                          homologation: Number(fs.projetoHomologacaoCusto) || 0,
+                          visitaTecnica: parseSafeNumber(fs.visitaTecnicaCusto),
+                          homologation: parseSafeNumber(fs.projetoHomologacaoCusto),
                           installation: thirdPartyInstallation,
-                          travelCost: Number(fs.custoViagem) || 0,
-                          adequationCost: Number(fs.adequacaoLocalCusto) || 0,
-                          materialCost: Number(calc.totalEstrutura) || 0,
-                          invoicedTax: existing ? Number(existing.invoicedTax) : (Number(calc.nfServicoValor) || 0),
-                          commission: Number(calc.comissaoVendasValor) || 0,
-                          bankFees: existing ? Number(existing.bankFees) : 0,
+                          travelCost: parseSafeNumber(fs.custoViagem),
+                          adequationCost: parseSafeNumber(fs.adequacaoLocalCusto),
+                          materialCost: parseSafeNumber(calc.totalEstrutura),
+                          invoicedTax: existing ? parseSafeNumber(existing.invoicedTax) : parseSafeNumber(calc.nfServicoValor),
+                          commission: parseSafeNumber(calc.comissaoVendasValor),
+                          bankFees: existing ? parseSafeNumber(existing.bankFees) : 0,
                           totalCost: 0, 
                           netProfit: 0,
                           finalMargin: 0,
@@ -160,7 +179,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                       const extraCosts = 
                           saleItem.visitaTecnica + saleItem.homologation + saleItem.installation + 
                           saleItem.travelCost + saleItem.adequationCost + saleItem.materialCost + 
-                          saleItem.invoicedTax + Number(calc.comissaoVendasValor || 0) + saleItem.bankFees;
+                          saleItem.invoicedTax + saleItem.commission + saleItem.bankFees;
 
                       saleItem.totalCost = extraCosts;
                       saleItem.netProfit = saleItem.closedValue - saleItem.systemCost - extraCosts;
