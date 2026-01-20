@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import type { ChecklistEntry, StockItem, StockMovement, PurchaseRequest, CheckListPageProps, SavedOrcamento } from '../types';
 import { 
     ClipboardCheckIcon, CheckCircleIcon, TrashIcon, 
@@ -215,6 +215,12 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
     const [showNameSuggestions, setShowNameSuggestions] = useState(false);
     const suggestionRef = useRef<HTMLDivElement>(null);
 
+    const isAdmin = useMemo(() => 
+        String(currentUser.profileId) === ADMIN_PROFILE_ID || 
+        userPermissions.includes('ALL') || 
+        currentUser.email.toLowerCase().includes('homologacao')
+    , [currentUser, userPermissions]);
+
     const getTableName = (type: string) => {
         switch(type) {
             case 'checkin': return 'checklist_checkin';
@@ -246,19 +252,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<'Todos' | 'Aberto' | 'Efetivado' | 'Perdido' | 'Finalizado'>('Todos');
 
-    const isAdmin = useMemo(() => 
-        String(currentUser.profileId) === ADMIN_PROFILE_ID || 
-        userPermissions.includes('ALL') ||
-        currentUser.email.toLowerCase().includes('homologacao')
-    , [currentUser, userPermissions]);
-
-    useEffect(() => {
-        setActiveFormType(view);
-        setForm(getInitialForm(view));
-        loadData();
-    }, [view]);
-
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         setIsLoading(true);
         const currentTable = getTableName(view);
         try {
@@ -282,7 +276,13 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
             setOrcamentos(rawOrcamentos);
             setAllCheckins(processedAllCheckins);
         } catch (e) { console.error(e); } finally { setIsLoading(false); }
-    };
+    }, [view, currentUser.id, isAdmin]);
+
+    useEffect(() => {
+        setActiveFormType(view);
+        setForm(getInitialForm(view));
+        loadData();
+    }, [view, loadData]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -717,7 +717,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-center bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 gap-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 gap-4">
                 <div className="flex items-center gap-4">
                     <div className="p-3 bg-indigo-100 text-indigo-600 rounded-xl">{view === 'checkin' ? <ClipboardCheckIcon className="w-8 h-8"/> : view === 'checkout' ? <CheckCircleIcon className="w-8 h-8" /> : <WrenchIcon className="w-8 h-8" />}</div>
                     <div><h2 className="text-xl font-bold text-gray-800 dark:text-white">{view === 'checkin' ? 'Check-in de obra' : view === 'checkout' ? 'Check-out (Pós-instalação)' : 'Manutenção'}</h2><p className="text-[11px] text-gray-400 font-semibold tracking-wider">{view === 'checkin' ? 'Vistorias técnicas oficiais' : view === 'checkout' ? 'Documentação final de entrega' : 'Documentação para manutenções avulsas'}</p></div>
@@ -883,7 +883,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
 
                                                         {showNameSuggestions && !isViewOnly && filteredApprovedClients.length > 0 && (
                                                             <div className="absolute top-full left-0 z-50 w-full bg-white dark:bg-gray-800 mt-1 rounded-xl shadow-2xl border border-indigo-50 dark:border-gray-700 py-2 max-h-52 overflow-y-auto custom-scrollbar animate-fade-in">
-                                                                <p className="px-4 py-1.5 text-[9px] font-black text-indigo-500 uppercase tracking-widest border-b border-gray-50 dark:border-gray-700 mb-1">Clientes aptos para vistorias</p>
+                                                                <p className="px-4 py-1.5 text-[9px] font-black text-indigo-500 uppercase tracking-widest border-b border-gray-50 dark:border-gray-700 mb-1">Clientes aptos para vistoria técnica</p>
                                                                 {filteredApprovedClients.map((client, idx) => (
                                                                     <button
                                                                         key={idx}

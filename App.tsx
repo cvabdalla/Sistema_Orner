@@ -47,6 +47,7 @@ const App: React.FC = () => {
       const profiles = await dataService.getAll<UserProfile>('system_profiles', undefined, true);
       let profile = profiles.find(p => String(p.id) === String(profileId));
       
+      // Fallback robusto para mock profiles se o Supabase falhar ou o perfil não for encontrado
       if (!profile) profile = MOCK_PROFILES.find(p => String(p.id) === String(profileId));
 
       if (profile) {
@@ -158,7 +159,7 @@ const App: React.FC = () => {
       case 'RELATORIOS_NOVO': return <RelatoriosPage view="reembolso" reportToEdit={editingReport} onSave={handleSaveReport} currentUser={currentUser} userPermissions={userPermissions} />;
       case 'RELATORIOS_STATUS': return <RelatoriosPage view="status" onEditReport={handleEditReport} currentUser={currentUser} userPermissions={userPermissions} />;
       case 'RELATORIOS_HISTORICO': return <RelatoriosPage view="historico" onEditReport={handleEditReport} currentUser={currentUser} userPermissions={userPermissions} />;
-      case 'RELATORIOS_CONFIG': return <RelatoriosPage view="config" currentUser={currentUser} userPermissions={userPermissions} />;
+      case 'RELATORIOS_CONFIG': return <RelatoriosPage view="config" currentUser={currentUser} />;
       case 'INSTALACOES_CALENDARIO': return <InstalacoesPage currentUser={currentUser} />;
       case 'INSTALACOES_CADASTRO': return <InstalacoesCadastroPage currentUser={currentUser} />;
       case 'INSTALACOES_LAVAGEM': return <LavagemPage currentUser={currentUser} />;

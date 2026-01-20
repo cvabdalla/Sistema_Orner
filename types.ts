@@ -289,8 +289,9 @@ export interface LavagemRecord {
     owner_id: string;
     client_id: string;
     date: string;
-    status: 'scheduled' | 'executed';
+    status: 'scheduled' | 'executed' | 'cancelled';
     created_at?: string;
+    notes?: string;
 }
 
 export interface LavagemPackage {
@@ -373,7 +374,7 @@ export interface FinanceiroPageProps {
 }
 
 export interface RelatoriosPageProps {
-    view: 'analise' | 'reembolso' | 'status' | 'historico' | 'config' | 'instalacao_lavagem';
+    view: 'analise' | 'instalacao_lavagem' | 'status' | 'historico';
     reportToEdit?: ExpenseReport | null;
     onSave?: () => void;
     onEditReport?: (report: ExpenseReport) => void;
