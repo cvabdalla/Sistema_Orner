@@ -208,6 +208,7 @@ export interface ExpenseReport {
     createdAt: string;
     totalValue: number;
     cancelReason?: string;
+    isInstallmentWash?: boolean;
 }
 
 /* Fix missing Financial types */
@@ -227,6 +228,7 @@ export interface FinancialTransaction {
     bankId?: string;
     status: FinancialTransactionStatus;
     cancelReason?: string;
+    relatedReportId?: string;
 }
 
 export interface FinancialCategory {
@@ -371,11 +373,12 @@ export interface FinanceiroPageProps {
 }
 
 export interface RelatoriosPageProps {
-    view: 'analise' | 'reembolso' | 'status' | 'historico' | 'config';
+    view: 'analise' | 'reembolso' | 'status' | 'historico' | 'config' | 'instalacao_lavagem';
     reportToEdit?: ExpenseReport | null;
     onSave?: () => void;
     onEditReport?: (report: ExpenseReport) => void;
     currentUser: User;
+    userPermissions: string[];
 }
 
 export interface NovoOrcamentoPageProps {
@@ -400,6 +403,7 @@ export interface UsuariosPageProps {
 export interface CheckListPageProps {
     view: 'checkin' | 'checkout' | 'manutencao';
     currentUser: User;
+    userPermissions: string[];
 }
 
 export interface InstalacoesPageProps {

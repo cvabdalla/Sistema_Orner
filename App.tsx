@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -46,7 +47,6 @@ const App: React.FC = () => {
       const profiles = await dataService.getAll<UserProfile>('system_profiles', undefined, true);
       let profile = profiles.find(p => String(p.id) === String(profileId));
       
-      // Fallback robusto para mock profiles se o Supabase falhar ou o perfil não for encontrado
       if (!profile) profile = MOCK_PROFILES.find(p => String(p.id) === String(profileId));
 
       if (profile) {
@@ -151,14 +151,14 @@ const App: React.FC = () => {
       case 'ESTOQUE_VISAO_GERAL': return <EstoquePage view="visao_geral" setCurrentPage={handleSetCurrentPage} currentUser={currentUser} userPermissions={userPermissions} />;
       case 'ESTOQUE_NOVO_PRODUTO': return <EstoquePage view="cadastro" setCurrentPage={handleSetCurrentPage} currentUser={currentUser} userPermissions={userPermissions} />;
       case 'ESTOQUE_COMPRAS': return <EstoquePage view="compras" setCurrentPage={handleSetCurrentPage} currentUser={currentUser} userPermissions={userPermissions} />;
-      case 'CHECKLIST_CHECKIN': return <CheckListPage view="checkin" currentUser={currentUser} />;
-      case 'CHECKLIST_CHECKOUT': return <CheckListPage view="checkout" currentUser={currentUser} />;
-      case 'CHECKLIST_MANUTENCAO': return <CheckListPage view="manutencao" currentUser={currentUser} />;
-      case 'RELATORIOS_VISAO_GERAL': return <RelatoriosPage view="analise" currentUser={currentUser} />;
-      case 'RELATORIOS_NOVO': return <RelatoriosPage view="reembolso" reportToEdit={editingReport} onSave={handleSaveReport} currentUser={currentUser} />;
-      case 'RELATORIOS_STATUS': return <RelatoriosPage view="status" onEditReport={handleEditReport} currentUser={currentUser} />;
-      case 'RELATORIOS_HISTORICO': return <RelatoriosPage view="historico" onEditReport={handleEditReport} currentUser={currentUser} />;
-      case 'RELATORIOS_CONFIG': return <RelatoriosPage view="config" currentUser={currentUser} />;
+      case 'CHECKLIST_CHECKIN': return <CheckListPage view="checkin" currentUser={currentUser} userPermissions={userPermissions} />;
+      case 'CHECKLIST_CHECKOUT': return <CheckListPage view="checkout" currentUser={currentUser} userPermissions={userPermissions} />;
+      case 'CHECKLIST_MANUTENCAO': return <CheckListPage view="manutencao" currentUser={currentUser} userPermissions={userPermissions} />;
+      case 'RELATORIOS_VISAO_GERAL': return <RelatoriosPage view="analise" currentUser={currentUser} userPermissions={userPermissions} />;
+      case 'RELATORIOS_NOVO': return <RelatoriosPage view="reembolso" reportToEdit={editingReport} onSave={handleSaveReport} currentUser={currentUser} userPermissions={userPermissions} />;
+      case 'RELATORIOS_STATUS': return <RelatoriosPage view="status" onEditReport={handleEditReport} currentUser={currentUser} userPermissions={userPermissions} />;
+      case 'RELATORIOS_HISTORICO': return <RelatoriosPage view="historico" onEditReport={handleEditReport} currentUser={currentUser} userPermissions={userPermissions} />;
+      case 'RELATORIOS_CONFIG': return <RelatoriosPage view="config" currentUser={currentUser} userPermissions={userPermissions} />;
       case 'INSTALACOES_CALENDARIO': return <InstalacoesPage currentUser={currentUser} />;
       case 'INSTALACOES_CADASTRO': return <InstalacoesCadastroPage currentUser={currentUser} />;
       case 'INSTALACOES_LAVAGEM': return <LavagemPage currentUser={currentUser} />;
