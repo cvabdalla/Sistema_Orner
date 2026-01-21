@@ -40,6 +40,13 @@ export interface User {
     biometricsEnabled?: boolean;
 }
 
+export interface Supplier {
+    id: string;
+    owner_id: string;
+    name: string;
+    active: boolean;
+}
+
 export interface UserProfile {
     id: string;
     name: string;
@@ -376,7 +383,7 @@ export interface FinanceiroPageProps {
 }
 
 export interface RelatoriosPageProps {
-    view: 'analise' | 'instalacao_lavagem' | 'status' | 'historico';
+    view: 'analise' | 'reembolso' | 'status' | 'historico' | 'config';
     reportToEdit?: ExpenseReport | null;
     onSave?: () => void;
     onEditReport?: (report: ExpenseReport) => void;

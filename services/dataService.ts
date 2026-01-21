@@ -24,24 +24,18 @@ class SupabaseDataService implements IDataService {
         try {
             localStorage.setItem(`orner_cache_${collection}`, JSON.stringify(data));
         } catch (e: any) {
-            // Verifica se o erro é de falta de espaço (QuotaExceededError)
             if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22) {
                 console.warn(`[CACHE] Limite de armazenamento atingido ao salvar ${collection}. Tentando liberar espaço...`);
-                
-                // Estratégia de limpeza: Remove caches de outras coleções grandes para tentar salvar a atual
                 const largeCollections = ['checklist_checkin', 'checklist_checkout', 'checklist_manutencao', 'expense_reports'];
                 largeCollections.forEach(c => {
                     if (c !== collection) {
                         localStorage.removeItem(`orner_cache_${c}`);
                     }
                 });
-
-                // Tenta salvar novamente após a limpeza
                 try {
                     localStorage.setItem(`orner_cache_${collection}`, JSON.stringify(data));
                 } catch (retryError) {
-                    console.error(`[CACHE] Falha crítica: ${collection} é muito grande para o LocalStorage, mesmo após limpeza.`);
-                    // Não lançamos o erro para não quebrar o fluxo da aplicação
+                    console.error(`[CACHE] Falha crítica: ${collection} é muito grande para o LocalStorage.`);
                 }
             } else {
                 console.error(`Erro desconhecido ao salvar cache de ${collection}:`, e);
@@ -64,7 +58,8 @@ class SupabaseDataService implements IDataService {
                 'lavagem_records',
                 'checklist_checkin',
                 'checklist_checkout',
-                'checklist_manutencao'
+                'checklist_manutencao',
+                'suppliers'
             ];
 
             if (!isAdmin && userId && privateCollections.includes(collection)) {
@@ -78,7 +73,6 @@ class SupabaseDataService implements IDataService {
                 return this.getLocal<T>(collection);
             }
 
-            // Atualiza o cache local de forma segura
             if (data) {
                 this.setLocal(collection, data);
             }
@@ -86,13 +80,12 @@ class SupabaseDataService implements IDataService {
             return (data as T[]) || [];
 
         } catch (e: any) {
-            console.error(`[OFFLINE MODE] Usando dados locais para ${collection}. Motivo:`, e.message || e);
+            console.error(`[OFFLINE MODE] Usando dados locais para ${collection}.`, e.message || e);
             return this.getLocal<T>(collection);
         }
     }
 
     async save<T extends { id: string | number }>(collection: string, item: T): Promise<T> {
-        // 1. Salva no Cache Local Primeiro (Segurança)
         const localData = this.getLocal<T>(collection);
         const index = localData.findIndex(i => String(i.id) === String(item.id));
         if (index > -1) {
@@ -102,7 +95,6 @@ class SupabaseDataService implements IDataService {
         }
         this.setLocal(collection, localData);
 
-        // 2. Tenta sincronizar com Supabase
         try {
             const cleanItem = Object.fromEntries(
                 Object.entries(item).filter(([_, v]) => v !== undefined)
@@ -117,13 +109,12 @@ class SupabaseDataService implements IDataService {
             if (error) throw error;
             return data as T;
         } catch (e: any) {
-            console.warn(`[OFFLINE SAVE] ${collection} salva apenas localmente. Erro:`, e.message);
-            return item;
+            console.error(`[SAVE ERROR] ${collection}:`, e.message);
+            throw e; // Lançar o erro para que o componente saiba que falhou
         }
     }
 
     async saveAll<T extends { id: string | number }>(collection: string, items: T[]): Promise<T[]> {
-        // 1. Salva no Cache Local
         const localData = this.getLocal<T>(collection);
         items.forEach(item => {
             const index = localData.findIndex(i => String(i.id) === String(item.id));
@@ -132,7 +123,6 @@ class SupabaseDataService implements IDataService {
         });
         this.setLocal(collection, localData);
 
-        // 2. Tenta sincronizar
         try {
             const { data, error } = await supabase
                 .from(collection)
@@ -142,18 +132,16 @@ class SupabaseDataService implements IDataService {
             if (error) throw error;
             return data as T[];
         } catch (e: any) {
-            console.warn(`[OFFLINE BATCH SAVE] ${collection} salvo apenas localmente.`);
-            return items;
+            console.error(`[BATCH SAVE ERROR] ${collection}:`, e.message);
+            throw e;
         }
     }
 
     async delete(collection: string, id: string | number): Promise<boolean> {
-        // 1. Remove do Cache Local
         const localData = this.getLocal<any>(collection);
         const filtered = localData.filter(i => String(i.id) !== String(id));
         this.setLocal(collection, filtered);
 
-        // 2. Tenta remover do Supabase
         try {
             const { error } = await supabase
                 .from(collection)
@@ -163,8 +151,8 @@ class SupabaseDataService implements IDataService {
             if (error) throw error;
             return true;
         } catch (e: any) {
-            console.warn(`[OFFLINE DELETE] ${collection} removido apenas localmente.`);
-            return true;
+            console.error(`[DELETE ERROR] ${collection}:`, e.message);
+            throw e;
         }
     }
 }

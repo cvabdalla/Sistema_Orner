@@ -6,7 +6,7 @@ import {
     CheckCircleIcon, DollarIcon, ExclamationTriangleIcon, 
     DocumentReportIcon, XCircleIcon, LockClosedIcon,
     ArrowLeftIcon, EyeIcon, CalendarIcon, TableIcon, FilterIcon, UsersIcon, ChevronDownIcon,
-    UploadIcon, PhotographIcon, ClockIcon, SearchIcon, TrendUpIcon, SparklesIcon
+    UploadIcon, PhotographIcon, ClockIcon, SearchIcon, TrendUpIcon, SparklesIcon, TruckIcon
 } from '../assets/icons';
 import Modal from '../components/Modal';
 import DashboardCard from '../components/DashboardCard';
@@ -15,7 +15,7 @@ import {
     Tooltip as RechartsTooltip, Legend, BarChart, 
     Bar, XAxis, YAxis, CartesianGrid 
 } from 'recharts';
-import type { RelatoriosPageProps, ExpenseReportItem, ExpenseReport, ExpenseReportStatus, ExpenseAttachment, FinancialCategory, FinancialTransaction } from '../types';
+import type { RelatoriosPageProps, ExpenseReportItem, ExpenseReport, ExpenseReportStatus, ExpenseAttachment, FinancialCategory, FinancialTransaction, Supplier } from '../types';
 import { dataService } from '../services/dataService';
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
@@ -49,6 +49,12 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
   const [configKmValue, setConfigKmValue] = useState(1.20);
   const [configInstValue, setConfigInstValue] = useState(120.00);
 
+  // Estados Fornecedor
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [newSupplierName, setNewSupplierName] = useState('');
+  const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
+  const [editSupplierNameValue, setEditSupplierNameValue] = useState('');
+
   const [isEditingKm, setIsEditingKm] = useState(false);
   const [isEditingInst, setIsEditingInst] = useState(false);
 
@@ -74,6 +80,18 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
   const isAdmin = useMemo(() => currentUser.profileId === '001' || currentUser.profileId === '00000000-0000-0000-0000-000000000001', [currentUser]);
 
   const isReadOnly = useMemo(() => reportToEdit ? reportToEdit.status !== 'Rascunho' : false, [reportToEdit]);
+
+  const loadSuppliers = useCallback(async () => {
+    try {
+        const isAdminUser = currentUser.profileId === '001';
+        const data = await dataService.getAll<Supplier>('suppliers', currentUser.id, isAdminUser);
+        if (data) {
+            setSuppliers(data.sort((a,b) => a.name.localeCompare(b.name)));
+        }
+    } catch (e) {
+        console.error("Erro ao carregar fornecedores:", e);
+    }
+  }, [currentUser]);
 
   const loadReports = useCallback(async () => {
     setIsLoading(true);
@@ -115,6 +133,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
   useEffect(() => { 
     loadReports(); 
     loadConfig();
+    loadSuppliers();
 
     const date = new Date();
     const filterStartDefault = new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
@@ -129,7 +148,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [view, loadReports, loadConfig]);
+  }, [view, loadReports, loadConfig, loadSuppliers]);
 
   useEffect(() => {
     if (view === 'reembolso') {
@@ -152,6 +171,65 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
         }
     }
   }, [view, reportToEdit, currentUser, configKmValue]);
+
+  const handleAddSupplier = async () => {
+    const name = newSupplierName.trim();
+    if (!name) return;
+
+    setIsLoading(true);
+    try {
+        const newSupplier: Supplier = {
+            id: `sup-${Date.now()}`,
+            owner_id: currentUser.id,
+            name: name,
+            active: true
+        };
+        
+        await dataService.save('suppliers', newSupplier);
+        setNewSupplierName('');
+        setSuppliers(prev => [...prev, newSupplier].sort((a,b) => a.name.localeCompare(b.name)));
+    } catch (e: any) {
+        console.error("Erro ao salvar fornecedor:", e);
+        alert(`Não foi possível salvar o fornecedor.\n\nMotivo: ${e.message || "Erro de conexão"}`);
+    } finally {
+        setIsLoading(false);
+    }
+  };
+
+  const handleEditSupplierClick = (sup: Supplier) => {
+      setEditingSupplierId(sup.id);
+      setEditSupplierNameValue(sup.name);
+  };
+
+  const handleSaveSupplierEdit = async (sup: Supplier) => {
+      const name = editSupplierNameValue.trim();
+      if (!name) return;
+      
+      setIsLoading(true);
+      try {
+          const updatedSupplier = { ...sup, name };
+          await dataService.save('suppliers', updatedSupplier);
+          setEditingSupplierId(null);
+          setSuppliers(prev => prev.map(s => s.id === sup.id ? updatedSupplier : s).sort((a,b) => a.name.localeCompare(b.name)));
+      } catch (e: any) {
+          alert("Erro ao atualizar fornecedor.");
+      } finally {
+          setIsLoading(false);
+      }
+  };
+
+  const handleDeleteSupplier = async (id: string) => {
+    if (!confirm("Deseja realmente excluir este fornecedor?")) return;
+    setIsLoading(true);
+    try {
+        await dataService.delete('suppliers', id);
+        setSuppliers(prev => prev.filter(s => s.id !== id));
+    } catch (e) {
+        alert("Erro ao excluir fornecedor.");
+    } finally {
+        setIsLoading(false);
+    }
+  };
 
   const uniqueRequesters = useMemo(() => {
     const names = reports.map(r => r.requester);
@@ -537,7 +615,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
     );
 
     if (view === 'config') return (
-        <div className="max-w-3xl mx-auto space-y-6 animate-fade-in pb-20">
+        <div className="max-w-7xl mx-auto space-y-6 animate-fade-in pb-20">
             <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700">
                 <div className="flex items-center gap-5 mb-10 pb-6 border-b border-gray-100 dark:border-gray-700">
                     <div className="w-14 h-14 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-600/20">
@@ -549,7 +627,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                     <div className="space-y-6">
                         <SectionTitle color="bg-blue-500">Parâmetros de solicitação</SectionTitle>
                         <div className={`p-6 rounded-2xl border-2 transition-all group ${isEditingKm ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-400' : 'bg-gray-50 dark:bg-gray-950 border-transparent hover:border-gray-200'}`}>
@@ -618,6 +696,95 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                                     onChange={(e) => setConfigInstValue(parseFloat(e.target.value) || 0)} 
                                     className={`w-full border-2 rounded-xl py-3.5 pl-11 pr-4 text-sm font-black outline-none transition-all ${isEditingInst ? 'bg-white dark:bg-gray-900 border-green-500 text-green-700' : 'bg-gray-100 text-gray-500 cursor-not-allowed'}`}
                                 />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="space-y-6">
+                        <SectionTitle color="bg-amber-500">Cadastro de Fornecedor</SectionTitle>
+                        <div className="bg-gray-50 dark:bg-gray-950 rounded-2xl p-6 border-2 border-transparent hover:border-gray-200 transition-all space-y-4">
+                            <div className="space-y-2">
+                                <FormLabel>Nome do Fornecedor</FormLabel>
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="text" 
+                                        value={newSupplierName}
+                                        onChange={(e) => setNewSupplierName(e.target.value)}
+                                        placeholder="Ex: Aldo Solar, Fortlev..."
+                                        className="flex-1 rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-2 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-sm"
+                                    />
+                                    <button 
+                                        onClick={handleAddSupplier}
+                                        disabled={isLoading || !newSupplierName.trim()}
+                                        className={`p-2 rounded-xl shadow-md transition-all active:scale-95 flex items-center justify-center ${newSupplierName.trim() ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
+                                        title="Adicionar fornecedor"
+                                    >
+                                        <PlusIcon className="w-5 h-5" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="max-h-48 overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
+                                {suppliers.length > 0 ? (
+                                    suppliers.map(sup => (
+                                        <div key={sup.id} className="flex justify-between items-center p-2.5 bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 group hover:border-indigo-100 transition-all shadow-sm">
+                                            <div className="flex items-center gap-2 flex-1">
+                                                <div className="w-2 h-2 rounded-full bg-amber-500 shrink-0"></div>
+                                                {editingSupplierId === sup.id ? (
+                                                    <input 
+                                                        autoFocus
+                                                        type="text"
+                                                        value={editSupplierNameValue}
+                                                        onChange={(e) => setEditSupplierNameValue(e.target.value)}
+                                                        className="flex-1 bg-transparent border-b border-indigo-500 text-[11px] font-bold text-gray-700 dark:text-white outline-none"
+                                                        onKeyDown={(e) => e.key === 'Enter' && handleSaveSupplierEdit(sup)}
+                                                    />
+                                                ) : (
+                                                    <span className="text-[11px] font-bold text-gray-700 dark:text-gray-200 truncate">{sup.name}</span>
+                                                )}
+                                            </div>
+                                            <div className="flex gap-1 shrink-0 ml-2">
+                                                {editingSupplierId === sup.id ? (
+                                                    <>
+                                                        <button 
+                                                            onClick={() => handleSaveSupplierEdit(sup)}
+                                                            className="p-1 text-green-600 hover:bg-green-50 rounded transition-all"
+                                                            title="Salvar"
+                                                        >
+                                                            <CheckCircleIcon className="w-4 h-4" />
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => setEditingSupplierId(null)}
+                                                            className="p-1 text-red-600 hover:bg-red-50 rounded transition-all"
+                                                            title="Cancelar"
+                                                        >
+                                                            <XCircleIcon className="w-4 h-4" />
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <button 
+                                                            onClick={() => handleEditSupplierClick(sup)}
+                                                            className="p-1 text-gray-400 hover:text-indigo-600 transition-all"
+                                                            title="Editar"
+                                                        >
+                                                            <EditIcon className="w-4 h-4" />
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => handleDeleteSupplier(sup.id)}
+                                                            className="p-1 text-gray-400 hover:text-red-500 transition-all"
+                                                            title="Excluir"
+                                                        >
+                                                            <TrashIcon className="w-4 h-4" />
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <p className="text-center py-4 text-[10px] font-bold text-gray-400 italic">Nenhum fornecedor cadastrado.</p>
+                                )}
                             </div>
                         </div>
                     </div>
