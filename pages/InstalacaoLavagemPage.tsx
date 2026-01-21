@@ -110,13 +110,46 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
     };
 
     const handleSaveAction = async (status: 'Transferido' | 'Rascunho') => {
+        // Caso especial: se desmarcar tudo e for um rascunho existente, o objetivo é excluir o rascunho
         if (selectedTxIds.length === 0) {
-            alert("Selecione pelo menos um lançamento.");
+            if (reportToEdit && reportToEdit.status === 'Rascunho') {
+                setIsSaving(true);
+                try {
+                    // 1. Limpa os metadados das transações financeiras vinculadas a este rascunho para que voltem a ficar disponíveis
+                    const allTxs = await dataService.getAll<FinancialTransaction>('financial_transactions');
+                    const relatedTxs = allTxs.filter(t => t.relatedReportId === reportToEdit.id);
+                    for (const tx of relatedTxs) {
+                        await dataService.save('financial_transactions', { 
+                            ...tx, 
+                            invoiceSent: false, 
+                            relatedReportId: undefined 
+                        });
+                    }
+
+                    // 2. Exclui o rascunho fisicamente do banco de dados
+                    await dataService.delete('expense_reports', reportToEdit.id);
+                    
+                    // 3. Prepara feedback de sucesso
+                    setModalMessage("Rascunho excluído com sucesso. Os itens originais voltaram a ficar disponíveis para seleção.");
+                    setIsConfirmDraftModalOpen(false);
+                    setSuccessModalOpen(true);
+                    return;
+                } catch (e) {
+                    console.error("Erro ao excluir rascunho:", e);
+                    alert("Não foi possível excluir o rascunho. Tente novamente.");
+                } finally {
+                    setIsSaving(false);
+                }
+            } else {
+                alert("Selecione pelo menos um lançamento para salvar o rascunho.");
+                setIsConfirmDraftModalOpen(false);
+            }
             return;
         }
         
         if (status === 'Transferido' && attachments.length === 0) {
             alert("A Nota Fiscal (NF) é obrigatória para solicitar o pagamento.");
+            setIsConfirmDraftModalOpen(false);
             return;
         }
 
@@ -125,7 +158,6 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
             const selectedItems = pendingTransactions.filter(t => selectedTxIds.includes(t.id));
             const reportId = reportToEdit ? reportToEdit.id : `tech-${Date.now()}`;
             
-            // 1. Criar/Atualizar o Relatório de Despesas (Técnico)
             const finalReport: ExpenseReport = {
                 id: reportId,
                 owner_id: reportToEdit ? reportToEdit.owner_id : currentUser.id,
@@ -154,14 +186,12 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
 
             await dataService.save('expense_reports', finalReport);
 
-            // 2. Ponte de Destaque Financeiro: 
-            // Somente se estiver enviando para pagamento (Transferido), atualizamos as linhas financeiras originais
+            // Se for envio (Transferido), atualiza as flags nas transações originais
             if (status === 'Transferido') {
                 const allTxs = await dataService.getAll<FinancialTransaction>('financial_transactions');
                 for (const txId of selectedTxIds) {
                     const originalTx = allTxs.find(t => t.id === txId);
                     if (originalTx) {
-                        // Ativamos 'invoiceSent' que é o gatilho visual no Contas a Pagar
                         await dataService.save('financial_transactions', { 
                             ...originalTx, 
                             invoiceSent: true, 
@@ -169,15 +199,15 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                         });
                     }
                 }
-                setModalMessage("Solicitação enviada! As linhas no Contas a Pagar agora estão destacadas para o financeiro.");
+                setModalMessage("Solicitação enviada com sucesso! O financeiro já pode visualizar os itens destacados.");
             } else {
-                setModalMessage("Rascunho salvo com sucesso.");
+                setModalMessage("Rascunho atualizado. Você poderá finalizar este faturamento no menu Histórico.");
             }
 
             setSuccessModalOpen(true);
             setIsConfirmDraftModalOpen(false);
         } catch (e) {
-            console.error(e);
+            console.error("Erro ao salvar ação:", e);
             alert("Erro ao processar a operação.");
         } finally {
             setIsSaving(false);
@@ -186,7 +216,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
 
     const handleSuccessModalClose = () => {
         setSuccessModalOpen(false);
-        if (onSave) onSave();
+        if (onSave) onSave(); // Retorna para a lista de histórico
     };
 
     const filteredList = pendingTransactions.filter(t => 
@@ -195,7 +225,6 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
 
     return (
         <div className="max-w-7xl mx-auto space-y-6 animate-fade-in pb-20">
-            {/* Header da Página */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700">
                 <div className="flex items-center gap-5">
                     <div className="w-16 h-16 bg-cyan-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-cyan-600/20">
@@ -203,10 +232,10 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                     </div>
                     <div>
                         <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight leading-none">
-                            {isReadOnly ? 'Visualizar faturamento' : reportToEdit ? 'Finalizar Faturamento' : 'Instalações / Lavagens'}
+                            {isReadOnly ? 'Visualizar faturamento' : reportToEdit ? 'Alterar Faturamento' : 'Instalações / Lavagens'}
                         </h1>
                         <p className="text-sm text-gray-500 font-bold mt-2">
-                            {reportToEdit ? `Edição de rascunho: ${reportToEdit.id}` : 'Faturamento Técnico Independente'}
+                            {reportToEdit ? `Registro técnico: ${reportToEdit.id}` : 'Faturamento Técnico Independente'}
                         </p>
                     </div>
                 </div>
@@ -217,12 +246,11 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                {/* Coluna da Esquerda: Seleção de Débitos */}
                 <div className="lg:col-span-8 space-y-4">
                     <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-lg border border-gray-100 dark:border-gray-700 overflow-hidden">
                         <div className="p-6 border-b border-gray-50 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/20 flex flex-col sm:flex-row justify-between items-center gap-4">
                             <h3 className="text-xs font-black text-gray-500 flex items-center gap-2">
-                                <TableIcon className="w-4 h-4" /> {isReadOnly ? 'Itens Selecionados' : 'Lançamentos em Aberto'}
+                                <TableIcon className="w-4 h-4" /> {isReadOnly ? 'Itens do faturamento' : 'Lançamentos disponíveis'}
                             </h3>
                             {!isReadOnly && (
                                 <div className="relative w-full sm:w-64">
@@ -286,7 +314,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                         <tr>
                                             <td colSpan={4} className="px-6 py-20 text-center space-y-4">
                                                 <ExclamationTriangleIcon className="w-12 h-12 text-gray-200 mx-auto" />
-                                                <p className="text-gray-400 font-bold italic text-sm">Não há lançamentos técnicos pendentes ou disponíveis.</p>
+                                                <p className="text-gray-400 font-bold italic text-sm">Não há lançamentos técnicos pendentes nesta categoria.</p>
                                             </td>
                                         </tr>
                                     )}
@@ -296,7 +324,6 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                     </div>
                 </div>
 
-                {/* Coluna da Direita: Upload de NF e Salvamento */}
                 <div className="lg:col-span-4 space-y-6">
                     <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 sticky top-8">
                         <div className="flex items-center gap-3 mb-6">
@@ -305,7 +332,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                         </div>
 
                         <div className="space-y-4">
-                            <p className="text-[11px] text-gray-500 font-bold leading-relaxed">Para solicitar o recebimento, anexe o comprovante ou a Nota Fiscal (PDF ou imagem).</p>
+                            <p className="text-[11px] text-gray-500 font-bold leading-relaxed">Para solicitar o pagamento, anexe a Nota Fiscal ou comprovante (PDF ou Imagem).</p>
                             
                             <div className="grid grid-cols-2 gap-3">
                                 {attachments.map((file, idx) => {
@@ -344,12 +371,12 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                     </button>
                                 )}
                             </div>
-                            <input type="file" ref={fileInputRef} className="hidden" multiple accept="image/*,application/pdf" onChange={handleFileUpload} />
+                            <input type="file" className="hidden" ref={fileInputRef} multiple accept="image/*,application/pdf" onChange={handleFileUpload} />
                         </div>
 
                         <div className="mt-10 pt-8 border-t border-gray-100 dark:border-gray-700 space-y-4">
                             <div className="flex justify-between items-end mb-2">
-                                <span className="text-[11px] font-black text-gray-400">Saldo a Faturar</span>
+                                <span className="text-[11px] font-black text-gray-400">Saldo Fechado</span>
                                 <span className="text-2xl font-black text-cyan-600 leading-none">{formatCurrency(selectedTotal)}</span>
                             </div>
                             
@@ -365,20 +392,20 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                         }`}
                                     >
                                         <SaveIcon className="w-5 h-5" /> 
-                                        {isSaving ? 'Processando...' : (reportToEdit ? 'Finalizar e Enviar' : 'Solicitar Pagamento')}
+                                        {isSaving ? 'Gravando...' : (reportToEdit ? 'Finalizar e Enviar' : 'Solicitar Pagamento')}
                                     </button>
 
                                     <button 
                                         onClick={() => setIsConfirmDraftModalOpen(true)}
-                                        disabled={isSaving || selectedTxIds.length === 0}
+                                        disabled={isSaving}
                                         className={`w-full py-3 rounded-2xl font-bold text-xs transition-all flex items-center justify-center gap-2 ${
-                                            selectedTxIds.length > 0
+                                            !isSaving
                                             ? 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50'
                                             : 'bg-gray-50 dark:bg-gray-900/40 text-gray-300 cursor-not-allowed'
                                         }`}
                                     >
                                         <ClockIcon className="w-4 h-4" /> 
-                                        Salvar Rascunho
+                                        {selectedTxIds.length === 0 && reportToEdit ? 'Excluir Rascunho' : 'Salvar Rascunho'}
                                     </button>
                                 </div>
                             ) : (
@@ -392,7 +419,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                             
                             {!isReadOnly && attachments.length === 0 && selectedTxIds.length > 0 && (
                                 <p className="text-[10px] font-bold text-red-500 text-center animate-pulse">
-                                    ⚠️ Anexo de NF pendente
+                                    ⚠️ Upload de Nota Fiscal pendente
                                 </p>
                             )}
                         </div>
@@ -400,19 +427,32 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                 </div>
             </div>
 
+            {/* Modal de Confirmação para Salvar Rascunho ou EXCLUIR se estiver vazio */}
             {isConfirmDraftModalOpen && (
-                <Modal title="Salvar Rascunho" onClose={() => setIsConfirmDraftModalOpen(false)} maxWidth="max-w-sm">
+                <Modal title={selectedTxIds.length === 0 && reportToEdit ? "Confirmar exclusão" : "Salvar Rascunho"} onClose={() => setIsConfirmDraftModalOpen(false)} maxWidth="max-w-sm">
                     <div className="text-center p-4 space-y-6">
-                        <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-indigo-50 text-indigo-600">
-                            <ClockIcon className="w-10 h-10" />
+                        <div className={`mx-auto flex items-center justify-center h-16 w-16 rounded-full ${selectedTxIds.length === 0 ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                            {selectedTxIds.length === 0 ? <TrashIcon className="w-10 h-10" /> : <ClockIcon className="w-10 h-10" />}
                         </div>
                         <div className="space-y-2">
-                            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Deseja salvar o formulário?</h3>
-                            <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Os itens selecionados ficarão ocultos para outros formulários e salvos como rascunho para você finalizar depois.</p>
+                            <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                                {selectedTxIds.length === 0 && reportToEdit ? 'Deseja excluir este rascunho?' : 'Deseja salvar o formulário?'}
+                            </h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 font-medium leading-relaxed">
+                                {selectedTxIds.length === 0 && reportToEdit 
+                                    ? 'Você desmarcou todos os itens. Ao confirmar, este registro de faturamento será removido e as linhas financeiras serão liberadas para novos formulários.' 
+                                    : 'Os itens selecionados serão reservados para este faturamento. Você poderá editá-los novamente acessando o menu de Histórico.'}
+                            </p>
                         </div>
                         <div className="flex gap-4">
                             <button onClick={() => setIsConfirmDraftModalOpen(false)} className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl font-bold text-sm">Não</button>
-                            <button onClick={() => handleSaveAction('Rascunho')} disabled={isSaving} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20">Sim, Salvar</button>
+                            <button 
+                                onClick={() => handleSaveAction('Rascunho')} 
+                                disabled={isSaving} 
+                                className={`flex-1 py-3 text-white rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-all ${selectedTxIds.length === 0 ? 'bg-red-600 shadow-red-600/20 hover:bg-red-700' : 'bg-indigo-600 shadow-indigo-600/20 hover:bg-indigo-700'}`}
+                            >
+                                {isSaving ? '...' : 'Sim, confirmar'}
+                            </button>
                         </div>
                     </div>
                 </Modal>
@@ -425,14 +465,14 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                             <CheckCircleIcon className="w-12 h-12" />
                         </div>
                         <div className="space-y-2">
-                            <h3 className="text-2xl font-black text-gray-900">Operação concluída!</h3>
+                            <h3 className="text-2xl font-black text-gray-900">Sucesso!</h3>
                             <p className="text-sm font-bold text-gray-500">{modalMessage}</p>
                         </div>
                         <button 
                             onClick={handleSuccessModalClose}
                             className="w-full py-4 bg-gray-900 text-white rounded-2xl font-black text-xs shadow-xl hover:bg-black transition-all active:scale-95"
                         >
-                            Excelente!
+                            Fechar
                         </button>
                     </div>
                 </Modal>
