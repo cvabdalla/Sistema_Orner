@@ -51,6 +51,7 @@ export interface UserProfile {
     id: string;
     name: string;
     permissions: string[];
+    hasGlobalView?: boolean;
 }
 
 export interface MenuItem {
@@ -219,7 +220,6 @@ export interface ExpenseReport {
     isInstallmentWash?: boolean;
 }
 
-/* Fix missing Financial types */
 export type FinancialTransactionType = 'receita' | 'despesa' | 'resultado';
 export type FinancialTransactionStatus = 'pendente' | 'pago' | 'cancelado';
 
@@ -292,7 +292,6 @@ export interface FinancialClassification {
     type: FinancialTransactionType;
 }
 
-/* Fix missing Lavagem types */
 export interface LavagemRecord {
     id: string;
     owner_id: string;
@@ -321,7 +320,6 @@ export interface LavagemContract {
     created_at: string;
 }
 
-/* Fix missing Instalacoes types */
 export interface ActivityCatalogEntry {
     id: string;
     owner_id: string;
@@ -375,11 +373,13 @@ export interface OrcamentoPageProps {
     setCurrentPage: (page: Page) => void;
     onEdit: (orcamento: SavedOrcamento) => void;
     currentUser: User;
+    hasGlobalView?: boolean;
 }
 
 export interface FinanceiroPageProps {
     view: 'dashboard' | 'dre' | 'categorias' | 'bancos';
     currentUser: User;
+    hasGlobalView?: boolean;
 }
 
 export interface RelatoriosPageProps {
@@ -389,6 +389,7 @@ export interface RelatoriosPageProps {
     onEditReport?: (report: ExpenseReport) => void;
     currentUser: User;
     userPermissions: string[];
+    hasGlobalView?: boolean;
 }
 
 export interface NovoOrcamentoPageProps {
@@ -403,6 +404,7 @@ export interface EstoquePageProps {
     setCurrentPage: (page: Page) => void;
     currentUser: User;
     userPermissions: string[];
+    hasGlobalView?: boolean;
 }
 
 export interface UsuariosPageProps {
@@ -414,14 +416,17 @@ export interface CheckListPageProps {
     view: 'checkin' | 'checkout' | 'manutencao';
     currentUser: User;
     userPermissions: string[];
+    hasGlobalView?: boolean;
 }
 
 export interface InstalacoesPageProps {
     currentUser: User;
+    hasGlobalView?: boolean;
 }
 
 export interface InstalacaoLavagemPageProps {
     currentUser: User;
     reportToEdit?: ExpenseReport | null;
     onSave?: () => void;
+    hasGlobalView?: boolean;
 }

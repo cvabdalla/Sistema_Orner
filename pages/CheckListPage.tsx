@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import type { ChecklistEntry, StockItem, StockMovement, PurchaseRequest, CheckListPageProps, SavedOrcamento } from '../types';
+import type { ChecklistEntry, StockItem, StockMovement, PurchaseRequest, CheckListPageProps, SavedOrcamento, UserProfile } from '../types';
 import { 
     ClipboardCheckIcon, CheckCircleIcon, TrashIcon, 
     PlusIcon, PhotographIcon, EyeIcon, WrenchIcon,
@@ -205,6 +205,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
     const [stockItems, setStockItems] = useState<StockItem[]>([]);
     const [orcamentos, setOrcamentos] = useState<SavedOrcamento[]>([]);
     const [allCheckins, setAllCheckins] = useState<ChecklistEntry[]>([]);
+    const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
     const [cidades, setCIDADES] = useState<string[]>([]);
     const [isModalOpen, setModalOpen] = useState(false);
     const [isStatusModalOpen, setStatusModalOpen] = useState(false);
@@ -215,11 +216,15 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
     const [showNameSuggestions, setShowNameSuggestions] = useState(false);
     const suggestionRef = useRef<HTMLDivElement>(null);
 
-    const isAdmin = useMemo(() => 
-        String(currentUser.profileId) === ADMIN_PROFILE_ID || 
-        userPermissions.includes('ALL') || 
-        currentUser.email.toLowerCase().includes('homologacao')
-    , [currentUser, userPermissions]);
+    // Lógica de Admin/Acesso Global: Liberado para ID Admin, perfil com flag 'hasGlobalView' ou permissão ALL
+    const isAdmin = useMemo(() => {
+        const hasGlobalFlag = !!userProfile?.hasGlobalView;
+        
+        return String(currentUser.profileId) === ADMIN_PROFILE_ID || 
+               hasGlobalFlag ||
+               userPermissions.includes('ALL') || 
+               currentUser.email.toLowerCase().includes('homologacao');
+    }, [currentUser, userPermissions, userProfile]);
 
     const getTableName = (type: string) => {
         switch(type) {
@@ -256,11 +261,22 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
         setIsLoading(true);
         const currentTable = getTableName(view);
         try {
+            // Primeiro buscamos o perfil para garantir a lógica de isAdmin
+            const profiles = await dataService.getAll<UserProfile>('system_profiles', undefined, true);
+            const myProfile = profiles.find(p => String(p.id) === String(currentUser.profileId));
+            if (myProfile) setUserProfile(myProfile);
+
+            // Re-calcula localmente a condição de admin para o fetch de dados
+            const localIsAdmin = String(currentUser.profileId) === ADMIN_PROFILE_ID || 
+                               !!myProfile?.hasGlobalView || 
+                               userPermissions.includes('ALL') ||
+                               currentUser.email.toLowerCase().includes('homologacao');
+
             const results = await Promise.allSettled([
-                dataService.getAll<any>(currentTable, currentUser.id, isAdmin),
+                dataService.getAll<any>(currentTable, currentUser.id, localIsAdmin),
                 dataService.getAll<StockItem>('stock_items', currentUser.id, true),
-                dataService.getAll<SavedOrcamento>('orcamentos', currentUser.id, isAdmin),
-                dataService.getAll<any>('checklist_checkin', currentUser.id, isAdmin)
+                dataService.getAll<SavedOrcamento>('orcamentos', currentUser.id, localIsAdmin),
+                dataService.getAll<any>('checklist_checkin', currentUser.id, localIsAdmin)
             ]);
             
             const rawCurrent = results[0].status === 'fulfilled' ? (results[0].value as any[]) : [];
@@ -276,7 +292,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
             setOrcamentos(rawOrcamentos);
             setAllCheckins(processedAllCheckins);
         } catch (e) { console.error(e); } finally { setIsLoading(false); }
-    }, [view, currentUser.id, isAdmin]);
+    }, [view, currentUser.id, currentUser.profileId, currentUser.email, userPermissions]);
 
     useEffect(() => {
         setActiveFormType(view);

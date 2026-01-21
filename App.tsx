@@ -31,6 +31,7 @@ const App: React.FC = () => {
   
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [userPermissions, setUserPermissions] = useState<string[]>([]);
+  const [hasGlobalView, setHasGlobalView] = useState(false);
   const [isUserInitialized, setIsUserInitialized] = useState(false);
 
   const ADMIN_PROFILE_ID = '001';
@@ -48,20 +49,27 @@ const App: React.FC = () => {
       const profiles = await dataService.getAll<UserProfile>('system_profiles', undefined, true);
       let profile = profiles.find(p => String(p.id) === String(profileId));
       
-      // Fallback robusto para mock profiles se o Supabase falhar ou o perfil não for encontrado
       if (!profile) profile = MOCK_PROFILES.find(p => String(p.id) === String(profileId));
 
       if (profile) {
           setUserPermissions(profile.permissions || []);
+          setHasGlobalView(!!profile.hasGlobalView);
       } else if (profileId === ADMIN_PROFILE_ID) {
           setUserPermissions(['ALL']);
+          setHasGlobalView(true);
       } else {
           setUserPermissions([]);
+          setHasGlobalView(false);
       }
     } catch (e) {
       console.warn("Utilizando permissões de fallback devido a erro de conexão.");
-      if (profileId === ADMIN_PROFILE_ID) setUserPermissions(['ALL']);
-      else setUserPermissions([]);
+      if (profileId === ADMIN_PROFILE_ID) {
+          setUserPermissions(['ALL']);
+          setHasGlobalView(true);
+      } else {
+          setUserPermissions([]);
+          setHasGlobalView(false);
+      }
     }
   };
 
@@ -83,6 +91,7 @@ const App: React.FC = () => {
       authService.logout();
       setCurrentUser(null);
       setUserPermissions([]);
+      setHasGlobalView(false);
       setCurrentPage('DASHBOARD');
   };
 
@@ -99,7 +108,6 @@ const App: React.FC = () => {
 
   const handleEditReport = (report: ExpenseReport) => {
       setEditingReport(report);
-      // Roteamento inteligente baseado na origem do relatório
       if (report.isInstallmentWash || (report.id && report.id.startsWith('tech-'))) {
           setCurrentPage('INSTALACAO_LAVAGEM_SOLIC');
       } else {
@@ -148,28 +156,28 @@ const App: React.FC = () => {
 
     switch (currentPage) {
       case 'DASHBOARD': return <DashboardPage />;
-      case 'ORCAMENTO': return <OrcamentoPage setCurrentPage={handleSetCurrentPage} onEdit={handleEditOrcamento} currentUser={currentUser} />;
+      case 'ORCAMENTO': return <OrcamentoPage setCurrentPage={handleSetCurrentPage} onEdit={handleEditOrcamento} currentUser={currentUser} hasGlobalView={hasGlobalView} />;
       case 'NOVO_ORCAMENTO': return <NovoOrcamentoPage setCurrentPage={handleSetCurrentPage} orcamentoToEdit={editingOrcamento} clearEditingOrcamento={() => setEditingOrcamento(null)} currentUser={currentUser} />;
-      case 'RESUMO_VENDAS': return <ResumoVendasPage currentUser={currentUser} />;
-      case 'FINANCEIRO_VISAO_GERAL': return <FinanceiroPage view="dashboard" currentUser={currentUser} />;
-      case 'FINANCEIRO_DRE': return <FinanceiroPage view="dre" currentUser={currentUser} />;
+      case 'RESUMO_VENDAS': return <ResumoVendasPage currentUser={currentUser} hasGlobalView={hasGlobalView} />;
+      case 'FINANCEIRO_VISAO_GERAL': return <FinanceiroPage view="dashboard" currentUser={currentUser} hasGlobalView={hasGlobalView} />;
+      case 'FINANCEIRO_DRE': return <FinanceiroPage view="dre" currentUser={currentUser} hasGlobalView={hasGlobalView} />;
       case 'FINANCEIRO_CATEGORIAS': return <FinanceiroPage view="categorias" currentUser={currentUser} />;
-      case 'FINANCEIRO_BANCOS': return <FinanceiroPage view="bancos" currentUser={currentUser} />;
-      case 'ESTOQUE_VISAO_GERAL': return <EstoquePage view="visao_geral" setCurrentPage={handleSetCurrentPage} currentUser={currentUser} userPermissions={userPermissions} />;
-      case 'ESTOQUE_NOVO_PRODUTO': return <EstoquePage view="cadastro" setCurrentPage={handleSetCurrentPage} currentUser={currentUser} userPermissions={userPermissions} />;
-      case 'ESTOQUE_COMPRAS': return <EstoquePage view="compras" setCurrentPage={handleSetCurrentPage} currentUser={currentUser} userPermissions={userPermissions} />;
-      case 'CHECKLIST_CHECKIN': return <CheckListPage view="checkin" currentUser={currentUser} userPermissions={userPermissions} />;
-      case 'CHECKLIST_CHECKOUT': return <CheckListPage view="checkout" currentUser={currentUser} userPermissions={userPermissions} />;
-      case 'CHECKLIST_MANUTENCAO': return <CheckListPage view="manutencao" currentUser={currentUser} userPermissions={userPermissions} />;
-      case 'RELATORIOS_VISAO_GERAL': return <RelatoriosPage view="analise" currentUser={currentUser} userPermissions={userPermissions} />;
-      case 'RELATORIOS_NOVO': return <RelatoriosPage view="reembolso" reportToEdit={editingReport} onSave={handleSaveReport} currentUser={currentUser} userPermissions={userPermissions} />;
-      case 'RELATORIOS_STATUS': return <RelatoriosPage view="status" onEditReport={handleEditReport} currentUser={currentUser} userPermissions={userPermissions} />;
-      case 'RELATORIOS_HISTORICO': return <RelatoriosPage view="historico" onEditReport={handleEditReport} currentUser={currentUser} userPermissions={userPermissions} />;
+      case 'FINANCEIRO_BANCOS': return <FinanceiroPage view="bancos" currentUser={currentUser} hasGlobalView={hasGlobalView} />;
+      case 'ESTOQUE_VISAO_GERAL': return <EstoquePage view="visao_geral" setCurrentPage={handleSetCurrentPage} currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
+      case 'ESTOQUE_NOVO_PRODUTO': return <EstoquePage view="cadastro" setCurrentPage={handleSetCurrentPage} currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
+      case 'ESTOQUE_COMPRAS': return <EstoquePage view="compras" setCurrentPage={handleSetCurrentPage} currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
+      case 'CHECKLIST_CHECKIN': return <CheckListPage view="checkin" currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
+      case 'CHECKLIST_CHECKOUT': return <CheckListPage view="checkout" currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
+      case 'CHECKLIST_MANUTENCAO': return <CheckListPage view="manutencao" currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
+      case 'RELATORIOS_VISAO_GERAL': return <RelatoriosPage view="analise" currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
+      case 'RELATORIOS_NOVO': return <RelatoriosPage view="reembolso" reportToEdit={editingReport} onSave={handleSaveReport} currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
+      case 'RELATORIOS_STATUS': return <RelatoriosPage view="status" onEditReport={handleEditReport} currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
+      case 'RELATORIOS_HISTORICO': return <RelatoriosPage view="historico" onEditReport={handleEditReport} currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
       case 'RELATORIOS_CONFIG': return <RelatoriosPage view="config" currentUser={currentUser} />;
-      case 'INSTALACAO_LAVAGEM_SOLIC': return <InstalacaoLavagemPage currentUser={currentUser} reportToEdit={editingReport} onSave={handleSaveReport} />;
-      case 'INSTALACOES_CALENDARIO': return <InstalacoesPage currentUser={currentUser} />;
+      case 'INSTALACAO_LAVAGEM_SOLIC': return <InstalacaoLavagemPage currentUser={currentUser} reportToEdit={editingReport} onSave={handleSaveReport} hasGlobalView={hasGlobalView} />;
+      case 'INSTALACOES_CALENDARIO': return <InstalacoesPage currentUser={currentUser} hasGlobalView={hasGlobalView} />;
       case 'INSTALACOES_CADASTRO': return <InstalacoesCadastroPage currentUser={currentUser} />;
-      case 'INSTALACOES_LAVAGEM': return <LavagemPage currentUser={currentUser} />;
+      case 'INSTALACOES_LAVAGEM': return <LavagemPage currentUser={currentUser} hasGlobalView={hasGlobalView} />;
       case 'USUARIOS_GESTAO': return <UsuariosPage view="gestao" currentUser={currentUser} />;
       case 'USUARIOS_PERFIL': return <UsuariosPage view="perfil" currentUser={currentUser} />;
       default: return <DashboardPage />;

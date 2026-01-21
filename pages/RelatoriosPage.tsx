@@ -25,7 +25,7 @@ const FormLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 );
 
 const SectionTitle: React.FC<{ children: React.ReactNode; color?: string }> = ({ children, color = "bg-indigo-500" }) => (
-    <h3 className="text-sm font-bold text-gray-900 dark:text-white tracking-wide border-b border-gray-100 dark:border-gray-700 pb-2 mb-4 flex items-center gap-2">
+    <h3 className="text-sm font-bold text-gray-900 dark:text-white tracking-tight border-b border-gray-100 dark:border-gray-700 pb-2 mb-4 flex items-center gap-2">
         <span className={`w-1 h-4 ${color} rounded-full`}></span>
         {children}
     </h3>
@@ -501,7 +501,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                               <label className="flex items-center px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer group">
                                   <input type="checkbox" className="hidden" checked={selectedUserFilter.includes('Todos')} onChange={() => toggleUserSelection('Todos')} />
                                   <div className={`w-4 h-4 rounded border mr-3 flex items-center justify-center transition-all ${selectedUserFilter.includes('Todos') ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300'}`}>{selectedUserFilter.includes('Todos') && <CheckCircleIcon className="w-3.5 h-3.5 text-white" />}</div>
-                                  <span className="text-xs font-bold text-gray-700 dark:text-gray-200">Selecionar Todos</span>
+                                  <span className="text-xs font-bold text-gray-700 dark:text-gray-200">Selecionar todos</span>
                               </label>
                               <div className="h-px bg-gray-100 dark:bg-gray-700 my-1 mx-2"></div>
                               {uniqueRequesters.map(u => (
@@ -515,17 +515,17 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                       )}
                   </div>
               </div>
-              <button onClick={() => window.print()} className="flex items-center gap-2 px-6 py-2.5 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-black transition-all shadow-lg active:scale-95"><PrinterIcon className="w-4 h-4" /> Imprimir Relatório</button>
+              <button onClick={() => window.print()} className="flex items-center gap-2 px-6 py-2.5 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-black transition-all shadow-lg active:scale-95"><PrinterIcon className="w-4 h-4" /> Imprimir relatório</button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               <DashboardCard title="Solicitações pagas" value={formatCurrency(analysisData.paid)} icon={CheckCircleIcon} color="bg-green-500" />
               <DashboardCard title="Em aprovação" value={formatCurrency(analysisData.pending)} icon={ClockIcon} color="bg-indigo-500" />
-              <DashboardCard title="Total em Km" value={formatCurrency(analysisData.totalKmValue)} icon={TrendUpIcon} color="bg-blue-500" />
-              <DashboardCard title="Total Pedágio" value={formatCurrency(analysisData.totalTollValue)} icon={DollarIcon} color="bg-purple-500" />
+              <DashboardCard title="Total em km" value={formatCurrency(analysisData.totalKmValue)} icon={TrendUpIcon} color="bg-blue-500" />
+              <DashboardCard title="Total pedágio" value={formatCurrency(analysisData.totalTollValue)} icon={DollarIcon} color="bg-purple-500" />
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 h-[400px] flex flex-col">
-                  <SectionTitle color="bg-indigo-500">Distribuição por Categoria (Pagas)</SectionTitle>
+                  <SectionTitle color="bg-indigo-500">Distribuição por categoria (pagas)</SectionTitle>
                   <div className="flex-1">
                       {analysisData.pieData.length > 0 ? (
                           <ResponsiveContainer width="100%" height="100%">
@@ -541,7 +541,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                   </div>
               </div>
               <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 h-[400px] flex flex-col">
-                  <SectionTitle color="bg-teal-500">Evolução Mensal de Pagamentos</SectionTitle>
+                  <SectionTitle color="bg-teal-500">Evolução mensal de pagamentos</SectionTitle>
                   <div className="flex-1">
                       {analysisData.barData.length > 0 ? (
                           <ResponsiveContainer width="100%" height="100%">
@@ -565,7 +565,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
               </div>
               <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
-                      <thead className="bg-gray-50 dark:bg-gray-900/50 text-[10px] font-black text-gray-400 tracking-tight">
+                      <thead className="bg-gray-50 dark:bg-gray-900/50 text-[10px] font-bold text-gray-400 tracking-tight">
                           <tr>
                               <th className="px-6 py-4 text-left">Data/Solicitante</th>
                               <th className="px-6 py-4 text-right">Km rodado</th>
@@ -622,7 +622,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                         <CogIcon className="w-7 h-7" />
                     </div>
                     <div>
-                        <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">Configurações Gerais</h2>
+                        <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">Configurações gerais</h2>
                         <p className="text-sm text-gray-500 font-bold mt-1">Defina os parâmetros globais para cálculos do sistema.</p>
                     </div>
                 </div>
@@ -632,7 +632,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                         <SectionTitle color="bg-blue-500">Parâmetros de solicitação</SectionTitle>
                         <div className={`p-6 rounded-2xl border-2 transition-all group ${isEditingKm ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-400' : 'bg-gray-50 dark:bg-gray-950 border-transparent hover:border-gray-200'}`}>
                             <div className="flex justify-between items-center mb-3 ml-0.5">
-                                <FormLabel>Valor padrão por Km rodado (R$)</FormLabel>
+                                <FormLabel>Valor padrão por km rodado (R$)</FormLabel>
                                 {isEditingKm ? (
                                     <button 
                                         onClick={handleSaveKmConfig} 
@@ -701,10 +701,10 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                     </div>
 
                     <div className="space-y-6">
-                        <SectionTitle color="bg-amber-500">Cadastro de Fornecedor</SectionTitle>
+                        <SectionTitle color="bg-amber-500">Cadastro de fornecedor</SectionTitle>
                         <div className="bg-gray-50 dark:bg-gray-950 rounded-2xl p-6 border-2 border-transparent hover:border-gray-200 transition-all space-y-4">
                             <div className="space-y-2">
-                                <FormLabel>Nome do Fornecedor</FormLabel>
+                                <FormLabel>Nome do fornecedor</FormLabel>
                                 <div className="flex gap-2">
                                     <input 
                                         type="text" 
@@ -799,13 +799,13 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
           <div className="max-w-7xl mx-auto space-y-4 animate-fade-in pb-10">
               <div className="flex items-center gap-4 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                   <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center border border-indigo-100"><CheckCircleIcon className="w-6 h-6" /></div>
-                  <div><h1 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">{view === 'status' ? 'Status de Solicitações' : 'Histórico de Solicitações'}</h1><p className="text-[11px] text-gray-400 font-bold tracking-tight">{isAdmin ? `Visão global da equipe (${listReports.length} itens)` : `Minhas solicitações (${listReports.length} itens)`}</p></div>
+                  <div><h1 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">{view === 'status' ? 'Status de solicitações' : 'Histórico de solicitações'}</h1><p className="text-[11px] text-gray-400 font-bold tracking-tight">{isAdmin ? `Visão global da equipe (${listReports.length} itens)` : `Minhas solicitações (${listReports.length} itens)`}</p></div>
               </div>
               <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm"><div className="max-w-xs"><FormLabel>Filtrar por status</FormLabel><div className="relative"><select value={statusFilterValue} onChange={(e) => setStatusFilterValue(e.target.value as any)} className="w-full bg-gray-50 dark:bg-gray-900 border-none rounded-lg px-3 py-2 text-xs font-bold text-gray-700 dark:text-gray-200 outline-none focus:ring-2 focus:ring-indigo-500/20 appearance-none shadow-sm cursor-pointer"><option value="Todos">Todos os status</option><option value="Rascunho">Rascunho</option><option value="Transferido">Transferido</option><option value="Env. p/ Pagamento">Env. p/ Pagamento</option><option value="Pago">Pago</option><option value="Cancelado">Cancelado</option></select><div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-40"><ChevronDownIcon className="w-4 h-4" /></div></div></div></div>
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left">
-                    <thead className="bg-gray-50/50 dark:bg-gray-900/40 text-[10px] font-black text-gray-400 tracking-tight border-b dark:border-gray-700">
+                    <thead className="bg-gray-50/50 dark:bg-gray-900/40 text-[10px] font-bold text-gray-400 tracking-tight border-b dark:border-gray-700">
                       <tr>
                         <th className="px-6 py-4">Data</th>
                         <th className="px-6 py-4">Solicitante</th>
@@ -844,7 +844,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                               <div className="flex justify-center gap-1.5 transition-opacity">
                                 <button onClick={() => onEditReport?.(report)} className={`p-1.5 rounded-lg ${canEdit ? 'text-indigo-500 hover:bg-indigo-50' : 'text-blue-500 hover:bg-blue-50'}`} title={canEdit ? "Alterar" : "Visualizar"}>{canEdit ? <EditIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}</button>
                                 {view === 'historico' && canEffectuateHistory && (<button onClick={() => { setReportInAction(report); setIsConfirmEfetivarHistoricoModal(true); }} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg" title="Efetivar solicitação"><CheckCircleIcon className="w-4 h-4" /></button>)}
-                                {canEffectuateStatus && (<button onClick={() => { setReportInAction(report); setIsConfirmEfetivarStatusModal(true); }} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg" title="Aprovar p/ Pagamento"><CheckCircleIcon className="w-4 h-4" /></button>)}
+                                {canEffectuateStatus && (<button onClick={() => { setReportInAction(report); setIsConfirmEfetivarStatusModal(true); }} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg" title="Aprovar p/ pagamento"><CheckCircleIcon className="w-4 h-4" /></button>)}
                                 {canCancelStatus && (<button onClick={() => { setReportInAction(report); setIsCancelModalOpen(true); }} className="p-1.5 text-red-600 hover:bg-green-50 rounded-lg" title="Cancelar solicitação"><XCircleIcon className="w-5 h-5" /></button>)}
                               </div>
                             </td>
@@ -867,7 +867,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                 <ExclamationTriangleIcon className="w-6 h-6" />
               </div>
               <div>
-                <h4 className="text-sm font-black text-red-700 dark:text-red-400 tracking-tight">Solicitação Reprovada / Cancelada</h4>
+                <h4 className="text-sm font-black text-red-700 dark:text-red-400 tracking-tight">Solicitação reprovada / cancelada</h4>
                 <p className="text-[12px] font-bold text-red-600 dark:text-red-500/80 mt-1 leading-relaxed">
                    Motivo: <span className="text-gray-800 dark:text-gray-100">{reportToEdit.cancelReason}</span>
                 </p>
@@ -878,7 +878,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg"><DocumentReportIcon className="w-6 h-6 text-white" /></div>
-              <div><h1 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">{isReadOnly ? 'Visualizar solicitação' : reportToEdit ? 'Alterar solicitação' : 'Novo Reembolso'}</h1><div className="flex items-center gap-2 mt-0.5">{reportToEdit?.status && (<span className={`px-2 py-0.5 rounded-md text-[9px] font-black ${reportToEdit.status === 'Pago' ? 'bg-green-100 text-green-700' : reportToEdit.status === 'Transferido' ? 'bg-blue-100 text-blue-700' : reportToEdit.status === 'Env. p/ Pagamento' ? 'bg-orange-100 text-orange-700' : reportToEdit.status === 'Cancelado' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{reportToEdit.status}</span>)}<span className="text-[10px] text-gray-400 font-bold tracking-tight">Controle de reembolsos</span></div></div>
+              <div><h1 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">{isReadOnly ? 'Visualizar solicitação' : reportToEdit ? 'Alterar solicitação' : 'Novo reembolso'}</h1><div className="flex items-center gap-2 mt-0.5">{reportToEdit?.status && (<span className={`px-2 py-0.5 rounded-md text-[9px] font-black ${reportToEdit.status === 'Pago' ? 'bg-green-100 text-green-700' : reportToEdit.status === 'Transferido' ? 'bg-blue-100 text-blue-700' : reportToEdit.status === 'Env. p/ Pagamento' ? 'bg-orange-100 text-orange-700' : reportToEdit.status === 'Cancelado' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{reportToEdit.status}</span>)}<span className="text-[10px] text-gray-400 font-bold tracking-tight">Controle de reembolsos</span></div></div>
             </div>
             {!isReadOnly && (
               <div className="flex gap-2 w-full md:w-auto">
@@ -951,7 +951,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
             <div className="p-5 border-b border-gray-50 dark:bg-gray-800/50 flex justify-between items-center"><h3 className="text-xs font-black text-gray-800 dark:text-white flex items-center gap-2 tracking-tight"><TableIcon className="w-4 h-4 text-indigo-600" /> Detalhamento de gastos</h3><div className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-[9px] font-black border border-indigo-100">Custo km: R$ {valorPorKm.toFixed(2)}</div></div>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
-                <thead className="bg-gray-50 dark:bg-gray-800 text-[9px] font-black text-gray-400 tracking-tighter"><tr><th className="px-6 py-4">Data / finalidade</th><th className="px-4 py-4 text-center">Km</th><th className="px-4 py-4 text-center">Pedágio</th><th className="px-4 py-4 text-center">Alim.</th><th className="px-4 py-4 text-center">Comp.</th><th className="px-4 py-4 text-center">Outros</th><th className="px-6 py-4 text-right bg-gray-50/50">Subtotal</th>{!isReadOnly && <th className="px-4 py-4 w-10"></th>}</tr></thead>
+                <thead className="bg-gray-50 dark:bg-gray-800 text-[9px] font-bold text-gray-400 tracking-tight"><tr><th className="px-6 py-4">Data / finalidade</th><th className="px-4 py-4 text-center">Km</th><th className="px-4 py-4 text-center">Pedágio</th><th className="px-4 py-4 text-center">Alim.</th><th className="px-4 py-4 text-center">Comp.</th><th className="px-4 py-4 text-center">Outros</th><th className="px-6 py-4 text-right bg-gray-50/50">Subtotal</th>{!isReadOnly && <th className="px-4 py-4 w-10"></th>}</tr></thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                   {items.map((item) => (
                     <tr key={item.id} className="hover:bg-indigo-50/10 transition-colors group">
@@ -1015,7 +1015,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                 <div className="bg-indigo-600 rounded-xl p-6 text-white shadow-xl shadow-indigo-100 dark:shadow-none sticky top-6">
                     <h3 className="text-sm font-black mb-6 flex items-center gap-2 tracking-tight opacity-80"><DollarIcon className="w-4 h-4" /> Resumo financeiro</h3>
                     <div className="space-y-3.5 mb-6">
-                        {[{ label: "Total em Km", val: (items || []).reduce((acc, item) => acc + (Math.ceil(((item.km || 0) * valorPorKm) * 100) / 100), 0) }, { label: "Total em Pedágios", val: (items || []).reduce((acc, item) => acc + (item.toll || 0), 0) }, { label: "Total Alimentação", val: (items || []).reduce((acc, item) => acc + (item.food || 0), 0) }, { label: "Compra de Componentes", val: (items || []).reduce((acc, item) => acc + (item.components || 0), 0) }, { label: "Outros Custos", val: (items || []).reduce((acc, item) => acc + (item.others || 0), 0) }].map(row => (<div key={row.label} className="flex justify-between items-center text-[11px] font-medium border-b border-white/10 pb-2.5 last:border-0 last:pb-0"><span className="opacity-70">{row.label}</span><span className="font-black tracking-tight">{formatCurrency(row.val)}</span></div>))}
+                        {[{ label: "Total em km", val: (items || []).reduce((acc, item) => acc + (Math.ceil(((item.km || 0) * valorPorKm) * 100) / 100), 0) }, { label: "Total em pedágios", val: (items || []).reduce((acc, item) => acc + (item.toll || 0), 0) }, { label: "Total alimentação", val: (items || []).reduce((acc, item) => acc + (item.food || 0), 0) }, { label: "Compra de componentes", val: (items || []).reduce((acc, item) => acc + (item.components || 0), 0) }, { label: "Outros custos", val: (items || []).reduce((acc, item) => acc + (item.others || 0), 0) }].map(row => (<div key={row.label} className="flex justify-between items-center text-[11px] font-medium border-b border-white/10 pb-2.5 last:border-0 last:pb-0"><span className="opacity-70">{row.label}</span><span className="font-black tracking-tight">{formatCurrency(row.val)}</span></div>))}
                     </div>
                     <div className="pt-5 border-t border-white/20">
                         <p className="text-[10px] font-black tracking-tight opacity-60 mb-1">Valor total a receber</p>
@@ -1035,38 +1035,38 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
             <Modal title="Confirmar efetivação" onClose={() => setIsConfirmEfetivarHistoricoModal(false)}>
                 <div className="text-center p-4 space-y-4">
                     <CheckCircleIcon className="w-12 h-12 text-green-500 mx-auto" />
-                    <h3 className="text-sm font-bold text-gray-800 dark:text-white">Deseja efetivar a Solicitação?</h3>
+                    <h3 className="text-sm font-bold text-gray-800 dark:text-white">Deseja efetivar a solicitação?</h3>
                     <p className="text-[10px] text-gray-500">Ao efetivar, o status mudará para 'Transferido' e a edição será bloqueada.</p>
                     <div className="flex gap-3 mt-4">
                         <button onClick={() => setIsConfirmEfetivarHistoricoModal(false)} className="flex-1 py-2 bg-gray-100 rounded-lg text-xs font-bold">Não</button>
                         <button onClick={handleEfetivarHistorico} disabled={isLoading} className="flex-1 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow-lg">
-                            {isLoading ? 'Salvando...' : 'Sim, Efetivar'}
+                            {isLoading ? 'Salvando...' : 'Sim, efetivar'}
                         </button>
                     </div>
                 </div>
             </Modal>
         )}
         {isConfirmEfetivarStatusModal && (
-            <Modal title="Aprovar para Pagamento" onClose={() => setIsConfirmEfetivarStatusModal(false)}>
+            <Modal title="Aprovar para pagamento" onClose={() => setIsConfirmEfetivarStatusModal(false)}>
                 <div className="text-center p-4 space-y-4">
                     <DollarIcon className="w-12 h-12 text-indigo-600 mx-auto" />
                     <h3 className="text-sm font-bold text-gray-800 dark:text-white">Deseja aprovar esta solicitação?</h3>
                     <p className="text-[10px] text-gray-500">
                       {reportInAction?.isInstallmentWash 
                         ? "Esta ação valida a documentação enviada e destaca os lançamentos no financeiro para pagamento." 
-                        : "Esta ação criará um lançamento no Financeiro para pagamento em 7 dias."}
+                        : "Esta ação criará um lançamento no financeiro para pagamento em 7 dias."}
                     </p>
                     <div className="flex gap-3 mt-4">
                         <button onClick={() => setIsConfirmEfetivarStatusModal(false)} className="flex-1 py-2 bg-gray-100 rounded-lg text-xs font-bold">Não</button>
                         <button onClick={handleEfetivarStatus} disabled={isLoading} className="flex-1 py-2 bg-green-600 text-white rounded-lg text-xs font-bold shadow-lg">
-                            {isLoading ? 'Processando...' : 'Sim, Aprovar'}
+                            {isLoading ? 'Processando...' : 'Sim, aprovar'}
                         </button>
                     </div>
                 </div>
             </Modal>
         )}
         {isCancelModalOpen && (
-            <Modal title="Cancelar Solicitação" onClose={() => setIsCancelModalOpen(false)}>
+            <Modal title="Cancelar solicitação" onClose={() => setIsCancelModalOpen(false)}>
                 <div className="space-y-4">
                     <div>
                         <FormLabel>Motivo do cancelamento *</FormLabel>
@@ -1087,7 +1087,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                     <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto animate-bounce"><CheckCircleIcon className="w-10 h-10" /></div>
                     <h3 className="text-lg font-black text-gray-900 tracking-tight">Concluído!</h3>
                     <p className="text-xs font-bold text-gray-500">{modalMessage}</p>
-                    <button onClick={handleSuccessModalClose} className="w-full mt-4 py-3 bg-gray-900 text-white rounded-xl font-bold text-xs">OK</button>
+                    <button onClick={handleSuccessModalClose} className="w-full mt-4 py-3 bg-gray-900 text-white rounded-xl font-bold text-xs">Ok</button>
                 </div>
             </Modal>
         )}
@@ -1096,7 +1096,10 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                 <div className="relative max-w-5xl w-full h-full flex flex-col items-center justify-center gap-4">
                     <button className="absolute top-0 right-0 p-3 text-white hover:text-indigo-400 z-[110]" onClick={(e) => { e.stopPropagation(); setHdPhoto(null); }}><XCircleIcon className="w-10 h-10" /></button>
                     <div className="flex-1 w-full flex items-center justify-center overflow-hidden">
-                        <img src={hdPhoto} className="max-w-full max-h-full object-contain rounded-lg shadow-2xl animate-zoom-in" alt="Visualização HD" onClick={(e) => e.stopPropagation()} />
+                        <img src={hdPhoto} className="max-w-full max-h-full object-contain rounded-lg shadow-2xl animate-zoom-in" alt="Visualização hd" onClick={(e) => e.stopPropagation()} />
+                    </div>
+                    <div className="bg-white/10 px-6 py-2 rounded-full backdrop-blur-md">
+                        <p className="text-white text-[11px] font-black tracking-tight">Visualização em alta definição</p>
                     </div>
                 </div>
             </div>

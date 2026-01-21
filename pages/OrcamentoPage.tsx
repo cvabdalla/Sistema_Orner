@@ -17,21 +17,14 @@ const toSentenceCase = (str: string) => {
     return clean.charAt(0).toUpperCase() + clean.slice(1);
 };
 
-/**
- * Converte strings financeiras (BR) em números de forma ultra robusta.
- * Remove R$, espaços, pontos de milhar e trata a vírgula decimal.
- */
 const parseSafeNumber = (val: any): number => {
     if (typeof val === 'number') return val;
     if (!val) return 0;
-    
-    // Converte para string e limpa caracteres não numéricos exceto vírgula e ponto
     const clean = String(val)
-        .replace(/R\$/g, '')      // Remove R$
-        .replace(/\s/g, '')       // Remove espaços
-        .replace(/\./g, '')       // Remove pontos de milhar
-        .replace(',', '.');       // Troca vírgula decimal por ponto
-        
+        .replace(/R\$/g, '')
+        .replace(/\s/g, '')
+        .replace(/\./g, '')
+        .replace(',', '.');
     const parsed = parseFloat(clean);
     return isNaN(parsed) ? 0 : parsed;
 };
@@ -57,6 +50,8 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
   const [endDate, setEndDate] = useState('');
 
   const ADMIN_PROFILE_ID = '001';
+  // Agora apenas o perfil de Administrador Master vê tudo. 
+  // A flag hasGlobalView é exclusiva para o Checklist conforme solicitado.
   const isAdminUser = currentUser.profileId === ADMIN_PROFILE_ID;
 
   const loadData = async () => {
@@ -401,7 +396,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                                     <button onClick={() => onEdit(orc)} className={`p-2 rounded-lg transition-all ${isApproved ? 'text-blue-500 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20' : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20'}`} title={isApproved ? 'Visualizar' : 'Editar'}>
                                         {isApproved ? <EyeIcon className="w-5 h-5" /> : <EditIcon className="w-5 h-5" />}
                                     </button>
-                                    {isAdminUser && !isReadOnlyStatus && (
+                                    {(currentUser.profileId === ADMIN_PROFILE_ID) && !isReadOnlyStatus && (
                                         <button onClick={() => { setOrcamentoToDeleteId(orc.id); setDeleteModalOpen(true); }} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg">
                                             <TrashIcon className="w-5 h-5" />
                                         </button>
