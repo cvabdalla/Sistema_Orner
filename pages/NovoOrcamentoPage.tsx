@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import Modal from '../components/Modal';
-import { CalculatorIcon, SaveIcon, AddIcon, TrashIcon, EditIcon, CheckCircleIcon, DollarIcon, CubeIcon, ArrowLeftIcon, PlusIcon, XCircleIcon, TrendUpIcon } from '../assets/icons';
-import type { NovoOrcamentoPageProps, OrcamentoVariant, SavedOrcamento, StockItem } from '../types';
+import { CalculatorIcon, SaveIcon, AddIcon, TrashIcon, EditIcon, CheckCircleIcon, DollarIcon, CubeIcon, ArrowLeftIcon, PlusIcon, XCircleIcon, TrendUpIcon, ChevronDownIcon } from '../assets/icons';
+import type { NovoOrcamentoPageProps, OrcamentoVariant, SavedOrcamento, StockItem, Supplier } from '../types';
 import { dataService } from '../services/dataService';
 
 // Helper to format numbers as BRL currency
@@ -33,6 +34,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
     const [isSaving, setIsSaving] = useState(false);
     
     const [allStockItems, setAllStockItems] = useState<StockItem[]>([]);
+    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
     const [addItemTab, setAddItemTab] = useState<'estoque' | 'manual'>('estoque');
 
@@ -69,13 +71,15 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
     const [calculated, setCalculated] = useState<any>({});
 
     useEffect(() => {
-        const loadStockAndConfigs = async () => {
-            const [items, remoteConfigs] = await Promise.all([
+        const loadInitialData = async () => {
+            const [items, remoteConfigs, supplierData] = await Promise.all([
                 dataService.getAll<StockItem>('stock_items'),
-                dataService.getAll<any>('system_configs', undefined, true)
+                dataService.getAll<any>('system_configs', undefined, true),
+                dataService.getAll<Supplier>('suppliers', undefined, true)
             ]);
             
             setAllStockItems(items);
+            setSuppliers(supplierData.sort((a, b) => a.name.localeCompare(b.name)));
             
             // Tenta obter o custo de instalação global do banco de dados
             const remoteInst = remoteConfigs.find(c => c.id === 'installation_value');
@@ -95,10 +99,10 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                 setVariants([{ id: '1', name: 'Opção 1', isPrincipal: true, formState: newState, calculated: {} }]);
             } else if (formState.terceiroInstalacaoCusto === 120 && !isReadOnly) {
                 // Se for edição de orçamento aberto e o custo ainda é o padrão hardcoded, atualiza para o global
-                setFormState(prev => ({ ...prev, terceiroInstalacaoCusto: finalInstCost }));
+                setFormState(prev => ({ ...prev, standby: true, terceiroInstalacaoCusto: finalInstCost }));
             }
         }
-        loadStockAndConfigs();
+        loadInitialData();
     }, [orcamentoToEdit]);
 
     const selectedStockTableItems = useMemo(() => {
@@ -618,7 +622,27 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                             <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Nome do cliente</label><input type="text" name="nomeCliente" value={formState.nomeCliente} onChange={handleInputChange} disabled={isReadOnly} className={`w-full rounded-lg border-gray-300 dark:border-gray-600 ${isReadOnly ? 'bg-gray-50 cursor-not-allowed' : 'bg-yellow-100 dark:bg-yellow-900/30'} p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 dark:text-white font-bold transition-all`} placeholder="Ex: João Silva" /></div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-                            <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Fornecedor do kit</label><input type="text" name="fornecedor" value={formState.fornecedor} onChange={handleInputChange} disabled={isReadOnly} className={`w-full rounded-lg border-gray-300 dark:border-gray-600 ${isReadOnly ? 'bg-gray-50 cursor-not-allowed' : 'bg-indigo-50 dark:bg-indigo-900/30'} p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 dark:text-white font-bold transition-all`} placeholder="Ex: Aldo Solar" /></div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Fornecedor do kit</label>
+                                <div className="relative">
+                                    <select 
+                                        name="fornecedor" 
+                                        value={formState.fornecedor} 
+                                        onChange={handleInputChange} 
+                                        disabled={isReadOnly} 
+                                        className={`w-full rounded-lg border-gray-300 dark:border-gray-600 ${isReadOnly ? 'bg-gray-50 cursor-not-allowed' : 'bg-yellow-100 dark:bg-yellow-900/30'} p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 dark:text-white font-bold transition-all appearance-none cursor-pointer`}
+                                    >
+                                        <option value="">Selecione um fornecedor...</option>
+                                        {suppliers.map(sup => (
+                                            <option key={sup.id} value={sup.name}>{sup.name}</option>
+                                        ))}
+                                    </select>
+                                    {!isReadOnly && <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-40"><ChevronDownIcon className="w-4 h-4" /></div>}
+                                </div>
+                                {suppliers.length === 0 && !isReadOnly && (
+                                    <p className="text-[10px] text-orange-600 font-bold mt-1 leading-tight">Nenhum fornecedor cadastrado. Vá em Configurações Gerais.</p>
+                                )}
+                            </div>
                             <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Custo do sistema (kit)</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">R$</span><input type="text" inputMode="decimal" name="custoSistema" value={formState.custoSistema} onChange={handleInputChange} disabled={isReadOnly} className={`w-full pl-8 rounded-lg border-gray-300 dark:border-gray-600 ${isReadOnly ? 'bg-gray-50 cursor-not-allowed' : 'bg-yellow-100 dark:bg-yellow-900/30'} font-bold text-gray-900 dark:text-white p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none`} /></div></div>
                             <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Mão de obra geral</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">R$</span><input type="text" inputMode="decimal" name="maoDeObraGeral" value={formState.maoDeObraGeral} onChange={handleInputChange} disabled={isReadOnly} className={`w-full pl-8 rounded-lg border-gray-300 dark:border-gray-600 ${isReadOnly ? 'bg-gray-50 cursor-not-allowed' : 'bg-yellow-100 dark:bg-yellow-900/30'} font-bold text-gray-900 dark:text-white p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none`} /></div></div>
                         </div>
