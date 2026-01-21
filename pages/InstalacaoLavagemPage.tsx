@@ -203,7 +203,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                     </div>
                     <div>
                         <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight leading-none">
-                            {isReadOnly ? 'Visualizar solicitação' : reportToEdit ? 'Finalizar Faturamento' : 'Recebimento: Instalação / Lavagem'}
+                            {isReadOnly ? 'Visualizar faturamento' : reportToEdit ? 'Finalizar Faturamento' : 'Instalações / Lavagens'}
                         </h1>
                         <p className="text-sm text-gray-500 font-bold mt-2">
                             {reportToEdit ? `Edição de rascunho: ${reportToEdit.id}` : 'Faturamento Técnico Independente'}
