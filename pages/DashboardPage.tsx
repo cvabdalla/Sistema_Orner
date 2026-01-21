@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useMemo } from 'react';
 import DashboardCard from '../components/DashboardCard';
 import ChartComponent from '../components/ChartComponent';
@@ -226,16 +227,16 @@ const DashboardPage: React.FC = () => {
                 </div>
             </div>
 
-            {/* Comercial Lavagem */}
-            <div className={`p-4 rounded-2xl border-2 transition-all flex items-center gap-4 ${metrics.salesOpportunities > 0 ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800' : 'bg-gray-50 dark:bg-gray-900/40 border-transparent opacity-60'}`}>
-                <div className={`p-3 rounded-xl flex-shrink-0 ${metrics.salesOpportunities > 0 ? 'bg-amber-500 text-white shadow-lg shadow-amber-200' : 'bg-gray-200 text-gray-400'}`}>
-                    <CalendarIcon className="w-6 h-6" />
+            {/* Solicitações de Pagamento */}
+            <div className={`p-4 rounded-2xl border-2 transition-all flex items-center gap-4 ${metrics.transferidos > 0 ? 'bg-indigo-50 dark:bg-indigo-900/10 border-indigo-200 dark:border-indigo-800' : 'bg-gray-50 dark:bg-gray-900/40 border-transparent opacity-60'}`}>
+                <div className={`p-3 rounded-xl flex-shrink-0 ${metrics.transferidos > 0 ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-200' : 'bg-gray-200 text-gray-400'}`}>
+                    <DocumentReportIcon className="w-6 h-6" />
                 </div>
                 <div className="overflow-hidden">
-                    <span className="text-[9px] font-bold text-gray-400 block mb-0.5">Comercial/Lavagem</span>
-                    <p className="text-sm font-bold text-gray-600 dark:text-gray-400 leading-tight truncate">Oportunidade (1 ano)</p>
-                    <p className={`text-xl font-black ${metrics.salesOpportunities > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-500'}`}>
-                        {metrics.salesOpportunities} {metrics.salesOpportunities === 1 ? 'contato' : 'contatos'}
+                    <span className="text-[9px] font-bold text-gray-400 block mb-0.5">Solic. Pagamento</span>
+                    <p className="text-sm font-bold text-gray-600 dark:text-gray-400 leading-tight truncate">Aguardando aprovação</p>
+                    <p className={`text-xl font-black ${metrics.transferidos > 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-500'}`}>
+                        {metrics.transferidos} {metrics.transferidos === 1 ? 'pendente' : 'pendentes'}
                     </p>
                 </div>
             </div>

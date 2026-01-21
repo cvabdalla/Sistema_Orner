@@ -21,6 +21,7 @@ export type Page =
   | 'RELATORIOS_STATUS'
   | 'RELATORIOS_HISTORICO'
   | 'RELATORIOS_CONFIG'
+  | 'INSTALACAO_LAVAGEM_SOLIC'
   | 'INSTALACOES_CALENDARIO'
   | 'INSTALACOES_CADASTRO'
   | 'INSTALACOES_LAVAGEM'
@@ -229,6 +230,7 @@ export interface FinancialTransaction {
     status: FinancialTransactionStatus;
     cancelReason?: string;
     relatedReportId?: string;
+    invoiceSent?: boolean;
 }
 
 export interface FinancialCategory {
@@ -409,4 +411,10 @@ export interface CheckListPageProps {
 
 export interface InstalacoesPageProps {
     currentUser: User;
+}
+
+export interface InstalacaoLavagemPageProps {
+    currentUser: User;
+    reportToEdit?: ExpenseReport | null;
+    onSave?: () => void;
 }

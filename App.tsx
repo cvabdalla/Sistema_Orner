@@ -16,6 +16,7 @@ import LoginPage from './pages/LoginPage';
 import InstalacoesPage from './pages/InstalacoesPage';
 import InstalacoesCadastroPage from './pages/InstalacoesCadastroPage';
 import LavagemPage from './pages/LavagemPage';
+import InstalacaoLavagemPage from './pages/InstalacaoLavagemPage';
 import { LockClosedIcon, ExclamationTriangleIcon } from './assets/icons';
 import type { Page, SavedOrcamento, ExpenseReport, User, UserProfile } from './types';
 import { dataService } from './services/dataService';
@@ -87,7 +88,7 @@ const App: React.FC = () => {
 
   const handleSetCurrentPage = (page: Page) => {
     if (page !== 'NOVO_ORCAMENTO') setEditingOrcamento(null);
-    if (page !== 'RELATORIOS_NOVO') setEditingReport(null);
+    if (page !== 'RELATORIOS_NOVO' && page !== 'INSTALACAO_LAVAGEM_SOLIC') setEditingReport(null);
     setCurrentPage(page);
   }
 
@@ -98,7 +99,12 @@ const App: React.FC = () => {
 
   const handleEditReport = (report: ExpenseReport) => {
       setEditingReport(report);
-      setCurrentPage('RELATORIOS_NOVO');
+      // Roteamento inteligente baseado na origem do relatório
+      if (report.isInstallmentWash || (report.id && report.id.startsWith('tech-'))) {
+          setCurrentPage('INSTALACAO_LAVAGEM_SOLIC');
+      } else {
+          setCurrentPage('RELATORIOS_NOVO');
+      }
   }
 
   const handleSaveReport = () => {
@@ -160,6 +166,7 @@ const App: React.FC = () => {
       case 'RELATORIOS_STATUS': return <RelatoriosPage view="status" onEditReport={handleEditReport} currentUser={currentUser} userPermissions={userPermissions} />;
       case 'RELATORIOS_HISTORICO': return <RelatoriosPage view="historico" onEditReport={handleEditReport} currentUser={currentUser} userPermissions={userPermissions} />;
       case 'RELATORIOS_CONFIG': return <RelatoriosPage view="config" currentUser={currentUser} />;
+      case 'INSTALACAO_LAVAGEM_SOLIC': return <InstalacaoLavagemPage currentUser={currentUser} reportToEdit={editingReport} onSave={handleSaveReport} />;
       case 'INSTALACOES_CALENDARIO': return <InstalacoesPage currentUser={currentUser} />;
       case 'INSTALACOES_CADASTRO': return <InstalacoesCadastroPage currentUser={currentUser} />;
       case 'INSTALACOES_LAVAGEM': return <LavagemPage currentUser={currentUser} />;

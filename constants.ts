@@ -1,3 +1,4 @@
+
 import type { FinancialCategory, User, UserProfile, MenuItem } from './types';
 import { DashboardIcon, OrcamentoIcon, FinanceiroIcon, RelatoriosIcon, AddIcon, CubeIcon, UsersIcon, ShoppingCartIcon, ClipboardListIcon, DocumentReportIcon, ChartPieIcon, CogIcon, CheckCircleIcon, LockClosedIcon, ClipboardCheckIcon, TableIcon, CalendarIcon, TruckIcon, SparklesIcon } from './assets/icons';
 
@@ -68,17 +69,18 @@ export const MENU_ITEMS: MenuItem[] = [
           { id: 'FINANCEIRO_DRE', label: 'DRE Gerencial', icon: DocumentReportIcon },
           { id: 'FINANCEIRO_CATEGORIAS', label: 'Categorias Financeiras', icon: ClipboardListIcon },
           { id: 'FINANCEIRO_BANCOS', label: 'Bancos', icon: TableIcon },
-          { id: 'RELATORIOS_VISAO_GERAL', label: 'Resumo Reembolso', icon: ChartPieIcon },
+          { id: 'RELATORIOS_VISAO_GERAL', label: 'Resumo Solic. Pagto', icon: ChartPieIcon },
       ]
   },
   { 
       id: 'RELATORIOS_MENU', 
-      label: 'Reembolso', 
+      label: 'Solic. Pagamento', 
       icon: RelatoriosIcon,
       children: [
-          { id: 'RELATORIOS_NOVO', label: 'Novo Reembolso', icon: AddIcon },
-          { id: 'RELATORIOS_STATUS', label: 'Status de Reembolso', icon: CheckCircleIcon },
-          { id: 'RELATORIOS_HISTORICO', label: 'Histórico de Reembolso', icon: ClipboardListIcon },
+          { id: 'RELATORIOS_NOVO', label: 'Nova Solicitação', icon: AddIcon },
+          { id: 'INSTALACAO_LAVAGEM_SOLIC', label: 'Instalação / Lavagem', icon: SparklesIcon },
+          { id: 'RELATORIOS_STATUS', label: 'Status de Solicitação', icon: CheckCircleIcon },
+          { id: 'RELATORIOS_HISTORICO', label: 'Histórico de Solicitação', icon: ClipboardListIcon },
       ]
   },
   {
@@ -119,7 +121,8 @@ export const MOCK_PROFILES: UserProfile[] = [
             'CHECKLIST_MENU', 'CHECKLIST_CHECKIN', 'CHECKLIST_CHECKOUT', 'CHECKLIST_MANUTENCAO',
             'RELATORIOS_MENU', 'RELATORIOS_NOVO', 'RELATORIOS_STATUS', 'RELATORIOS_HISTORICO', 'RELATORIOS_VISAO_GERAL',
             'INSTALACOES_MENU', 'INSTALACOES_CALENDARIO', 'INSTALACOES_CADASTRO', 'INSTALACOES_LAVAGEM',
-            'USUARIOS_MENU', 'RELATORIOS_CONFIG', 'USUARIOS_GESTAO', 'USUARIOS_PERFIL'
+            'USUARIOS_MENU', 'RELATORIOS_CONFIG', 'USUARIOS_GESTAO', 'USUARIOS_PERFIL',
+            'INSTALACAO_LAVAGEM_SOLIC'
         ] 
     }
 ];
