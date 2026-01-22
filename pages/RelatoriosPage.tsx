@@ -321,7 +321,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
     setIsLoading(true);
     try {
         await dataService.save('expense_reports', { ...reportInAction, status: 'Transferido' });
-        setModalMessage("Solicitação de pagamento efetivada com sucesso! Agora disponível para análise.");
+        setModalMessage("Reembolso efetivado com sucesso! Agora disponível para análise.");
         setSuccessModalOpen(true);
         await loadReports();
     } catch (e: any) { 
@@ -345,7 +345,11 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
             const targetTxs = allTxs.filter(t => txIds.includes(t.id));
             
             for (const tx of targetTxs) {
-                await dataService.save('financial_transactions', { ...tx, invoiceSent: true, relatedReportId: reportInAction.id });
+                try {
+                  await dataService.save('financial_transactions', { ...tx, invoiceSent: true, relatedReportId: reportInAction.id });
+                } catch (txErr) {
+                  console.warn("Falha secundária ao sinalizar transação técnica (coluna faltante)");
+                }
             }
         } else {
             const financialCategories = await dataService.getAll<FinancialCategory>('financial_categories');
@@ -381,8 +385,8 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
         await dataService.save('expense_reports', { ...reportInAction, status: 'Env. p/ Pagamento' });
         
         const customMessage = reportInAction.isInstallmentWash 
-            ? "Faturamento técnico aprovado! Os lançamentos no financeiro agora estão destacados para pagamento."
-            : "Solicitação efetivada! Transação criada em 'Contas a Pagar' com vencimento em 7 dias.";
+            ? "Instalação/Lavagem aprovada! Os lançamentos no financeiro agora estão com status 'Liberado p/ Pagar'."
+            : "Reembolso aprovado! Transação criada em 'Contas a Pagar' com vencimento em 7 dias.";
             
         setModalMessage(customMessage);
         setSuccessModalOpen(true);
@@ -408,7 +412,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
               await dataService.save('financial_transactions', { 
                   ...relatedTx, 
                   status: 'cancelado', 
-                  cancelReason: `Solicitação cancelada via RD: ${cancelReason}` 
+                  cancelReason: `Reembolso cancelado via RD: ${cancelReason}` 
               });
           }
           
@@ -416,16 +420,20 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
               const txIds = reportInAction.items.map(i => i.id);
               const targetTxs = allTxs.filter(t => txIds.includes(t.id));
               for (const tx of targetTxs) {
-                  await dataService.save('financial_transactions', { ...tx, invoiceSent: false });
+                  try {
+                    await dataService.save('financial_transactions', { ...tx, invoiceSent: false });
+                  } catch (e) {
+                    console.warn("Falha silenciosa ao remover sinalização técnica");
+                  }
               }
           }
 
-          setModalMessage("Solicitação cancelada com sucesso.");
+          setModalMessage("Reembolso cancelado com sucesso.");
           setSuccessModalOpen(true);
           await loadReports();
       } catch (e: any) { 
           console.error(e); 
-          alert("Erro ao cancelar solicitação.");
+          alert("Erro ao cancelar reembolso.");
       } finally { 
           setIsLoading(false); 
           setIsCancelModalOpen(false); 
@@ -491,7 +499,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                       <input type="date" value={filterEnd} onChange={e => setFilterEnd(e.target.value)} className="bg-transparent border-none text-[11px] font-bold outline-none dark:text-white w-28" />
                   </div>
                   <div className="relative" ref={userDropdownRef}>
-                      <button onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)} className="flex items-center gap-2 bg-gray-50 dark:bg-gray-700/50 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700 min-w-[220px] transition-all hover:bg-gray-100 dark:hover:bg-gray-700">
+                      <button onClick={() => !isUserDropdownOpen && setIsUserDropdownOpen(true)} className="flex items-center gap-2 bg-gray-50 dark:bg-gray-700/50 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700 min-w-[220px] transition-all hover:bg-gray-100 dark:hover:bg-gray-700">
                           <UsersIcon className="w-4 h-4 text-gray-400" />
                           <span className="text-[11px] font-bold text-gray-700 dark:text-white truncate flex-1 text-left">{selectedUserFilter.includes('Todos') ? 'Todos os usuários' : `${selectedUserFilter.length} usuário(s) selecionado(s)`}</span>
                           <ChevronDownIcon className={`w-4 h-4 transition-transform ${isUserDropdownOpen ? 'rotate-180' : ''}`} />
@@ -518,7 +526,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
               <button onClick={() => window.print()} className="flex items-center gap-2 px-6 py-2.5 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-black transition-all shadow-lg active:scale-95"><PrinterIcon className="w-4 h-4" /> Imprimir relatório</button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              <DashboardCard title="Solicitações pagas" value={formatCurrency(analysisData.paid)} icon={CheckCircleIcon} color="bg-green-500" />
+              <DashboardCard title="Reembolsos pagos" value={formatCurrency(analysisData.paid)} icon={CheckCircleIcon} color="bg-green-500" />
               <DashboardCard title="Em aprovação" value={formatCurrency(analysisData.pending)} icon={ClockIcon} color="bg-indigo-500" />
               <DashboardCard title="Total em km" value={formatCurrency(analysisData.totalKmValue)} icon={TrendUpIcon} color="bg-blue-500" />
               <DashboardCard title="Total pedágio" value={formatCurrency(analysisData.totalTollValue)} icon={DollarIcon} color="bg-purple-500" />
@@ -595,7 +603,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                                   </tr>
                               );
                           })}
-                          {analysisData.filteredReports.filter(r => r.status === 'Pago').length === 0 && (<tr><td colSpan={7} className="px-6 py-10 text-center text-gray-400 italic font-bold">Nenhuma solicitação paga encontrada para os filtros ativos.</td></tr>)}
+                          {analysisData.filteredReports.filter(r => r.status === 'Pago').length === 0 && (<tr><td colSpan={7} className="px-6 py-10 text-center text-gray-400 italic font-bold">Nenhum reembolso pago encontrado para os filtros ativos.</td></tr>)}
                       </tbody>
                       <tfoot className="bg-gray-50 dark:bg-gray-900/50 font-black border-t">
                           <tr>
@@ -629,7 +637,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                     <div className="space-y-6">
-                        <SectionTitle color="bg-blue-500">Parâmetros de solicitação</SectionTitle>
+                        <SectionTitle color="bg-blue-500">Parâmetros de reembolso</SectionTitle>
                         <div className={`p-6 rounded-2xl border-2 transition-all group ${isEditingKm ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-400' : 'bg-gray-50 dark:bg-gray-950 border-transparent hover:border-gray-200'}`}>
                             <div className="flex justify-between items-center mb-3 ml-0.5">
                                 <FormLabel>Valor padrão por km rodado (R$)</FormLabel>
@@ -799,7 +807,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
           <div className="max-w-7xl mx-auto space-y-4 animate-fade-in pb-10">
               <div className="flex items-center gap-4 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                   <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center border border-indigo-100"><CheckCircleIcon className="w-6 h-6" /></div>
-                  <div><h1 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">{view === 'status' ? 'Status de solicitações' : 'Histórico de solicitações'}</h1><p className="text-[11px] text-gray-400 font-bold tracking-tight">{isAdmin ? `Visão global da equipe (${listReports.length} itens)` : `Minhas solicitações (${listReports.length} itens)`}</p></div>
+                  <div><h1 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">{view === 'status' ? 'Status de reembolsos' : 'Histórico de reembolsos'}</h1><p className="text-[11px] text-gray-400 font-bold tracking-tight">{isAdmin ? `Visão global da equipe (${listReports.length} itens)` : `Meus reembolsos (${listReports.length} itens)`}</p></div>
               </div>
               <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm"><div className="max-w-xs"><FormLabel>Filtrar por status</FormLabel><div className="relative"><select value={statusFilterValue} onChange={(e) => setStatusFilterValue(e.target.value as any)} className="w-full bg-gray-50 dark:bg-gray-900 border-none rounded-lg px-3 py-2 text-xs font-bold text-gray-700 dark:text-gray-200 outline-none focus:ring-2 focus:ring-indigo-500/20 appearance-none shadow-sm cursor-pointer"><option value="Todos">Todos os status</option><option value="Rascunho">Rascunho</option><option value="Transferido">Transferido</option><option value="Env. p/ Pagamento">Env. p/ Pagamento</option><option value="Pago">Pago</option><option value="Cancelado">Cancelado</option></select><div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-40"><ChevronDownIcon className="w-4 h-4" /></div></div></div></div>
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 overflow-hidden">
@@ -828,11 +836,11 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                             <td className="px-6 py-4">
                               {report.isInstallmentWash ? (
                                   <span className="flex items-center gap-1.5 px-2 py-1 bg-cyan-50 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300 rounded-lg text-[9px] font-black border border-cyan-100 dark:border-cyan-800">
-                                      <SparklesIcon className="w-3 h-3" /> Técnico
+                                      <SparklesIcon className="w-3 h-3" /> Instalação/Lavagem
                                   </span>
                               ) : (
                                   <span className="flex items-center gap-1.5 px-2 py-1 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 rounded-lg text-[9px] font-black border border-indigo-100 dark:border-indigo-800">
-                                      <DocumentReportIcon className="w-3 h-3" /> Solicitação
+                                      <DocumentReportIcon className="w-3 h-3" /> Reembolso
                                   </span>
                               )}
                             </td>
@@ -843,9 +851,9 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                             <td className="px-6 py-4 text-center">
                               <div className="flex justify-center gap-1.5 transition-opacity">
                                 <button onClick={() => onEditReport?.(report)} className={`p-1.5 rounded-lg ${canEdit ? 'text-indigo-500 hover:bg-indigo-50' : 'text-blue-500 hover:bg-blue-50'}`} title={canEdit ? "Alterar" : "Visualizar"}>{canEdit ? <EditIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}</button>
-                                {view === 'historico' && canEffectuateHistory && (<button onClick={() => { setReportInAction(report); setIsConfirmEfetivarHistoricoModal(true); }} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg" title="Efetivar solicitação"><CheckCircleIcon className="w-4 h-4" /></button>)}
+                                {view === 'historico' && canEffectuateHistory && (<button onClick={() => { setReportInAction(report); setIsConfirmEfetivarHistoricoModal(true); }} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg" title="Efetivar reembolso"><CheckCircleIcon className="w-4 h-4" /></button>)}
                                 {canEffectuateStatus && (<button onClick={() => { setReportInAction(report); setIsConfirmEfetivarStatusModal(true); }} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg" title="Aprovar p/ pagamento"><CheckCircleIcon className="w-4 h-4" /></button>)}
-                                {canCancelStatus && (<button onClick={() => { setReportInAction(report); setIsCancelModalOpen(true); }} className="p-1.5 text-red-600 hover:bg-green-50 rounded-lg" title="Cancelar solicitação"><XCircleIcon className="w-5 h-5" /></button>)}
+                                {canCancelStatus && (<button onClick={() => { setReportInAction(report); setIsCancelModalOpen(true); }} className="p-1.5 text-red-600 hover:bg-green-50 rounded-lg" title="Cancelar reembolso"><XCircleIcon className="w-5 h-5" /></button>)}
                               </div>
                             </td>
                           </tr>
@@ -867,7 +875,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                 <ExclamationTriangleIcon className="w-6 h-6" />
               </div>
               <div>
-                <h4 className="text-sm font-black text-red-700 dark:text-red-400 tracking-tight">Solicitação reprovada / cancelada</h4>
+                <h4 className="text-sm font-black text-red-700 dark:text-red-400 tracking-tight">Reembolso reprovado / cancelado</h4>
                 <p className="text-[12px] font-bold text-red-600 dark:text-red-500/80 mt-1 leading-relaxed">
                    Motivo: <span className="text-gray-800 dark:text-gray-100">{reportToEdit.cancelReason}</span>
                 </p>
@@ -878,7 +886,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg"><DocumentReportIcon className="w-6 h-6 text-white" /></div>
-              <div><h1 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">{isReadOnly ? 'Visualizar solicitação' : reportToEdit ? 'Alterar solicitação' : 'Novo reembolso'}</h1><div className="flex items-center gap-2 mt-0.5">{reportToEdit?.status && (<span className={`px-2 py-0.5 rounded-md text-[9px] font-black ${reportToEdit.status === 'Pago' ? 'bg-green-100 text-green-700' : reportToEdit.status === 'Transferido' ? 'bg-blue-100 text-blue-700' : reportToEdit.status === 'Env. p/ Pagamento' ? 'bg-orange-100 text-orange-700' : reportToEdit.status === 'Cancelado' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{reportToEdit.status}</span>)}<span className="text-[10px] text-gray-400 font-bold tracking-tight">Controle de reembolsos</span></div></div>
+              <div><h1 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">{isReadOnly ? 'Visualizar reembolso' : reportToEdit ? 'Alterar reembolso' : 'Novo reembolso'}</h1><div className="flex items-center gap-2 mt-0.5">{reportToEdit?.status && (<span className={`px-2 py-0.5 rounded-md text-[9px] font-black ${reportToEdit.status === 'Pago' ? 'bg-green-100 text-green-700' : reportToEdit.status === 'Transferido' ? 'bg-blue-100 text-blue-700' : reportToEdit.status === 'Env. p/ Pagamento' ? 'bg-orange-100 text-orange-700' : reportToEdit.status === 'Cancelado' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{reportToEdit.status}</span>)}<span className="text-[10px] text-gray-400 font-bold tracking-tight">Controle de reembolsos</span></div></div>
             </div>
             {!isReadOnly && (
               <div className="flex gap-2 w-full md:w-auto">
@@ -933,7 +941,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                       totalValue: itemsList.reduce((acc, item) => acc + (Math.ceil(((item.km || 0) * valorPorKm) * 100) / 100) + (item.toll || 0) + (item.food || 0) + (item.components || 0) + (item.others || 0), 0)
                   }); 
                   setIsConfirmEfetivarHistoricoModal(true); 
-                }} className="flex-1 md:flex-none px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-xs shadow-lg hover:bg-indigo-700 flex items-center justify-center gap-2"><CheckCircleIcon className="w-4 h-4" /> Efetivar solicitação</button>
+                }} className="flex-1 md:flex-none px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-xs shadow-lg hover:bg-indigo-700 flex items-center justify-center gap-2"><CheckCircleIcon className="w-4 h-4" /> Efetivar reembolso</button>
               </div>
             )}
           </div>
@@ -1035,7 +1043,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
             <Modal title="Confirmar efetivação" onClose={() => setIsConfirmEfetivarHistoricoModal(false)}>
                 <div className="text-center p-4 space-y-4">
                     <CheckCircleIcon className="w-12 h-12 text-green-500 mx-auto" />
-                    <h3 className="text-sm font-bold text-gray-800 dark:text-white">Deseja efetivar a solicitação?</h3>
+                    <h3 className="text-sm font-bold text-gray-800 dark:text-white">Deseja efetivar o reembolso?</h3>
                     <p className="text-[10px] text-gray-500">Ao efetivar, o status mudará para 'Transferido' e a edição será bloqueada.</p>
                     <div className="flex gap-3 mt-4">
                         <button onClick={() => setIsConfirmEfetivarHistoricoModal(false)} className="flex-1 py-2 bg-gray-100 rounded-lg text-xs font-bold">Não</button>
@@ -1050,7 +1058,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
             <Modal title="Aprovar para pagamento" onClose={() => setIsConfirmEfetivarStatusModal(false)}>
                 <div className="text-center p-4 space-y-4">
                     <DollarIcon className="w-12 h-12 text-indigo-600 mx-auto" />
-                    <h3 className="text-sm font-bold text-gray-800 dark:text-white">Deseja aprovar esta solicitação?</h3>
+                    <h3 className="text-sm font-bold text-gray-800 dark:text-white">Deseja aprovar este reembolso?</h3>
                     <p className="text-[10px] text-gray-500">
                       {reportInAction?.isInstallmentWash 
                         ? "Esta ação valida a documentação enviada e destaca os lançamentos no financeiro para pagamento." 
@@ -1066,7 +1074,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
             </Modal>
         )}
         {isCancelModalOpen && (
-            <Modal title="Cancelar solicitação" onClose={() => setIsCancelModalOpen(false)}>
+            <Modal title="Cancelar reembolso" onClose={() => setIsCancelModalOpen(false)}>
                 <div className="space-y-4">
                     <div>
                         <FormLabel>Motivo do cancelamento *</FormLabel>

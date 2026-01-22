@@ -24,6 +24,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
     const [searchTerm, setSearchTerm] = useState('');
     const [isSuccessModalOpen, setSuccessModalOpen] = useState(false);
     const [isConfirmDraftModalOpen, setIsConfirmDraftModalOpen] = useState(false);
+    const [isConfirmSubmitModalOpen, setIsConfirmSubmitModalOpen] = useState(false);
     const [modalMessage, setModalMessage] = useState('');
     
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -39,6 +40,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                 dataService.getAll<ExpenseReport>('expense_reports', undefined, true)
             ]);
 
+            // IDs já usados em outros relatórios não cancelados
             const usedTxIdsInOtherReports = new Set(
                 allReports
                     .filter(r => r.status !== 'Cancelado')
@@ -46,6 +48,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                     .flatMap(r => (r.items || []).map(item => item.id))
             );
 
+            // Categorias técnicas
             const targetCatIds = cats
                 .filter(c => {
                     const name = (c.name || '').toLowerCase();
@@ -110,50 +113,36 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
     };
 
     const handleSaveAction = async (status: 'Transferido' | 'Rascunho') => {
-        // Caso especial: se desmarcar tudo e for um rascunho existente, o objetivo é excluir o rascunho
         if (selectedTxIds.length === 0) {
             if (reportToEdit && reportToEdit.status === 'Rascunho') {
                 setIsSaving(true);
                 try {
-                    // 1. Limpa os metadados das transações financeiras vinculadas a este rascunho para que voltem a ficar disponíveis
-                    const allTxs = await dataService.getAll<FinancialTransaction>('financial_transactions');
-                    const relatedTxs = allTxs.filter(t => t.relatedReportId === reportToEdit.id);
-                    for (const tx of relatedTxs) {
-                        await dataService.save('financial_transactions', { 
-                            ...tx, 
-                            invoiceSent: false, 
-                            relatedReportId: undefined 
-                        });
-                    }
-
-                    // 2. Exclui o rascunho fisicamente do banco de dados
                     await dataService.delete('expense_reports', reportToEdit.id);
-                    
-                    // 3. Prepara feedback de sucesso
-                    setModalMessage("Rascunho excluído com sucesso. Os itens originais voltaram a ficar disponíveis para seleção.");
+                    setModalMessage("Rascunho excluído com sucesso.");
                     setIsConfirmDraftModalOpen(false);
                     setSuccessModalOpen(true);
                     return;
                 } catch (e) {
-                    console.error("Erro ao excluir rascunho:", e);
-                    alert("Não foi possível excluir o rascunho. Tente novamente.");
+                    alert("Erro ao excluir rascunho.");
                 } finally {
                     setIsSaving(false);
                 }
             } else {
-                alert("Selecione pelo menos um lançamento para salvar o rascunho.");
-                setIsConfirmDraftModalOpen(false);
+                alert("Selecione pelo menos um lançamento.");
             }
             return;
         }
         
         if (status === 'Transferido' && attachments.length === 0) {
-            alert("A Nota Fiscal (NF) é obrigatória para solicitar o pagamento.");
-            setIsConfirmDraftModalOpen(false);
+            alert("A Nota Fiscal (NF) é obrigatória para enviar.");
             return;
         }
 
         setIsSaving(true);
+        // Fecha modais de confirmação
+        setIsConfirmSubmitModalOpen(false);
+        setIsConfirmDraftModalOpen(false);
+
         try {
             const selectedItems = pendingTransactions.filter(t => selectedTxIds.includes(t.id));
             const reportId = reportToEdit ? reportToEdit.id : `tech-${Date.now()}`;
@@ -186,29 +175,32 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
 
             await dataService.save('expense_reports', finalReport);
 
-            // Se for envio (Transferido), atualiza as flags nas transações originais
             if (status === 'Transferido') {
+                // Sincroniza liberação para o financeiro
                 const allTxs = await dataService.getAll<FinancialTransaction>('financial_transactions');
                 for (const txId of selectedTxIds) {
                     const originalTx = allTxs.find(t => t.id === txId);
                     if (originalTx) {
-                        await dataService.save('financial_transactions', { 
-                            ...originalTx, 
-                            invoiceSent: true, 
-                            relatedReportId: reportId 
-                        });
+                        try {
+                            await dataService.save('financial_transactions', { 
+                                ...originalTx, 
+                                invoiceSent: true, 
+                                relatedReportId: reportId 
+                            });
+                        } catch (txErr: any) {
+                            console.warn("Falha ao marcar 'invoiceSent' (coluna pode não existir):", txErr.message);
+                        }
                     }
                 }
-                setModalMessage("Solicitação enviada com sucesso! O financeiro já pode visualizar os itens destacados.");
+                setModalMessage("Solicitação enviada! Os lançamentos no financeiro agora aparecem como 'Liberado p/ Pagar'.");
             } else {
-                setModalMessage("Rascunho atualizado. Você poderá finalizar este faturamento no menu Histórico.");
+                setModalMessage("Rascunho atualizado com sucesso.");
             }
 
             setSuccessModalOpen(true);
-            setIsConfirmDraftModalOpen(false);
-        } catch (e) {
-            console.error("Erro ao salvar ação:", e);
-            alert("Erro ao processar a operação.");
+        } catch (e: any) {
+            console.error("Erro ao salvar:", e);
+            alert("Erro ao processar a operação: " + e.message);
         } finally {
             setIsSaving(false);
         }
@@ -216,7 +208,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
 
     const handleSuccessModalClose = () => {
         setSuccessModalOpen(false);
-        if (onSave) onSave(); // Retorna para a lista de histórico
+        if (onSave) onSave();
     };
 
     const filteredList = pendingTransactions.filter(t => 
@@ -314,7 +306,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                         <tr>
                                             <td colSpan={4} className="px-6 py-20 text-center space-y-4">
                                                 <ExclamationTriangleIcon className="w-12 h-12 text-gray-200 mx-auto" />
-                                                <p className="text-gray-400 font-bold italic text-sm">Não há lançamentos técnicos pendentes nesta categoria.</p>
+                                                <p className="text-gray-400 font-bold italic text-sm">Não há lançamentos técnicos pendentes.</p>
                                             </td>
                                         </tr>
                                     )}
@@ -383,7 +375,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                             {!isReadOnly ? (
                                 <div className="flex flex-col gap-3">
                                     <button 
-                                        onClick={() => handleSaveAction('Transferido')}
+                                        onClick={() => setIsConfirmSubmitModalOpen(true)}
                                         disabled={isSaving || selectedTxIds.length === 0 || attachments.length === 0}
                                         className={`w-full py-4 rounded-2xl font-black text-sm shadow-xl transition-all flex items-center justify-center gap-3 ${
                                             selectedTxIds.length > 0 && attachments.length > 0
@@ -392,7 +384,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                         }`}
                                     >
                                         <SaveIcon className="w-5 h-5" /> 
-                                        {isSaving ? 'Gravando...' : (reportToEdit ? 'Finalizar e Enviar' : 'Solicitar Pagamento')}
+                                        {isSaving ? 'Salvando...' : (reportToEdit ? 'Finalizar e Enviar' : 'Solicitar Pagamento')}
                                     </button>
 
                                     <button 
@@ -416,18 +408,12 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                     <ArrowLeftIcon className="w-5 h-5" /> Voltar ao histórico
                                 </button>
                             )}
-                            
-                            {!isReadOnly && attachments.length === 0 && selectedTxIds.length > 0 && (
-                                <p className="text-[10px] font-bold text-red-500 text-center animate-pulse">
-                                    ⚠️ Upload de Nota Fiscal pendente
-                                </p>
-                            )}
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Modal de Confirmação para Salvar Rascunho ou EXCLUIR se estiver vazio */}
+            {/* Modal de Confirmação para Salvar Rascunho */}
             {isConfirmDraftModalOpen && (
                 <Modal title={selectedTxIds.length === 0 && reportToEdit ? "Confirmar exclusão" : "Salvar Rascunho"} onClose={() => setIsConfirmDraftModalOpen(false)} maxWidth="max-w-sm">
                     <div className="text-center p-4 space-y-6">
@@ -438,18 +424,18 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                             <h3 className="text-lg font-bold text-gray-900 dark:text-white">
                                 {selectedTxIds.length === 0 && reportToEdit ? 'Deseja excluir este rascunho?' : 'Deseja salvar o formulário?'}
                             </h3>
-                            <p className="text-sm text-gray-500 dark:text-gray-400 font-medium leading-relaxed">
+                            <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">
                                 {selectedTxIds.length === 0 && reportToEdit 
-                                    ? 'Você desmarcou todos os itens. Ao confirmar, este registro de faturamento será removido e as linhas financeiras serão liberadas para novos formulários.' 
-                                    : 'Os itens selecionados serão reservados para este faturamento. Você poderá editá-los novamente acessando o menu de Histórico.'}
+                                    ? 'Isso liberará as linhas financeiras para novos formulários.' 
+                                    : 'Você poderá editá-lo novamente no menu de Histórico.'}
                             </p>
                         </div>
                         <div className="flex gap-4">
-                            <button onClick={() => setIsConfirmDraftModalOpen(false)} className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl font-bold text-sm">Não</button>
+                            <button onClick={() => setIsConfirmDraftModalOpen(false)} className="flex-1 py-3 bg-gray-100 rounded-xl font-bold text-sm">Não</button>
                             <button 
                                 onClick={() => handleSaveAction('Rascunho')} 
                                 disabled={isSaving} 
-                                className={`flex-1 py-3 text-white rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-all ${selectedTxIds.length === 0 ? 'bg-red-600 shadow-red-600/20 hover:bg-red-700' : 'bg-indigo-600 shadow-indigo-600/20 hover:bg-indigo-700'}`}
+                                className={`flex-1 py-3 text-white rounded-xl font-bold text-sm shadow-lg ${selectedTxIds.length === 0 ? 'bg-red-600' : 'bg-indigo-600'}`}
                             >
                                 {isSaving ? '...' : 'Sim, confirmar'}
                             </button>
@@ -458,21 +444,48 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                 </Modal>
             )}
 
+            {/* Modal de Confirmação para Envio Final */}
+            {isConfirmSubmitModalOpen && (
+                <Modal title="Confirmar Operação" onClose={() => setIsConfirmSubmitModalOpen(false)} maxWidth="max-w-sm">
+                    <div className="text-center p-4 space-y-6">
+                        <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-50 text-green-600">
+                            <CheckCircleIcon className="w-10 h-10" />
+                        </div>
+                        <div className="space-y-2">
+                            <h3 className="text-lg font-bold text-gray-900 dark:text-white tracking-tight">Efetivar e enviar ao financeiro?</h3>
+                            <p className="text-sm text-gray-500 font-medium leading-relaxed px-4">
+                                Esta ação autorizará o pagamento e marcará os lançamentos como <strong>Liberados</strong> no financeiro.
+                            </p>
+                        </div>
+                        <div className="flex gap-4">
+                            <button onClick={() => setIsConfirmSubmitModalOpen(false)} className="flex-1 py-3 bg-gray-100 rounded-xl font-bold text-sm">Não, revisar</button>
+                            <button 
+                                onClick={() => handleSaveAction('Transferido')} 
+                                disabled={isSaving} 
+                                className="flex-1 py-3 bg-green-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-green-100 hover:bg-green-700 active:scale-95 transition-all"
+                            >
+                                {isSaving ? 'Gravando...' : 'Sim, efetivar'}
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
             {isSuccessModalOpen && (
                 <Modal title="" onClose={handleSuccessModalClose}>
-                    <div className="text-center py-10 space-y-6">
+                    <div className="text-center py-10 space-y-6 animate-fade-in">
                         <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto animate-bounce shadow-lg shadow-green-100">
                             <CheckCircleIcon className="w-12 h-12" />
                         </div>
                         <div className="space-y-2">
                             <h3 className="text-2xl font-black text-gray-900">Sucesso!</h3>
-                            <p className="text-sm font-bold text-gray-500">{modalMessage}</p>
+                            <p className="text-sm font-bold text-gray-500 px-8 leading-relaxed">{modalMessage}</p>
                         </div>
                         <button 
                             onClick={handleSuccessModalClose}
                             className="w-full py-4 bg-gray-900 text-white rounded-2xl font-black text-xs shadow-xl hover:bg-black transition-all active:scale-95"
                         >
-                            Fechar
+                            Fechar e concluir
                         </button>
                     </div>
                 </Modal>

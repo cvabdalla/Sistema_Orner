@@ -73,14 +73,14 @@ export const MENU_ITEMS: MenuItem[] = [
   },
   { 
       id: 'RELATORIOS_MENU', 
-      label: 'Solic. Pagamento', 
+      label: 'Reembolsos', 
       icon: RelatoriosIcon,
       children: [
           { id: 'RELATORIOS_NOVO', label: 'Novo Reembolso', icon: AddIcon },
           { id: 'INSTALACAO_LAVAGEM_SOLIC', label: 'Instalações / Lavagens', icon: SparklesIcon },
-          { id: 'RELATORIOS_HISTORICO', label: 'Histórico de Solicitações', icon: ClipboardListIcon },
-          { id: 'RELATORIOS_STATUS', label: 'Status de Solicitações', icon: CheckCircleIcon },
-          { id: 'RELATORIOS_VISAO_GERAL', label: 'Resumo Solic. Pagto', icon: ChartPieIcon },
+          { id: 'RELATORIOS_HISTORICO', label: 'Histórico de Reembolsos', icon: ClipboardListIcon },
+          { id: 'RELATORIOS_STATUS', label: 'Status de Reembolsos', icon: CheckCircleIcon },
+          { id: 'RELATORIOS_VISAO_GERAL', label: 'Resumo de Reembolsos', icon: ChartPieIcon },
       ]
   },
   {

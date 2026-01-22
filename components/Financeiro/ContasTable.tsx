@@ -162,32 +162,32 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                             const isPaid = tx.status === 'pago';
                             const isCancelled = tx.status === 'cancelado';
                             const isPending = !isPaid && !isCancelled;
-                            const isInvoiceSent = tx.invoiceSent && isPending;
+                            const isApprovedForPayment = tx.invoiceSent && isPending;
                             const isTech = isTechnicalCategory(tx.categoryId);
                             
-                            const statusLabel = isCancelled ? 'Cancelado' : isPaid ? (tx.type === 'receita' ? 'Recebido' : 'Pago') : (isInvoiceSent ? 'Pronto para pagar' : 'Pendente');
+                            // Determinação do rótulo de status
+                            let statusLabel = 'Pendente';
+                            if (isCancelled) statusLabel = 'Cancelado';
+                            else if (isPaid) statusLabel = tx.type === 'receita' ? 'Recebido' : 'Pago';
+                            else if (isApprovedForPayment) statusLabel = 'Liberado p/ Pagar';
+
                             const actionLabel = tx.type === 'receita' ? 'Receber' : 'Pagar';
 
-                            const rowStateClass = isInvoiceSent 
-                                ? 'bg-emerald-50/40 dark:bg-emerald-900/10' 
+                            // Estilização dinâmica da linha
+                            const rowStateClass = isApprovedForPayment 
+                                ? 'bg-emerald-50/40 dark:bg-emerald-900/10 border-l-4 border-l-emerald-500' 
                                 : isPaid 
-                                    ? 'bg-gray-50/50 dark:bg-gray-900/10 opacity-70' 
+                                    ? 'bg-gray-50/50 dark:bg-gray-900/10 opacity-70 border-l-4 border-l-transparent' 
                                     : isCancelled 
-                                        ? 'bg-red-50/20 opacity-50' 
-                                        : 'bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-indigo-900/10';
+                                        ? 'bg-red-50/20 opacity-50 border-l-4 border-l-transparent' 
+                                        : `bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-indigo-900/10 border-l-4 ${isPending ? (tx.type === 'receita' ? 'border-l-green-500' : 'border-l-red-500') : 'border-l-transparent'}`;
 
                             return (
                                 <tr key={tx.id} className={`transition-all duration-200 ${rowStateClass}`}>
-                                    <td className={`py-4 px-6 border-l-4 ${
-                                        isInvoiceSent 
-                                        ? 'border-l-emerald-500' 
-                                        : isPending 
-                                            ? (tx.type === 'receita' ? 'border-l-green-500' : 'border-l-red-500') 
-                                            : 'border-l-transparent'
-                                    }`}>
+                                    <td className="py-4 px-6">
                                         <div className="flex items-center gap-2">
-                                            {isInvoiceSent && (
-                                                <div className="relative flex h-3 w-3 mr-1" title="Documentação OK para pagamento">
+                                            {isApprovedForPayment && (
+                                                <div className="relative flex h-3 w-3 mr-1" title="Pagamento autorizado via faturamento técnico">
                                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                                                     <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]"></span>
                                                 </div>
@@ -197,10 +197,10 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                                             
                                             <div className="flex flex-col">
                                                 <div className="flex items-center gap-2">
-                                                    <span className={`text-[13px] font-bold ${isCancelled ? 'line-through text-gray-400' : 'text-gray-900 dark:text-white'} ${isInvoiceSent ? 'text-emerald-800 dark:text-emerald-400' : ''}`}>
+                                                    <span className={`text-[13px] font-bold ${isCancelled ? 'line-through text-gray-400' : 'text-gray-900 dark:text-white'} ${isApprovedForPayment ? 'text-emerald-800 dark:text-emerald-400' : ''}`}>
                                                         {tx.displayDescription}
                                                     </span>
-                                                    {isTech && isInvoiceSent && (
+                                                    {isTech && isApprovedForPayment && (
                                                         <span className="flex items-center gap-1 px-1.5 py-0.5 bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300 rounded text-[8px] font-black border border-cyan-200 dark:border-cyan-800 uppercase tracking-tighter">
                                                             <SparklesIcon className="w-2.5 h-2.5" /> Técnico OK
                                                         </span>
@@ -237,11 +237,11 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                                     </td>
 
                                     <td className="py-4 px-6 text-center">
-                                        <span className={`px-2.5 py-1 text-[9px] font-black rounded-full shadow-sm tracking-tight ${
-                                            isCancelled ? 'bg-red-100 text-red-700' : 
-                                            isPaid ? 'bg-green-100 text-green-700' : 
-                                            isInvoiceSent ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/30' : 
-                                            'bg-yellow-100 text-yellow-700'
+                                        <span className={`px-3 py-1 text-[9px] font-black rounded-full shadow-sm tracking-tight border transition-all ${
+                                            isCancelled ? 'bg-red-50 text-red-600 border-red-100' : 
+                                            isPaid ? 'bg-green-50 text-green-700 border-green-100' : 
+                                            isApprovedForPayment ? 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-500/30' : 
+                                            'bg-yellow-50 text-yellow-700 border-yellow-100'
                                         }`}>
                                             {statusLabel}
                                         </span>
@@ -257,7 +257,7 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                                                         <EyeIcon className="w-5 h-5" />
                                                     </button>
                                                     {!isPaid && (
-                                                        <button onClick={() => setConfirmingTx({id: tx.id, type: tx.type, isGroup: true, originalItems: tx.originalItems})} className="text-[9px] font-black text-white bg-green-600 px-3 py-1.5 rounded-lg shadow-sm hover:bg-green-700 transition-all">
+                                                        <button onClick={() => setConfirmingTx({id: tx.id, type: tx.type, isGroup: true, originalItems: tx.originalItems})} className={`text-[9px] font-black px-3 py-1.5 rounded-lg shadow-sm transition-all ${isApprovedForPayment ? 'bg-emerald-700 text-white hover:bg-emerald-800' : 'bg-green-600 text-white hover:bg-green-700'}`}>
                                                             Pagar fatura
                                                         </button>
                                                     )}
@@ -268,7 +268,7 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                                                         <button 
                                                             onClick={() => setConfirmingTx({id: tx.id, type: tx.type, isGroup: false})} 
                                                             className={`font-black text-[10px] px-3 py-1.5 rounded-lg border-2 transition-all mr-1 ${
-                                                                isInvoiceSent 
+                                                                isApprovedForPayment 
                                                                 ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700 shadow-md' 
                                                                 : 'bg-white text-green-600 border-green-100 hover:bg-green-50'
                                                             }`}

@@ -96,6 +96,7 @@ class SupabaseDataService implements IDataService {
         this.setLocal(collection, localData);
 
         try {
+            // Remove campos explicitamente marcados como undefined para evitar erros de schema no Supabase
             const cleanItem = Object.fromEntries(
                 Object.entries(item).filter(([_, v]) => v !== undefined)
             );
@@ -106,11 +107,14 @@ class SupabaseDataService implements IDataService {
                 .select()
                 .single();
 
-            if (error) throw error;
+            if (error) {
+                console.error(`[SUPABASE ERROR] ${collection}:`, error.message, error.details);
+                throw error;
+            }
             return data as T;
         } catch (e: any) {
             console.error(`[SAVE ERROR] ${collection}:`, e.message);
-            throw e; // Lançar o erro para que o componente saiba que falhou
+            throw e;
         }
     }
 
@@ -124,9 +128,14 @@ class SupabaseDataService implements IDataService {
         this.setLocal(collection, localData);
 
         try {
+            // Limpa cada item do array
+            const cleanItems = items.map(item => 
+                Object.fromEntries(Object.entries(item).filter(([_, v]) => v !== undefined))
+            );
+
             const { data, error } = await supabase
                 .from(collection)
-                .upsert(items)
+                .upsert(cleanItems)
                 .select();
 
             if (error) throw error;
