@@ -4,7 +4,8 @@ import {
     SparklesIcon, DollarIcon, CheckCircleIcon, 
     UploadIcon, TrashIcon, ExclamationTriangleIcon,
     TableIcon, SearchIcon, CalendarIcon, SaveIcon,
-    ClockIcon, ArrowLeftIcon, DocumentReportIcon
+    ClockIcon, ArrowLeftIcon, DocumentReportIcon,
+    EyeIcon, XCircleIcon, ArrowDownIcon
 } from '../assets/icons';
 import { dataService } from '../services/dataService';
 import type { FinancialTransaction, FinancialCategory, ExpenseReport, User, ExpenseAttachment, InstalacaoLavagemPageProps } from '../types';
@@ -26,6 +27,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
     const [isConfirmDraftModalOpen, setIsConfirmDraftModalOpen] = useState(false);
     const [isConfirmSubmitModalOpen, setIsConfirmSubmitModalOpen] = useState(false);
     const [modalMessage, setModalMessage] = useState('');
+    const [hdPhoto, setHdPhoto] = useState<string | null>(null);
     
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -40,7 +42,6 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                 dataService.getAll<ExpenseReport>('expense_reports', undefined, true)
             ]);
 
-            // IDs já usados em outros relatórios não cancelados
             const usedTxIdsInOtherReports = new Set(
                 allReports
                     .filter(r => r.status !== 'Cancelado')
@@ -48,7 +49,6 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                     .flatMap(r => (r.items || []).map(item => item.id))
             );
 
-            // Categorias técnicas
             const targetCatIds = cats
                 .filter(c => {
                     const name = (c.name || '').toLowerCase();
@@ -112,6 +112,41 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
         e.target.value = '';
     };
 
+    const getFileBlob = (file: ExpenseAttachment) => {
+        const parts = file.data.split(';base64,');
+        const contentType = parts[0].split(':')[1];
+        const raw = window.atob(parts[1]);
+        const rawLength = raw.length;
+        const uInt8Array = new Uint8Array(rawLength);
+        for (let i = 0; i < rawLength; ++i) {
+            uInt8Array[i] = raw.charCodeAt(i);
+        }
+        return new Blob([uInt8Array], { type: contentType });
+    };
+
+    const handleViewFile = (file: ExpenseAttachment) => {
+        const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.data.startsWith('data:application/pdf');
+        if (isPdf) {
+            const blob = getFileBlob(file);
+            const url = URL.createObjectURL(blob);
+            window.open(url, '_blank');
+        } else {
+            setHdPhoto(file.data);
+        }
+    };
+
+    const handleDownloadFile = (file: ExpenseAttachment) => {
+        const blob = getFileBlob(file);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
     const handleSaveAction = async (status: 'Transferido' | 'Rascunho') => {
         if (selectedTxIds.length === 0) {
             if (reportToEdit && reportToEdit.status === 'Rascunho') {
@@ -139,7 +174,6 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
         }
 
         setIsSaving(true);
-        // Fecha modais de confirmação
         setIsConfirmSubmitModalOpen(false);
         setIsConfirmDraftModalOpen(false);
 
@@ -176,23 +210,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
             await dataService.save('expense_reports', finalReport);
 
             if (status === 'Transferido') {
-                // Sincroniza liberação para o financeiro
-                const allTxs = await dataService.getAll<FinancialTransaction>('financial_transactions');
-                for (const txId of selectedTxIds) {
-                    const originalTx = allTxs.find(t => t.id === txId);
-                    if (originalTx) {
-                        try {
-                            await dataService.save('financial_transactions', { 
-                                ...originalTx, 
-                                invoiceSent: true, 
-                                relatedReportId: reportId 
-                            });
-                        } catch (txErr: any) {
-                            console.warn("Falha ao marcar 'invoiceSent' (coluna pode não existir):", txErr.message);
-                        }
-                    }
-                }
-                setModalMessage("Solicitação enviada! Os lançamentos no financeiro agora aparecem como 'Liberado p/ Pagar'.");
+                setModalMessage("Solicitação enviada para auditoria! O financeiro será liberado assim que o administrativo aprovar o relatório.");
             } else {
                 setModalMessage("Rascunho atualizado com sucesso.");
             }
@@ -217,6 +235,22 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
 
     return (
         <div className="max-w-7xl mx-auto space-y-6 animate-fade-in pb-20">
+            {/* Banner de Cancelamento */}
+            {reportToEdit?.status === 'Cancelado' && reportToEdit.cancelReason && (
+                <div className="bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-900/50 p-6 rounded-3xl flex items-start gap-5 shadow-sm animate-fade-in">
+                    <div className="p-3 bg-red-600 text-white rounded-2xl shadow-lg shrink-0">
+                        <ExclamationTriangleIcon className="w-8 h-8" />
+                    </div>
+                    <div>
+                        <h4 className="text-base font-black text-red-700 dark:text-red-400 tracking-tight">Faturamento Rejeitado</h4>
+                        <p className="text-sm font-bold text-red-600 dark:text-red-500/80 mt-1 leading-relaxed">
+                            Motivo do Administrativo: <span className="text-gray-800 dark:text-gray-100 font-black">"{reportToEdit.cancelReason}"</span>
+                        </p>
+                        <p className="text-[10px] font-black text-red-400 uppercase tracking-widest mt-3 opacity-70">Verifique as notas e reenvie se necessário</p>
+                    </div>
+                </div>
+            )}
+
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700">
                 <div className="flex items-center gap-5">
                     <div className="w-16 h-16 bg-cyan-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-cyan-600/20">
@@ -341,14 +375,31 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                                 <img src={file.data} className="w-full h-full object-cover" alt="" />
                                             )}
                                             
-                                            {!isReadOnly && (
+                                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 z-10">
                                                 <button 
-                                                    onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))}
-                                                    className="absolute top-1 right-1 p-1 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-10"
+                                                    onClick={() => handleViewFile(file)}
+                                                    className="p-1.5 bg-white text-gray-900 rounded-full hover:bg-indigo-50 shadow-lg"
+                                                    title="Visualizar"
                                                 >
-                                                    <TrashIcon className="w-3.5 h-3.5" />
+                                                    <EyeIcon className="w-4 h-4" />
                                                 </button>
-                                            )}
+                                                <button 
+                                                    onClick={() => handleDownloadFile(file)}
+                                                    className="p-1.5 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 shadow-lg"
+                                                    title="Baixar arquivo"
+                                                >
+                                                    <ArrowDownIcon className="w-4 h-4" />
+                                                </button>
+                                                {!isReadOnly && (
+                                                    <button 
+                                                        onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))}
+                                                        className="p-1.5 bg-red-600 text-white rounded-full hover:bg-red-700 shadow-lg"
+                                                        title="Excluir"
+                                                    >
+                                                        <TrashIcon className="w-3.5 h-3.5" />
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
                                     );
                                 })}
@@ -413,7 +464,6 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                 </div>
             </div>
 
-            {/* Modal de Confirmação para Salvar Rascunho */}
             {isConfirmDraftModalOpen && (
                 <Modal title={selectedTxIds.length === 0 && reportToEdit ? "Confirmar exclusão" : "Salvar Rascunho"} onClose={() => setIsConfirmDraftModalOpen(false)} maxWidth="max-w-sm">
                     <div className="text-center p-4 space-y-6">
@@ -444,7 +494,6 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                 </Modal>
             )}
 
-            {/* Modal de Confirmação para Envio Final */}
             {isConfirmSubmitModalOpen && (
                 <Modal title="Confirmar Operação" onClose={() => setIsConfirmSubmitModalOpen(false)} maxWidth="max-w-sm">
                     <div className="text-center p-4 space-y-6">
@@ -489,6 +538,15 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                         </button>
                     </div>
                 </Modal>
+            )}
+
+            {hdPhoto && (
+                <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setHdPhoto(null)}>
+                    <div className="relative max-w-5xl w-full h-full flex flex-col items-center justify-center gap-4">
+                        <button className="absolute top-0 right-0 p-3 text-white hover:text-indigo-400 z-[110]" onClick={(e) => { e.stopPropagation(); setHdPhoto(null); }}><XCircleIcon className="w-10 h-10" /></button>
+                        <div className="flex-1 w-full flex items-center justify-center overflow-hidden"><img src={hdPhoto} className="max-w-full max-h-full object-contain rounded-lg shadow-2xl animate-zoom-in" alt="" onClick={(e) => e.stopPropagation()} /></div>
+                    </div>
+                </div>
             )}
         </div>
     );

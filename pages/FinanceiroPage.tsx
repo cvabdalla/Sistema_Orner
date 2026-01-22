@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { AddIcon, FilterIcon, CalendarIcon, TrashIcon, ClipboardListIcon, DocumentReportIcon, ExclamationTriangleIcon, CreditCardIcon, XCircleIcon, TableIcon } from '../assets/icons';
 import type { FinancialTransaction, FinancialTransactionStatus, FinancialCategory, FinancialTransactionType, FinanceiroPageProps, User, ExpenseReport, BankAccount } from '../types';
@@ -178,16 +179,14 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
 
         try {
             await dataService.saveAll('financial_transactions', transactionsToSave);
+            
+            // Sincronização de status com relatórios de reembolso ao salvar via modal
             for (const tx of transactionsToSave) {
-                if (tx.id.startsWith('tx-reemb-') && tx.status === 'pago') {
-                    const reportId = tx.id.replace('tx-reemb-', '');
-                    const reports = await dataService.getAll<ExpenseReport>('expense_reports');
-                    const report = reports.find(r => r.id === reportId);
-                    if (report) {
-                        await dataService.save('expense_reports', { ...report, status: 'Pago' });
-                    }
+                if (tx.status === 'pago') {
+                    await syncReportStatus(tx.id, tx.relatedReportId);
                 }
             }
+            
             await loadData();
             handleCloseModal();
         } catch (e) {
@@ -217,8 +216,11 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
             };
             try {
                 await dataService.save('financial_transactions', updatedTx);
-                if (tx.id.startsWith('tx-reemb-')) {
-                    const reportId = tx.id.replace('tx-reemb-', '');
+                
+                // Se for um reembolso cancelado no financeiro, reflete no relatório
+                const reportId = tx.relatedReportId || (tx.id.startsWith('tx-reemb-') ? tx.id.replace('tx-reemb-', '') : null);
+                
+                if (reportId) {
                     const allReports = await dataService.getAll<ExpenseReport>('expense_reports');
                     const report = allReports.find(r => r.id === reportId);
                     if (report) {
@@ -240,6 +242,40 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
         }
     };
 
+    // Função auxiliar para sincronizar o status do relatório com base nos pagamentos financeiros
+    const syncReportStatus = async (txId: string, relatedReportId?: string) => {
+        // Tenta descobrir o ID do relatório por prefixo ou campo explícito
+        const reportId = relatedReportId || (txId.startsWith('tx-reemb-') ? txId.replace('tx-reemb-', '') : null);
+        
+        if (!reportId) return;
+
+        try {
+            const allReports = await dataService.getAll<ExpenseReport>('expense_reports');
+            const report = allReports.find(r => r.id === reportId);
+            
+            if (!report) return;
+
+            // Para faturamentos técnicos (Instalação/Lavagem), o relatório pode ter vários itens no financeiro
+            if (report.isInstallmentWash) {
+                const allTxs = await dataService.getAll<FinancialTransaction>('financial_transactions');
+                const relatedTxs = allTxs.filter(t => t.relatedReportId === reportId);
+                
+                // Um relatório de instalação/lavagem só vira "Pago" se TODOS os seus itens no financeiro forem pagos
+                // (Exceto o que acabamos de marcar como pago, que pode não estar refletido no getAll ainda)
+                const allPaid = relatedTxs.every(t => t.id === txId || t.status === 'pago');
+                
+                if (allPaid) {
+                    await dataService.save('expense_reports', { ...report, status: 'Pago' });
+                }
+            } else {
+                // Para reembolsos RD padrão (1 relatório = 1 transação gerada)
+                await dataService.save('expense_reports', { ...report, status: 'Pago' });
+            }
+        } catch (e) {
+            console.warn("[SYNC] Falha ao sincronizar status do relatório:", e);
+        }
+    };
+
     const handleStatusChange = async (id: string, status: FinancialTransactionStatus) => {
         const tx = transactions.find(t => t.id === id);
         if (tx) {
@@ -248,16 +284,20 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
                 status, 
                 paymentDate: status === 'pago' ? new Date().toISOString().split('T')[0] : undefined 
             };
-            setTransactions(prev => prev.map(t => t.id === id ? updatedTx : t));
-            await dataService.save('financial_transactions', updatedTx);
             
-            if (id.startsWith('tx-reemb-') && status === 'pago') {
-                const reportId = id.replace('tx-reemb-', '');
-                const reports = await dataService.getAll<ExpenseReport>('expense_reports');
-                const report = reports.find(r => r.id === reportId);
-                if (report) {
-                    await dataService.save('expense_reports', { ...report, status: 'Pago' });
+            // Atualiza localmente primeiro para UX rápida
+            setTransactions(prev => prev.map(t => t.id === id ? updatedTx : t));
+            
+            try {
+                await dataService.save('financial_transactions', updatedTx);
+                
+                // Se o status mudou para PAGO, sincroniza com o módulo de reembolsos
+                if (status === 'pago') {
+                    await syncReportStatus(id, tx.relatedReportId);
                 }
+            } catch (e) {
+                console.error("Erro ao atualizar status:", e);
+                loadData(); // Reverte em caso de erro
             }
         }
     };
