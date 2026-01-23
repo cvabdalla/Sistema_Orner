@@ -16,6 +16,7 @@ export type Page =
   | 'CHECKLIST_CHECKIN'
   | 'CHECKLIST_CHECKOUT'
   | 'CHECKLIST_MANUTENCAO'
+  | 'CHECKLIST_HOMOLOGACAO'
   | 'RELATORIOS_VISAO_GERAL'
   | 'RELATORIOS_NOVO'
   | 'RELATORIOS_STATUS'
@@ -135,6 +136,21 @@ export interface ChecklistEntry {
     date: string;
     status: 'Aberto' | 'Efetivado' | 'Finalizado' | 'Perdido';
     details: any;
+}
+
+export interface HomologacaoEntry {
+    id: string;
+    owner_id: string;
+    checkinId: string;
+    clientName: string;
+    date: string;
+    status: 'Em Análise' | 'Aprovada' | 'Pendente';
+    files: {
+        procuracao?: ExpenseAttachment;
+        contaEnergia?: ExpenseAttachment;
+        documentoFoto?: ExpenseAttachment;
+    };
+    observations?: string;
 }
 
 export interface StockItem {

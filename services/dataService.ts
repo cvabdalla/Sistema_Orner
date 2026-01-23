@@ -20,25 +20,63 @@ class SupabaseDataService implements IDataService {
         }
     }
 
+    /**
+     * Remove strings base64 pesadas (imagens/pdfs) de um objeto para economizar espaço no LocalStorage.
+     */
+    private lightenData(data: any): any {
+        if (Array.isArray(data)) {
+            return data.map(item => this.lightenData(item));
+        }
+        if (data !== null && typeof data === 'object') {
+            const newObj: any = {};
+            for (const key in data) {
+                const val = data[key];
+                // Se o valor for uma string muito longa (provável base64), nós a removemos do cache local
+                if (typeof val === 'string' && (val.startsWith('data:') || val.length > 5000)) {
+                    newObj[key] = null; // Remove a imagem do cache, mas mantém a chave
+                } else if (typeof val === 'object') {
+                    newObj[key] = this.lightenData(val);
+                } else {
+                    newObj[key] = val;
+                }
+            }
+            return newObj;
+        }
+        return data;
+    }
+
     private setLocal<T>(collection: string, data: T[]): void {
+        const cacheKey = `orner_cache_${collection}`;
         try {
-            localStorage.setItem(`orner_cache_${collection}`, JSON.stringify(data));
+            localStorage.setItem(cacheKey, JSON.stringify(data));
         } catch (e: any) {
+            // Se falhar por cota excedida, tentamos limpar outros caches ou salvar uma versão "leve"
             if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22) {
-                console.warn(`[CACHE] Limite de armazenamento atingido ao salvar ${collection}. Tentando liberar espaço...`);
-                const largeCollections = ['checklist_checkin', 'checklist_checkout', 'checklist_manutencao', 'expense_reports'];
+                console.warn(`[CACHE] Limite atingido em ${collection}. Tentando estratégia de recuperação...`);
+                
+                // 1. Tenta limpar todos os outros caches de tabelas pesadas
+                const largeCollections = ['checklist_checkin', 'checklist_checkout', 'checklist_manutencao', 'expense_reports', 'homologacao_entries'];
                 largeCollections.forEach(c => {
                     if (c !== collection) {
                         localStorage.removeItem(`orner_cache_${c}`);
                     }
                 });
+
                 try {
-                    localStorage.setItem(`orner_cache_${collection}`, JSON.stringify(data));
+                    // Tenta salvar novamente após a limpeza
+                    localStorage.setItem(cacheKey, JSON.stringify(data));
                 } catch (retryError) {
-                    console.error(`[CACHE] Falha crítica: ${collection} é muito grande para o LocalStorage.`);
+                    // 2. Se ainda assim falhar, salva apenas os dados de texto (remove imagens base64)
+                    console.warn(`[CACHE] Persistência total falhou. Salvando versão reduzida (sem mídias) para ${collection}.`);
+                    try {
+                        const lightVersion = this.lightenData(data);
+                        localStorage.setItem(cacheKey, JSON.stringify(lightVersion));
+                    } catch (finalError) {
+                        console.error(`[CACHE] Impossível salvar qualquer dado no LocalStorage para ${collection}. O navegador está sem espaço.`);
+                    }
                 }
             } else {
-                console.error(`Erro desconhecido ao salvar cache de ${collection}:`, e);
+                console.error(`Erro ao salvar cache de ${collection}:`, e);
             }
         }
     }
@@ -59,7 +97,8 @@ class SupabaseDataService implements IDataService {
                 'checklist_checkin',
                 'checklist_checkout',
                 'checklist_manutencao',
-                'suppliers'
+                'suppliers',
+                'homologacao_entries'
             ];
 
             if (!isAdmin && userId && privateCollections.includes(collection)) {
@@ -69,7 +108,7 @@ class SupabaseDataService implements IDataService {
             const { data, error } = await query;
             
             if (error) {
-                console.warn(`[SUPABASE] Erro em ${collection}, usando cache local:`, error.message);
+                console.warn(`[SUPABASE] Usando cache local para ${collection}:`, error.message);
                 return this.getLocal<T>(collection);
             }
 
@@ -80,7 +119,7 @@ class SupabaseDataService implements IDataService {
             return (data as T[]) || [];
 
         } catch (e: any) {
-            console.error(`[OFFLINE MODE] Usando dados locais para ${collection}.`, e.message || e);
+            console.error(`[OFFLINE] Usando dados locais para ${collection}.`, e.message || e);
             return this.getLocal<T>(collection);
         }
     }
@@ -96,7 +135,6 @@ class SupabaseDataService implements IDataService {
         this.setLocal(collection, localData);
 
         try {
-            // Remove campos explicitamente marcados como undefined para evitar erros de schema no Supabase
             const cleanItem = Object.fromEntries(
                 Object.entries(item).filter(([_, v]) => v !== undefined)
             );
@@ -107,10 +145,7 @@ class SupabaseDataService implements IDataService {
                 .select()
                 .single();
 
-            if (error) {
-                console.error(`[SUPABASE ERROR] ${collection}:`, error.message, error.details);
-                throw error;
-            }
+            if (error) throw error;
             return data as T;
         } catch (e: any) {
             console.error(`[SAVE ERROR] ${collection}:`, e.message);
@@ -128,7 +163,6 @@ class SupabaseDataService implements IDataService {
         this.setLocal(collection, localData);
 
         try {
-            // Limpa cada item do array
             const cleanItems = items.map(item => 
                 Object.fromEntries(Object.entries(item).filter(([_, v]) => v !== undefined))
             );

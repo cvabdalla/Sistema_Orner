@@ -11,6 +11,7 @@ import NovoOrcamentoPage from './pages/NovoOrcamentoPage';
 import ResumoVendasPage from './pages/ResumoVendasPage';
 import EstoquePage from './pages/EstoquePage';
 import CheckListPage from './pages/CheckListPage';
+import HomologacaoPage from './pages/HomologacaoPage';
 import UsuariosPage from './pages/UsuariosPage';
 import LoginPage from './pages/LoginPage';
 import InstalacoesPage from './pages/InstalacoesPage';
@@ -169,6 +170,7 @@ const App: React.FC = () => {
       case 'CHECKLIST_CHECKIN': return <CheckListPage view="checkin" currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
       case 'CHECKLIST_CHECKOUT': return <CheckListPage view="checkout" currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
       case 'CHECKLIST_MANUTENCAO': return <CheckListPage view="manutencao" currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
+      case 'CHECKLIST_HOMOLOGACAO': return <HomologacaoPage currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
       case 'RELATORIOS_VISAO_GERAL': return <RelatoriosPage view="analise" currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
       case 'RELATORIOS_NOVO': return <RelatoriosPage view="reembolso" reportToEdit={editingReport} onSave={handleSaveReport} currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
       case 'RELATORIOS_STATUS': return <RelatoriosPage view="status" onEditReport={handleEditReport} currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
