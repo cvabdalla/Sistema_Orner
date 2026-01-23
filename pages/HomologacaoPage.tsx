@@ -482,7 +482,6 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                 </Modal>
             )}
 
-            {/* Modal de Confirmação de Finalização */}
             {isConfirmFinalizeModalOpen && entryToFinalize && (
                 <Modal title="Efetivar Homologação" onClose={() => setIsConfirmFinalizeModalOpen(false)} maxWidth="max-w-sm">
                     <div className="text-center p-4 space-y-6">
@@ -686,7 +685,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                         <button className="absolute top-0 right-0 p-3 text-white hover:text-indigo-400 z-[110]" onClick={(e) => { e.stopPropagation(); setHdPhoto(null); }}><XCircleIcon className="w-10 h-10" /></button>
                         <div className="flex-1 w-full flex items-center justify-center overflow-hidden"><img src={hdPhoto} className="max-w-full max-h-full object-contain rounded-lg shadow-2xl animate-zoom-in" alt="" onClick={(e) => e.stopPropagation()} /></div>
                         <div className="flex gap-4">
-                            <button onClick={(e) => { e.stopPropagation(); const a = document.createElement('a'); a.href = hdPhoto; a.download = 'anexo-homologacao.jpg'; a.click(); }} className="px-8 py-2 bg-indigo-600 text-white rounded-full font-black text-xs uppercase tracking-widest shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2"><ArrowDownIcon className="w-4 h-4" /> Download em alta definição</button>
+                            <button onClick={(e) => { e.stopPropagation(); const a = document.createElement('a'); a.href = hdPhoto; a.download = 'anexo-homologacao.jpg'; a.click(); }} className="px-8 py-2 bg-indigo-600 text-white rounded-full font-black text-xs tracking-tight shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2"><ArrowDownIcon className="w-4 h-4" /> Download em alta definição</button>
                         </div>
                     </div>
                 </div>
