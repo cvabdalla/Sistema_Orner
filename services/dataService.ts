@@ -25,7 +25,6 @@ class SupabaseDataService implements IDataService {
      */
     private lightenData(data: any): any {
         if (Array.isArray(data)) {
-            // Se for array, processa cada item e limita a quantidade no cache se for muito grande
             const lightArray = data.map(item => this.lightenData(item));
             return lightArray.length > 50 ? lightArray.slice(0, 50) : lightArray;
         }
@@ -33,7 +32,6 @@ class SupabaseDataService implements IDataService {
             const newObj: any = {};
             for (const key in data) {
                 const val = data[key];
-                // Se o valor for uma string muito longa (provável base64 ou anexo), remove do cache
                 if (typeof val === 'string' && (val.startsWith('data:') || val.length > 3000)) {
                     newObj[key] = null; 
                 } else if (typeof val === 'object') {
@@ -55,7 +53,6 @@ class SupabaseDataService implements IDataService {
             if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22) {
                 console.warn(`[CACHE] Limite atingido em ${collection}. Executando limpeza de emergência...`);
                 
-                // 1. Limpa ABSOLUTAMENTE TODOS os outros caches para dar prioridade ao atual
                 Object.keys(localStorage).forEach(key => {
                     if (key.startsWith('orner_cache_') && key !== cacheKey) {
                         localStorage.removeItem(key);
@@ -63,18 +60,13 @@ class SupabaseDataService implements IDataService {
                 });
 
                 try {
-                    // Tenta salvar novamente após limpar tudo ao redor
                     localStorage.setItem(cacheKey, JSON.stringify(data));
                 } catch (retryError) {
-                    // 2. Se ainda assim falhar, salva a versão sem imagens e limitada em 20 itens
-                    console.warn(`[CACHE] Salvando apenas metadados leves (sem imagens) para ${collection}.`);
                     try {
                         const lightVersion = this.lightenData(data);
                         localStorage.setItem(cacheKey, JSON.stringify(lightVersion));
                     } catch (finalError) {
-                        // Se falhar aqui, o LocalStorage está corrompido ou o item único é grande demais
                         localStorage.removeItem(cacheKey);
-                        console.error(`[CACHE] Falha crítica: ${collection} é muito grande para o LocalStorage.`);
                     }
                 }
             } else {
@@ -104,7 +96,12 @@ class SupabaseDataService implements IDataService {
             ];
 
             if (!isAdmin && userId && privateCollections.includes(collection)) {
-                query = query.eq('owner_id', userId);
+                // Caso especial para homologação: o responsável também deve ver o card
+                if (collection === 'homologacao_entries') {
+                    query = query.or(`owner_id.eq.${userId},responsible_user_id.eq.${userId}`);
+                } else {
+                    query = query.eq('owner_id', userId);
+                }
             }
 
             const { data, error } = await query;

@@ -141,6 +141,7 @@ export interface ChecklistEntry {
 export interface HomologacaoEntry {
     id: string;
     owner_id: string;
+    responsible_user_id?: string;
     checkinId: string;
     clientName: string;
     date: string;

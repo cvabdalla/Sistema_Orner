@@ -9,16 +9,22 @@ import {
     ExclamationTriangleIcon, MapPinIcon, HomeIcon,
     CogIcon, ClipboardListIcon, ClockIcon, MapIcon,
     CameraIcon, ArrowLeftIcon, ChevronDownIcon,
-    CubeIcon
+    CubeIcon, EditIcon
 } from '../assets/icons';
 import Modal from '../components/Modal';
 import { dataService } from '../services/dataService';
-import type { HomologacaoEntry, ChecklistEntry, User, ExpenseAttachment, PainelConfig } from '../types';
+import type { HomologacaoEntry, ChecklistEntry, User, ExpenseAttachment, PainelConfig, UserProfile } from '../types';
 
 const ADMIN_PROFILE_ID = '001';
 
+const toSentenceCase = (str: string) => {
+    if (!str) return '';
+    const clean = str.toLowerCase();
+    return clean.charAt(0).toUpperCase() + clean.slice(1);
+};
+
 const FormLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5 tracking-tight">{children}</label>
+    <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 mb-1 ml-0.5 tracking-tight uppercase">{children}</label>
 );
 
 const SectionHeader: React.FC<{ icon: React.ReactElement<any>; title: string; color?: string }> = ({ icon, title, color = "bg-indigo-600" }) => (
@@ -40,12 +46,15 @@ const DataRow: React.FC<{ label: string; value: any; color?: string }> = ({ labe
 const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; hasGlobalView?: boolean }> = ({ currentUser, userPermissions, hasGlobalView }) => {
     const [entries, setEntries] = useState<HomologacaoEntry[]>([]);
     const [checkins, setCheckins] = useState<ChecklistEntry[]>([]);
+    const [systemUsers, setSystemUsers] = useState<User[]>([]);
+    const [homologationUsers, setHomologationUsers] = useState<User[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [activeMainTab, setActiveMainTab] = useState<'pendentes' | 'concluidas'>('pendentes');
     
     const [isModalOpen, setModalOpen] = useState(false);
+    const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
     const [isViewCheckinModalOpen, setViewCheckinModalOpen] = useState(false);
     const [isConfirmFinalizeModalOpen, setIsConfirmFinalizeModalOpen] = useState(false);
     const [entryToFinalize, setEntryToFinalize] = useState<HomologacaoEntry | null>(null);
@@ -59,6 +68,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
     const [form, setForm] = useState<Partial<HomologacaoEntry>>({
         checkinId: '',
         clientName: '',
+        responsible_user_id: '',
         status: 'Em Análise',
         files: {
             procuracao: undefined,
@@ -71,19 +81,33 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
         setSuccessModalOpen(false);
     };
 
-    const isAdmin = useMemo(() => {
-        return String(currentUser.profileId) === ADMIN_PROFILE_ID || userPermissions.includes('ALL') || hasGlobalView;
-    }, [currentUser, userPermissions, hasGlobalView]);
+    // Apenas o Master Admin ID 001 tem visão global total
+    const isMasterAdmin = useMemo(() => String(currentUser.profileId) === ADMIN_PROFILE_ID, [currentUser]);
 
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const [homoData, checkinData] = await Promise.all([
-                dataService.getAll<HomologacaoEntry>('homologacao_entries', currentUser.id, isAdmin),
-                dataService.getAll<ChecklistEntry>('checklist_checkin', currentUser.id, isAdmin)
+            // Buscamos as homologações filtradas por usuário (já isolado no service ou localmente)
+            const [homoData, checkinData, userData, profileData] = await Promise.all([
+                dataService.getAll<HomologacaoEntry>('homologacao_entries', currentUser.id, isMasterAdmin),
+                // CRÍTICO: Check-ins precisam ser carregados sem o filtro de ID do usuário para que o botão "Ver Check-in" funcione 
+                // para projetos criados por outros técnicos mas atribuídos a este usuário para homologação.
+                dataService.getAll<ChecklistEntry>('checklist_checkin', undefined, true), 
+                dataService.getAll<User>('system_users', undefined, true),
+                dataService.getAll<UserProfile>('system_profiles', undefined, true)
             ]);
+
             setEntries(homoData.sort((a, b) => b.date.localeCompare(a.date)));
             setCheckins(checkinData);
+            setSystemUsers(userData);
+
+            const homologationProfiles = profileData.filter(p => 
+                p.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('homologacao')
+            ).map(p => p.id);
+
+            const hUsers = userData.filter(u => homologationProfiles.includes(u.profileId));
+            setHomologationUsers(hUsers);
+
         } catch (e) {
             console.error("Erro ao carregar homologações:", e);
         } finally {
@@ -93,16 +117,34 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
 
     useEffect(() => {
         loadData();
-    }, [currentUser.id, isAdmin]);
+    }, [currentUser.id, isMasterAdmin]);
 
     const filteredEntries = useMemo(() => {
         return entries.filter(e => {
             const matchesSearch = e.clientName.toLowerCase().includes(searchTerm.toLowerCase());
             const isCompleted = e.status === 'Aprovada';
             const matchesTab = activeMainTab === 'concluidas' ? isCompleted : !isCompleted;
-            return matchesSearch && matchesTab;
+            
+            // Filtro de Segurança Reforçado: Se não for Master Admin, só vê o que está no seu nome (responsible_user_id)
+            const isResponsible = e.responsible_user_id === currentUser.id;
+            const canSee = isMasterAdmin || isResponsible;
+
+            return matchesSearch && matchesTab && canSee;
         });
-    }, [entries, searchTerm, activeMainTab]);
+    }, [entries, searchTerm, activeMainTab, isMasterAdmin, currentUser.id]);
+
+    const handleEditEntry = (entry: HomologacaoEntry) => {
+        setEditingEntryId(entry.id);
+        setForm({
+            checkinId: entry.checkinId,
+            clientName: entry.clientName,
+            responsible_user_id: entry.responsible_user_id,
+            status: entry.status,
+            files: { ...entry.files },
+            observations: entry.observations
+        });
+        setModalOpen(true);
+    };
 
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, field: keyof HomologacaoEntry['files']) => {
         const file = e.target.files?.[0];
@@ -142,29 +184,34 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!form.checkinId || !form.clientName) return;
+        if (!form.checkinId || !form.clientName || !form.responsible_user_id) {
+            alert("Por favor, preencha todos os campos obrigatórios.");
+            return;
+        }
 
         setIsSaving(true);
         try {
             const entry: HomologacaoEntry = {
-                id: `homo-${Date.now()}`,
-                owner_id: currentUser.id,
+                id: editingEntryId || `homo-${Date.now()}`,
+                owner_id: editingEntryId ? entries.find(e => e.id === editingEntryId)?.owner_id || currentUser.id : currentUser.id,
+                responsible_user_id: form.responsible_user_id,
                 checkinId: form.checkinId!,
                 clientName: form.clientName!,
-                date: new Date().toISOString(),
-                status: 'Em Análise',
+                date: editingEntryId ? entries.find(e => e.id === editingEntryId)?.date || new Date().toISOString() : new Date().toISOString(),
+                status: (form.status as any) || 'Em Análise',
                 files: form.files as any,
                 observations: form.observations
             };
 
             await dataService.save('homologacao_entries', entry);
             setModalOpen(false);
-            setForm({ checkinId: '', clientName: '', status: 'Em Análise', files: {} });
-            setModalMessage("Homologação registrada com sucesso!");
+            setEditingEntryId(null);
+            setForm({ checkinId: '', clientName: '', responsible_user_id: '', status: 'Em Análise', files: {} });
+            setModalMessage(editingEntryId ? "Homologação atualizada!" : "Homologação registrada!");
             setSuccessModalOpen(true);
             await loadData();
         } catch (e) {
-            alert("Erro ao salvar homologação.");
+            alert("Erro ao salvar.");
         } finally {
             setIsSaving(false);
         }
@@ -175,7 +222,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
         setIsSaving(true);
         try {
             await dataService.save('homologacao_entries', { ...entryToFinalize, status: 'Aprovada' });
-            setModalMessage("Processo concluído! O registro foi movido para a aba de Concluídas.");
+            setModalMessage("Processo concluído com sucesso!");
             setSuccessModalOpen(true);
             await loadData();
             setIsConfirmFinalizeModalOpen(false);
@@ -204,7 +251,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
             setActiveCheckinStep(1);
             setViewCheckinModalOpen(true);
         } else {
-            alert("Dados do Check-in original não encontrados no servidor.");
+            alert("Dados técnicos do Check-in não encontrados ou indisponíveis.");
         }
     };
 
@@ -244,32 +291,32 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
         const isPdf = file?.name.toLowerCase().endsWith('.pdf') || file?.data.startsWith('data:application/pdf');
         
         return (
-            <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 flex flex-col gap-3">
+            <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 flex flex-col gap-2">
                 <FormLabel>{label}</FormLabel>
                 {file ? (
-                    <div className="flex items-center justify-between gap-3 bg-white dark:bg-gray-800 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900 shadow-sm group">
+                    <div className="flex items-center justify-between gap-3 bg-white dark:bg-gray-800 p-2.5 rounded-xl border border-indigo-100 dark:border-indigo-900 shadow-sm group">
                         <div className="flex items-center gap-3 overflow-hidden">
                             {isPdf ? (
-                                <DocumentReportIcon className="w-6 h-6 text-red-500 shrink-0" />
+                                <DocumentReportIcon className="w-5 h-5 text-red-500 shrink-0" />
                             ) : (
-                                <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-gray-100">
+                                <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 border border-gray-100">
                                     <img src={file.data} className="w-full h-full object-cover" alt="" />
                                 </div>
                             )}
-                            <span className="text-[11px] font-bold text-gray-700 dark:text-gray-200 truncate">{file.name}</span>
+                            <span className="text-[10px] font-bold text-gray-700 dark:text-gray-200 truncate">{file.name}</span>
                         </div>
-                        <div className="flex gap-1.5 shrink-0">
-                            <button type="button" onClick={() => handleViewFile(file)} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-all"><EyeIcon className="w-4 h-4" /></button>
-                            <button type="button" onClick={() => handleDownload(file)} className="p-1.5 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-all"><ArrowDownIcon className="w-4 h-4" /></button>
+                        <div className="flex gap-1 shrink-0">
+                            <button type="button" onClick={() => handleViewFile(file)} className="p-1 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-all"><EyeIcon className="w-3.5 h-3.5" /></button>
+                            <button type="button" onClick={() => handleDownload(file)} className="p-1 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-all"><ArrowDownIcon className="w-3.5 h-3.5" /></button>
                             {field && !isSaving && (
-                                <button type="button" onClick={() => setForm(prev => ({ ...prev, files: { ...prev.files, [field]: undefined } }))} className="p-1.5 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-all"><TrashIcon className="w-4 h-4" /></button>
+                                <button type="button" onClick={() => setForm(prev => ({ ...prev, files: { ...prev.files, [field]: undefined } }))} className="p-1 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-all"><TrashIcon className="w-3.5 h-3.5" /></button>
                             )}
                         </div>
                     </div>
                 ) : (
-                    <label className="flex flex-col items-center justify-center py-6 px-4 bg-white dark:bg-gray-800 border-2 border-dashed border-indigo-100 dark:border-indigo-900 rounded-2xl cursor-pointer hover:border-indigo-300 hover:bg-indigo-50/20 transition-all group">
-                        <UploadIcon className="w-6 h-6 text-indigo-400 group-hover:scale-110 transition-transform" />
-                        <span className="text-[10px] font-black text-indigo-600 mt-2">Selecionar arquivo</span>
+                    <label className="flex flex-col items-center justify-center py-4 px-4 bg-white dark:bg-gray-800 border-2 border-dashed border-indigo-100 dark:border-indigo-900 rounded-2xl cursor-pointer hover:border-indigo-300 hover:bg-indigo-50/20 transition-all group">
+                        <UploadIcon className="w-5 h-5 text-indigo-400 group-hover:scale-110 transition-transform" />
+                        <span className="text-[9px] font-black text-indigo-600 mt-1.5">Anexar arquivo</span>
                         <input type="file" className="hidden" accept="image/*,application/pdf" onChange={(e) => field && handleFileUpload(e, field)} />
                     </label>
                 )}
@@ -315,7 +362,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                     </div>
                 </div>
                 <button 
-                    onClick={() => { setForm({ checkinId: '', clientName: '', status: 'Em Análise', files: {} }); setModalOpen(true); }} 
+                    onClick={() => { setEditingEntryId(null); setForm({ checkinId: '', clientName: '', responsible_user_id: '', status: 'Em Análise', files: {} }); setModalOpen(true); }} 
                     className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-xs shadow-xl hover:bg-indigo-700 transition-all active:scale-95 flex items-center gap-2"
                 >
                     <PlusIcon className="w-5 h-5" /> Nova Homologação
@@ -323,7 +370,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
             </header>
 
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-                <div className="flex bg-white dark:bg-gray-800 p-1.5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                <div className="flex bg-white dark:bg-gray-800 p-1.5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 w-fit">
                     <button onClick={() => setActiveMainTab('pendentes')} className={`px-6 py-2 rounded-xl font-black text-xs transition-all ${activeMainTab === 'pendentes' ? 'bg-indigo-600 text-white shadow-lg' : 'text-gray-400 hover:text-gray-600'}`}>Pendentes</button>
                     <button onClick={() => setActiveMainTab('concluidas')} className={`px-6 py-2 rounded-xl font-black text-xs transition-all ${activeMainTab === 'concluidas' ? 'bg-green-600 text-white shadow-lg' : 'text-gray-400 hover:text-gray-600'}`}>Concluídas</button>
                 </div>
@@ -346,136 +393,197 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {filteredEntries.map(entry => (
-                        <div key={entry.id} className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 p-6 shadow-sm hover:shadow-xl transition-all group flex flex-col relative overflow-hidden">
-                            <div className="flex justify-between items-start mb-6">
-                                <div className="space-y-1">
-                                    <h4 className="font-black text-gray-800 dark:text-white text-lg leading-tight tracking-tight">{entry.clientName}</h4>
-                                    <p className="text-[10px] text-gray-400 font-bold flex items-center gap-1.5">
-                                        <CalendarIcon className="w-3 h-3" /> {new Date(entry.date).toLocaleDateString('pt-BR')}
-                                    </p>
-                                </div>
-                                <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black tracking-widest ${
-                                    entry.status === 'Aprovada' ? 'bg-green-100 text-green-700' : 
-                                    'bg-indigo-50 text-indigo-600'
-                                }`}>
-                                    {entry.status}
-                                </span>
-                            </div>
-
-                            <div className="space-y-4 flex-1">
-                                <button 
-                                    onClick={() => handleViewCheckin(entry.checkinId)}
-                                    className="w-full flex items-center justify-between p-3.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 rounded-2xl border border-indigo-100 dark:border-indigo-800 hover:bg-indigo-100 transition-all group/btn"
-                                >
-                                    <div className="flex items-center gap-2">
-                                        <ClipboardCheckIcon className="w-5 h-5" />
-                                        <span className="text-[11px] font-black tracking-tight">Ver Check-in de Obra</span>
+                    {filteredEntries.map(entry => {
+                        const responsibleUser = systemUsers.find(u => u.id === entry.responsible_user_id);
+                        return (
+                            <div key={entry.id} className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 p-6 shadow-sm hover:shadow-xl transition-all group flex flex-col relative overflow-hidden">
+                                <div className="flex justify-between items-start mb-6">
+                                    <div className="space-y-1">
+                                        <h4 className="font-black text-gray-800 dark:text-white text-lg leading-tight tracking-tight">{entry.clientName}</h4>
+                                        <div className="flex flex-col gap-1">
+                                            <p className="text-[10px] text-gray-400 font-bold flex items-center gap-1.5">
+                                                <CalendarIcon className="w-3 h-3" /> {new Date(entry.date).toLocaleDateString('pt-BR')}
+                                            </p>
+                                            {responsibleUser && (
+                                                <div className="flex items-center gap-1.5 mt-1.5">
+                                                    <div className="w-6 h-6 rounded-full overflow-hidden bg-indigo-50 border-2 border-indigo-200 shadow-sm flex-shrink-0">
+                                                        {responsibleUser.avatar ? (
+                                                            <img src={responsibleUser.avatar} className="w-full h-full object-cover" alt="" />
+                                                        ) : (
+                                                            <div className="w-full h-full flex items-center justify-center bg-indigo-100 text-indigo-600 text-[10px] font-black">
+                                                                {responsibleUser.name.substring(0, 1)}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <span className="text-[10px] font-black text-indigo-600 tracking-tight">
+                                                        Resp: {toSentenceCase(responsibleUser.name.split(' ')[0])}
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
-                                    <EyeIcon className="w-4 h-4 opacity-40 group-hover/btn:opacity-100" />
-                                </button>
+                                    <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black tracking-widest ${
+                                        entry.status === 'Aprovada' ? 'bg-green-100 text-green-700' : 
+                                        'bg-indigo-50 text-indigo-600'
+                                    }`}>
+                                        {entry.status}
+                                    </span>
+                                </div>
 
-                                <div className="grid grid-cols-1 gap-2.5">
-                                    <p className="text-[9px] font-black text-gray-400 px-1 tracking-tight">Documentação Digital</p>
-                                    {entry.files.procuracao && (
-                                        <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-100 dark:border-gray-700 group/file">
-                                            <div className="flex items-center gap-2"><div className="p-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-sm text-indigo-500"><DocumentReportIcon className="w-4 h-4" /></div><span className="text-[11px] font-bold text-gray-700 dark:text-gray-300">Procuração</span></div>
-                                            <div className="flex gap-1"><button onClick={() => handleViewFile(entry.files.procuracao!)} className="p-1.5 text-indigo-500 hover:bg-white rounded-lg transition-all shadow-sm group-hover/file:bg-white"><EyeIcon className="w-4 h-4" /></button><button onClick={() => handleDownload(entry.files.procuracao!)} className="p-1.5 text-green-500 hover:bg-white rounded-lg transition-all shadow-sm group-hover/file:bg-white"><ArrowDownIcon className="w-4 h-4" /></button></div>
+                                <div className="space-y-4 flex-1">
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); handleViewCheckin(entry.checkinId); }}
+                                        className="w-full flex items-center justify-between p-3.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 rounded-2xl border border-indigo-100 dark:border-indigo-800 hover:bg-indigo-100 transition-all group/btn"
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <ClipboardCheckIcon className="w-5 h-5" />
+                                            <span className="text-[11px] font-black tracking-tight">Ver Check-in de Obra</span>
                                         </div>
-                                    )}
-                                    {entry.files.contaEnergia && (
-                                        <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-100 dark:border-gray-700 group/file">
-                                            <div className="flex items-center gap-2"><div className="p-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-sm text-amber-500"><BoltIcon className="w-4 h-4" /></div><span className="text-[11px] font-bold text-gray-700 dark:text-gray-300">Conta de Energia</span></div>
-                                            <div className="flex gap-1"><button onClick={() => handleViewFile(entry.files.contaEnergia!)} className="p-1.5 text-indigo-500 hover:bg-white rounded-lg transition-all shadow-sm group-hover/file:bg-white"><EyeIcon className="w-4 h-4" /></button><button onClick={() => handleDownload(entry.files.contaEnergia!)} className="p-1.5 text-green-500 hover:bg-white rounded-lg transition-all shadow-sm group-hover/file:bg-white"><ArrowDownIcon className="w-4 h-4" /></button></div>
-                                        </div>
-                                    )}
-                                    {entry.files.documentoFoto && (
-                                        <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-100 dark:border-gray-700 group/file">
-                                            <div className="flex items-center gap-2"><div className="p-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-sm text-blue-500"><UsersIcon className="w-4 h-4" /></div><span className="text-[11px] font-bold text-gray-700 dark:text-gray-300">Documento com Foto</span></div>
-                                            <div className="flex gap-1"><button onClick={() => handleViewFile(entry.files.documentoFoto!)} className="p-1.5 text-indigo-500 hover:bg-white rounded-lg transition-all shadow-sm group-hover/file:bg-white"><EyeIcon className="w-4 h-4" /></button><button onClick={() => handleDownload(entry.files.documentoFoto!)} className="p-1.5 text-green-500 hover:bg-white rounded-lg transition-all shadow-sm group-hover/file:bg-white"><ArrowDownIcon className="w-4 h-4" /></button></div>
-                                        </div>
+                                        <EyeIcon className="w-4 h-4 opacity-40 group-hover/btn:opacity-100" />
+                                    </button>
+
+                                    <div className="grid grid-cols-1 gap-2.5">
+                                        <p className="text-[9px] font-black text-gray-400 px-1 tracking-tight">Documentação Digital</p>
+                                        {entry.files.procuracao && (
+                                            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-100 dark:border-gray-700 group/file">
+                                                <div className="flex items-center gap-2"><div className="p-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-sm text-indigo-500"><DocumentReportIcon className="w-4 h-4" /></div><span className="text-[11px] font-bold text-gray-700 dark:text-gray-300">Procuração</span></div>
+                                                <div className="flex gap-1"><button onClick={() => handleViewFile(entry.files.procuracao!)} className="p-1.5 text-indigo-500 hover:bg-white rounded-lg transition-all shadow-sm group-hover/file:bg-white"><EyeIcon className="w-4 h-4" /></button><button onClick={() => handleDownload(entry.files.procuracao!)} className="p-1.5 text-green-500 hover:bg-white rounded-lg transition-all shadow-sm group-hover/file:bg-white"><ArrowDownIcon className="w-4 h-4" /></button></div>
+                                            </div>
+                                        )}
+                                        {entry.files.contaEnergia && (
+                                            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-100 dark:border-gray-700 group/file">
+                                                <div className="flex items-center gap-2"><div className="p-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-sm text-amber-500"><BoltIcon className="w-4 h-4" /></div><span className="text-[11px] font-bold text-gray-700 dark:text-gray-300">Conta de Energia</span></div>
+                                                <div className="flex gap-1"><button onClick={() => handleViewFile(entry.files.contaEnergia!)} className="p-1.5 text-indigo-500 hover:bg-white rounded-lg transition-all shadow-sm group-hover/file:bg-white"><EyeIcon className="w-4 h-4" /></button><button onClick={() => handleDownload(entry.files.contaEnergia!)} className="p-1.5 text-green-500 hover:bg-white rounded-lg transition-all shadow-sm group-hover/file:bg-white"><ArrowDownIcon className="w-4 h-4" /></button></div>
+                                            </div>
+                                        )}
+                                        {entry.files.documentoFoto && (
+                                            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-100 dark:border-gray-700 group/file">
+                                                <div className="flex items-center gap-2"><div className="p-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-sm text-blue-500"><UsersIcon className="w-4 h-4" /></div><span className="text-[11px] font-bold text-gray-700 dark:text-gray-300">Documento com Foto</span></div>
+                                                <div className="flex gap-1"><button onClick={() => handleViewFile(entry.files.documentoFoto!)} className="p-1.5 text-indigo-500 hover:bg-white rounded-lg transition-all shadow-sm group-hover/file:bg-white"><EyeIcon className="w-4 h-4" /></button><button onClick={() => handleDownload(entry.files.documentoFoto!)} className="p-1.5 text-green-500 hover:bg-white rounded-lg transition-all shadow-sm group-hover/file:bg-white"><ArrowDownIcon className="w-4 h-4" /></button></div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="mt-6 pt-4 border-t border-gray-50 dark:border-gray-700 flex justify-between items-center">
+                                    <div className="flex gap-2">
+                                        <button onClick={() => handleDelete(entry.id)} className="p-2 text-gray-300 hover:text-red-500 transition-colors">
+                                            <TrashIcon className="w-5 h-5" />
+                                        </button>
+                                        {entry.status !== 'Aprovada' && (
+                                            <button onClick={() => handleEditEntry(entry)} className="p-2 text-gray-300 hover:text-indigo-600 transition-colors">
+                                                <EditIcon className="w-5 h-5" />
+                                            </button>
+                                        )}
+                                    </div>
+                                    {entry.status !== 'Aprovada' && (
+                                        <button 
+                                            onClick={() => { setEntryToFinalize(entry); setIsConfirmFinalizeModalOpen(true); }} 
+                                            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-xl font-black text-[10px] tracking-tighter shadow-md hover:bg-green-700 transition-all active:scale-95"
+                                        >
+                                            <CheckCircleIcon className="w-4 h-4" /> Finalizar Homologação
+                                        </button>
                                     )}
                                 </div>
                             </div>
-
-                            <div className="mt-6 pt-4 border-t border-gray-50 dark:border-gray-700 flex justify-between items-center">
-                                <button onClick={() => handleDelete(entry.id)} className="p-2 text-gray-300 hover:text-red-500 transition-colors">
-                                    <TrashIcon className="w-5 h-5" />
-                                </button>
-                                {entry.status !== 'Aprovada' && (
-                                    <button 
-                                        onClick={() => { setEntryToFinalize(entry); setIsConfirmFinalizeModalOpen(true); }} 
-                                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-xl font-black text-[10px] tracking-tighter shadow-md hover:bg-green-700 transition-all active:scale-95"
-                                    >
-                                        <CheckCircleIcon className="w-4 h-4" /> Finalizar Homologação
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                     {filteredEntries.length === 0 && (
                         <div className="col-span-full py-24 text-center space-y-4">
                             <DocumentReportIcon className="w-16 h-16 text-gray-200 mx-auto" />
-                            <p className="text-gray-400 font-black italic">Nenhuma homologação encontrada nesta aba.</p>
+                            <p className="text-gray-400 font-black italic">Nenhuma homologação encontrada para o seu usuário.</p>
                         </div>
                     )}
                 </div>
             )}
 
             {isModalOpen && (
-                <Modal title="Nova Homologação" onClose={() => setModalOpen(false)} maxWidth="max-w-4xl">
-                    <form onSubmit={handleSave} className="space-y-6 pt-2 animate-fade-in">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="space-y-4">
-                                <div>
-                                    <FormLabel>Vincular ao Check-in (Projetos Efetivados)</FormLabel>
-                                    <select 
-                                        required 
-                                        value={form.checkinId} 
-                                        onChange={e => handleSelectCheckin(e.target.value)} 
-                                        className="w-full rounded-2xl border-2 border-indigo-100 bg-white dark:bg-gray-800 p-3.5 text-sm font-black text-gray-800 dark:text-white shadow-sm outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all cursor-pointer"
-                                    >
-                                        <option value="">Selecione o projeto...</option>
-                                        {checkins.filter(c => c.status === 'Efetivado' || c.status === 'Finalizado').map(c => (
-                                            <option key={c.id} value={c.id}>{c.project} ({new Date(c.date).toLocaleDateString('pt-BR', {timeZone:'UTC'})})</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <FormLabel>Nome do Cliente (Conforme Concessionária)</FormLabel>
-                                    <input 
-                                        required
-                                        type="text"
-                                        value={form.clientName}
-                                        onChange={e => setForm({...form, clientName: e.target.value})}
-                                        placeholder="Digite o nome completo do titular..."
-                                        className="w-full rounded-2xl border-2 border-indigo-50 bg-gray-50 dark:bg-gray-900 p-3.5 text-sm font-bold text-gray-800 dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm transition-all"
-                                    />
-                                </div>
+                <Modal title={editingEntryId ? "Editar Homologação" : "Nova Homologação"} onClose={() => { setModalOpen(false); setEditingEntryId(null); }} maxWidth="max-w-2xl">
+                    <form onSubmit={handleSave} className="space-y-4 pt-2 animate-fade-in">
+                        <div className="space-y-4">
+                            <div>
+                                <FormLabel>Check-in (Projetos Efetivados)</FormLabel>
+                                <select 
+                                    required 
+                                    value={form.checkinId} 
+                                    onChange={e => handleSelectCheckin(e.target.value)} 
+                                    className="w-full rounded-xl border-2 border-indigo-100 bg-gray-50 dark:bg-gray-800 p-2 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all"
+                                >
+                                    <option value="">Selecione...</option>
+                                    {checkins.filter(c => c.status === 'Efetivado' || c.status === 'Finalizado').map(c => (
+                                        <option key={c.id} value={c.id}>{c.project}</option>
+                                    ))}
+                                </select>
                             </div>
-                            <div className="bg-indigo-50/50 dark:bg-indigo-900/10 p-5 rounded-3xl border border-indigo-100 dark:border-indigo-800 flex items-start gap-3">
-                                <ExclamationTriangleIcon className="w-8 h-8 text-indigo-500 shrink-0" />
-                                <div>
-                                    <h4 className="text-[10px] font-black text-indigo-600 mb-1 tracking-tight">Instruções de Envio</h4>
-                                    <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed font-bold">O nome do cliente deve ser exatamente o mesmo que consta na conta de energia. Anexos ilegíveis causam reprovação imediata na concessionária.</p>
+                            <div>
+                                <FormLabel>Nome do Titular (Concessionária)</FormLabel>
+                                <input 
+                                    required
+                                    type="text"
+                                    value={form.clientName}
+                                    onChange={e => setForm({...form, clientName: e.target.value})}
+                                    className="w-full rounded-xl border-2 border-indigo-50 bg-gray-50 dark:bg-gray-900 p-2 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm transition-all"
+                                />
+                            </div>
+                            <div>
+                                <FormLabel>Responsável Homologação</FormLabel>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                    {homologationUsers.map(u => {
+                                        const isSelected = form.responsible_user_id === u.id;
+                                        return (
+                                            <button
+                                                key={u.id}
+                                                type="button"
+                                                onClick={() => setForm(prev => ({ ...prev, responsible_user_id: u.id }))}
+                                                className={`relative flex items-center gap-2 p-2 rounded-xl border-2 transition-all active:scale-95 ${
+                                                    isSelected 
+                                                        ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 shadow-md scale-[1.02]' 
+                                                        : 'border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800 hover:border-indigo-200'
+                                                }`}
+                                            >
+                                                {isSelected && (
+                                                    <div className="absolute -top-1.5 -right-1.5 bg-indigo-600 text-white rounded-full p-0.5 shadow-sm z-10">
+                                                        <CheckCircleIcon className="w-3 h-3" />
+                                                    </div>
+                                                )}
+                                                <div className={`w-6 h-6 rounded-full overflow-hidden border-2 flex-shrink-0 ${isSelected ? 'border-indigo-600' : 'border-gray-100 dark:border-gray-700'}`}>
+                                                    {u.avatar ? (
+                                                        <img src={u.avatar} alt="" className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center bg-indigo-100 text-indigo-600 text-[8px] font-black">
+                                                            {u.name.substring(0, 1)}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <span className={`text-[10px] font-bold truncate ${isSelected ? 'text-indigo-800 dark:text-indigo-300' : 'text-gray-500 dark:text-gray-400'}`}>
+                                                    {toSentenceCase(u.name.split(' ')[0])}
+                                                </span>
+                                            </button>
+                                        )
+                                    })}
                                 </div>
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {renderFilePreview("Procuração Assinada", form.files?.procuracao, 'procuracao')}
-                            {renderFilePreview("Conta de Energia", form.files?.contaEnergia, 'contaEnergia')}
-                            {renderFilePreview("Documento com Foto", form.files?.documentoFoto, 'documentoFoto')}
+                        <div className="bg-indigo-50/50 dark:bg-indigo-900/10 p-3 rounded-2xl border border-indigo-100 dark:border-indigo-800 flex items-start gap-2">
+                            <ExclamationTriangleIcon className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+                            <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight font-bold">Anexos ilegíveis causam reprovação imediata na concessionária.</p>
                         </div>
 
-                        <div className="flex gap-4 pt-6 border-t dark:border-gray-700">
-                            <button type="button" onClick={() => setModalOpen(false)} className="flex-1 py-4 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-300 rounded-2xl font-black text-xs tracking-tight hover:bg-gray-200">Cancelar</button>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            {renderFilePreview("Procuração", form.files?.procuracao, 'procuracao')}
+                            {renderFilePreview("Conta Luz", form.files?.contaEnergia, 'contaEnergia')}
+                            {renderFilePreview("Documento", form.files?.documentoFoto, 'documentoFoto')}
+                        </div>
+
+                        <div className="flex gap-3 pt-4 border-t dark:border-gray-700">
+                            <button type="button" onClick={() => { setModalOpen(false); setEditingEntryId(null); }} className="flex-1 py-3 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-300 rounded-xl font-bold text-xs">Cancelar</button>
                             <button 
                                 type="submit" 
-                                disabled={isSaving || !form.checkinId || !form.clientName} 
-                                className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs tracking-tight shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 active:scale-95 disabled:opacity-50"
+                                disabled={isSaving || !form.checkinId || !form.clientName || !form.responsible_user_id} 
+                                className="flex-[2] py-3 bg-indigo-600 text-white rounded-xl font-black text-xs shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 active:scale-95 disabled:opacity-50"
                             >
-                                {isSaving ? 'Gravando...' : 'Iniciar Homologação'}
+                                {isSaving ? 'Gravando...' : editingEntryId ? 'Salvar' : 'Iniciar'}
                             </button>
                         </div>
                     </form>
@@ -512,8 +620,8 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
             {isViewCheckinModalOpen && selectedCheckin && (
                 <Modal title={`Dados técnicos: ${selectedCheckin.project}`} onClose={() => setViewCheckinModalOpen(false)} maxWidth="max-w-4xl">
                     <div className="px-1">
-                        {/* Indicador de Passos (Idêntico ao original) */}
-                        <div className="flex items-center justify-center gap-2 mb-8 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-inner overflow-x-auto custom-scrollbar">
+                        {/* Indicador de Passos */}
+                        <div className="flex items-center justify-center gap-2 mb-8 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-inner overflow-x-auto custom-scrollbar">
                             {[1, 2, 3, 4, 5].map(step => (
                                 <button key={step} onClick={() => setActiveCheckinStep(step)} className="flex items-center group shrink-0">
                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-black transition-all ${activeCheckinStep === step ? 'bg-indigo-600 text-white shadow-lg scale-110' : 'bg-gray-200 dark:bg-gray-700 text-gray-500'}`}>
@@ -618,7 +726,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                                         <SectionHeader icon={<CubeIcon />} title="Materiais e componentes" color="bg-indigo-600" />
                                         <div className="space-y-2">
                                             {(selectedCheckin.details?.componentesEstoque || []).map((comp: any, idx: number) => (
-                                                <div key={idx} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800">
+                                                <div key={idx} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-700">
                                                     <span className="text-xs font-bold text-gray-700 dark:text-gray-200">{comp.name}</span>
                                                     <span className="text-xs font-black text-indigo-600">{comp.qty} un</span>
                                                 </div>
