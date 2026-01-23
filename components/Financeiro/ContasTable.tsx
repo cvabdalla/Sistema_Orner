@@ -29,6 +29,9 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
     
     const [confirmingTx, setConfirmingTx] = useState<{id: string, type: 'receita' | 'despesa', isGroup: boolean, originalItems?: any} | null>(null);
 
+    // Identifica se estamos em modo de visualização de cancelados baseado nos dados recebidos
+    const isCancelledView = useMemo(() => transactions.length > 0 && transactions.every(t => t.status === 'cancelado'), [transactions]);
+
     useEffect(() => {
         dataService.getAll<CreditCard>('credit_cards').then(setCards);
     }, []);
@@ -117,7 +120,6 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                 </div>
                 
                 <div className="flex flex-1 justify-end items-center gap-4">
-                    {/* Total centralizado sobre a coluna de Valores (aprox. 300px do final da linha) */}
                     <div className="hidden lg:flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/30 px-4 py-2 rounded-xl border border-indigo-100 dark:border-indigo-800 shadow-sm mr-44">
                         <DollarIcon className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                         <div className="flex flex-col">
@@ -128,7 +130,6 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                         </div>
                     </div>
 
-                    {/* Mobile/Tablet fallback do total sem a margem larga */}
                     <div className="lg:hidden flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/30 px-4 py-2 rounded-xl border border-indigo-100 dark:border-indigo-800 shadow-sm">
                         <div className="flex flex-col">
                             <span className="text-[9px] font-bold text-gray-400 leading-none mb-0.5">Total exibido</span>
@@ -138,19 +139,20 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                        <FilterIcon className="text-gray-500 dark:text-gray-400 w-4 h-4" />
-                        <select
-                            value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value as any)}
-                            className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-[11px] font-bold rounded-lg block p-2 outline-none"
-                        >
-                            <option value="all">Todos os status</option>
-                            <option value="pendente">Pendentes</option>
-                            <option value="pago">Liquidados</option>
-                            <option value="cancelado">Cancelados</option>
-                        </select>
-                    </div>
+                    {!isCancelledView && (
+                        <div className="flex items-center gap-2">
+                            <FilterIcon className="text-gray-500 dark:text-gray-400 w-4 h-4" />
+                            <select
+                                value={statusFilter}
+                                onChange={(e) => setStatusFilter(e.target.value as any)}
+                                className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-[11px] font-bold rounded-lg block p-2 outline-none"
+                            >
+                                <option value="all">Todos os status</option>
+                                <option value="pendente">Pendentes</option>
+                                <option value="pago">Liquidados</option>
+                            </select>
+                        </div>
+                    )}
                 </div>
             </div>
             
@@ -185,7 +187,7 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                                 : isPaid 
                                     ? 'bg-gray-50/50 dark:bg-gray-900/10 opacity-70 border-l-4 border-l-transparent' 
                                     : isCancelled 
-                                        ? 'bg-red-50/20 opacity-50 border-l-4 border-l-transparent' 
+                                        ? 'bg-red-50/20 opacity-50 border-l-4 border-l-transparent italic' 
                                         : `bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-indigo-900/10 border-l-4 ${isPending ? (tx.type === 'receita' ? 'border-l-green-500' : 'border-l-red-500') : 'border-l-transparent'}`;
 
                             return (
@@ -217,34 +219,30 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                                                         Fatura consolidada: {tx.originalItems.length} itens
                                                     </span>
                                                 )}
-                                            </div>
-                                            
-                                            {isCancelled && tx.cancelReason && (
-                                                <div className="group relative ml-2">
-                                                    <ExclamationTriangleIcon className="w-4 h-4 text-red-500 cursor-help" />
-                                                    <div className="absolute left-0 top-6 hidden group-hover:block z-50 w-64 p-3 bg-red-600 text-white text-[10px] font-bold rounded-lg shadow-xl animate-fade-in">
+                                                {isCancelled && tx.cancelReason && (
+                                                    <span className="text-[9px] text-red-400 font-bold mt-0.5">
                                                         Motivo: {tx.cancelReason}
-                                                    </div>
-                                                </div>
-                                            )}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     </td>
 
-                                    <td className="py-4 px-6 text-xs font-semibold text-gray-600 dark:text-gray-400">
+                                    <td className={`py-4 px-6 text-xs font-semibold ${isCancelled ? 'text-gray-300' : 'text-gray-600 dark:text-gray-400'}`}>
                                         {getCategoryName(tx.categoryId)}
                                     </td>
 
-                                    <td className={`py-4 px-6 font-bold text-center ${isPaid || isCancelled ? 'text-gray-400' : 'text-gray-700 dark:text-gray-200'}`}>
+                                    <td className={`py-4 px-6 font-bold text-center ${isPaid || isCancelled ? 'text-gray-300' : 'text-gray-700 dark:text-gray-200'}`}>
                                         {formatDate(tx.dueDate)}
                                     </td>
 
-                                    <td className={`py-4 px-6 font-black text-right ${isPaid || isCancelled ? 'text-gray-400' : tx.type === 'receita' ? 'text-green-600' : 'text-red-600'}`}>
+                                    <td className={`py-4 px-6 font-black text-right ${isPaid || isCancelled ? 'text-gray-300 line-through' : tx.type === 'receita' ? 'text-green-600' : 'text-red-600'}`}>
                                         {formatCurrency(tx.amount)}
                                     </td>
 
                                     <td className="py-4 px-6 text-center">
                                         <span className={`px-3 py-1 text-[9px] font-black rounded-full shadow-sm tracking-tight border transition-all ${
-                                            isCancelled ? 'bg-red-50 text-red-600 border-red-100' : 
+                                            isCancelled ? 'bg-red-50/50 text-red-400 border-red-100' : 
                                             isPaid ? 'bg-green-50 text-green-700 border-green-100' : 
                                             isApprovedForPayment ? 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-500/30' : 
                                             'bg-yellow-50 text-yellow-700 border-yellow-100'
@@ -256,7 +254,9 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                                     <td className="py-4 px-6 text-center">
                                         <div className="flex justify-center items-center gap-2">
                                             {isCancelled ? (
-                                                <span className="text-[10px] font-bold text-gray-400 italic">---</span>
+                                                <button onClick={() => onEdit(tx)} className="p-2 text-gray-400 hover:text-indigo-600 transition-all" title="Ver detalhes">
+                                                    <EyeIcon className="w-5 h-5" />
+                                                </button>
                                             ) : tx.isGrouped ? (
                                                 <>
                                                     <button onClick={() => setSelectedGroup(tx.originalItems)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Ver detalhes">

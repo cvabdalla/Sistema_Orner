@@ -14,7 +14,7 @@ import OFXImportModal from '../components/Financeiro/OFXImportModal';
 import CreditCardModal from '../components/Financeiro/CreditCardModal';
 import Modal from '../components/Modal';
 
-type FinanceiroTab = 'visaoGeral' | 'aReceber' | 'aPagar';
+type FinanceiroTab = 'visaoGeral' | 'aReceber' | 'aPagar' | 'cancelados';
 export type DrePeriodType = 'mensal' | 'trimestral' | 'semestral' | 'anual';
 
 const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) => {
@@ -398,6 +398,7 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
                         <TabButton tabId="visaoGeral" label="Visão Geral" />
                         <TabButton tabId="aReceber" label="A Receber" />
                         <TabButton tabId="aPagar" label="A Pagar" />
+                        <TabButton tabId="cancelados" label="Cancelados" />
                     </div>
                 ) : (
                     <div className="flex items-center gap-3">
@@ -515,10 +516,14 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
                             />
                         ) : (
                             <ContasTable
-                                title={activeTab === 'aReceber' ? "Contas a Receber" : "Contas a Pagar"}
-                                transactions={activeTab === 'aReceber' 
-                                    ? filteredTransactions.filter(t => t.type === 'receita') 
-                                    : filteredTransactions.filter(t => t.type === 'despesa')}
+                                title={activeTab === 'aReceber' ? "Contas a Receber" : activeTab === 'aPagar' ? "Contas a Pagar" : "Lançamentos Cancelados"}
+                                transactions={
+                                    activeTab === 'aReceber' 
+                                    ? filteredTransactions.filter(t => t.type === 'receita' && t.status !== 'cancelado') 
+                                    : activeTab === 'aPagar'
+                                    ? filteredTransactions.filter(t => t.type === 'despesa' && t.status !== 'cancelado')
+                                    : filteredTransactions.filter(t => t.status === 'cancelado')
+                                }
                                 categories={categories}
                                 onEdit={(tx) => handleOpenModal(tx)}
                                 onCancel={handleCancelRequest}
