@@ -99,11 +99,6 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
         return cat?.name || 'N/A';
     };
 
-    const isTechnicalCategory = (categoryId: string) => {
-        const catName = categories.find(c => c.id === categoryId)?.name?.toLowerCase() || '';
-        return catName.includes('lavagem') || catName.includes('instalação') || catName.includes('instalacao');
-    };
-
     const handleConfirmEffectivation = () => {
         if (!confirmingTx) return;
         if (confirmingTx.isGroup) {
@@ -119,29 +114,43 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
             <div className="p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-50 dark:border-gray-700">
                 <div className="flex items-center gap-4">
                     <h3 className="text-xl font-bold text-gray-900 dark:text-white">{title}</h3>
-                    <div className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/30 px-4 py-2 rounded-xl border border-indigo-100 dark:border-indigo-800 shadow-sm">
+                </div>
+                
+                <div className="flex flex-1 justify-end items-center gap-4">
+                    {/* Total centralizado sobre a coluna de Valores (aprox. 300px do final da linha) */}
+                    <div className="hidden lg:flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/30 px-4 py-2 rounded-xl border border-indigo-100 dark:border-indigo-800 shadow-sm mr-44">
                         <DollarIcon className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                         <div className="flex flex-col">
-                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none mb-0.5">Total exibido</span>
+                            <span className="text-[9px] font-bold text-gray-400 leading-none mb-0.5">Total exibido</span>
                             <span className="text-sm font-black text-indigo-700 dark:text-indigo-300 leading-none">
                                 {formatCurrency(totalExibido)}
                             </span>
                         </div>
                     </div>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                    <FilterIcon className="text-gray-500 dark:text-gray-400 w-4 h-4" />
-                    <select
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value as any)}
-                        className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-[11px] font-bold rounded-lg block p-2 outline-none"
-                    >
-                        <option value="all">Todos os status</option>
-                        <option value="pendente">Pendentes</option>
-                        <option value="pago">Liquidados</option>
-                        <option value="cancelado">Cancelados</option>
-                    </select>
+
+                    {/* Mobile/Tablet fallback do total sem a margem larga */}
+                    <div className="lg:hidden flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/30 px-4 py-2 rounded-xl border border-indigo-100 dark:border-indigo-800 shadow-sm">
+                        <div className="flex flex-col">
+                            <span className="text-[9px] font-bold text-gray-400 leading-none mb-0.5">Total exibido</span>
+                            <span className="text-xs font-black text-indigo-700 dark:text-indigo-300 leading-none">
+                                {formatCurrency(totalExibido)}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <FilterIcon className="text-gray-500 dark:text-gray-400 w-4 h-4" />
+                        <select
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value as any)}
+                            className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-[11px] font-bold rounded-lg block p-2 outline-none"
+                        >
+                            <option value="all">Todos os status</option>
+                            <option value="pendente">Pendentes</option>
+                            <option value="pago">Liquidados</option>
+                            <option value="cancelado">Cancelados</option>
+                        </select>
+                    </div>
                 </div>
             </div>
             
@@ -162,11 +171,8 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                             const isPaid = tx.status === 'pago';
                             const isCancelled = tx.status === 'cancelado';
                             const isPending = !isPaid && !isCancelled;
-                            
-                            // Logica central solicitada: se invoiceSent for true e ainda estiver pendente, é LIBERADO
                             const isApprovedForPayment = tx.invoiceSent && isPending;
                             
-                            // Determinação do rótulo de status
                             let statusLabel = 'Pendente';
                             if (isCancelled) statusLabel = 'Cancelado';
                             else if (isPaid) statusLabel = tx.type === 'receita' ? 'Recebido' : 'Pago';
@@ -174,7 +180,6 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
 
                             const actionLabel = tx.type === 'receita' ? 'Receber' : 'Pagar';
 
-                            // Estilização dinâmica da linha baseada no novo status
                             const rowStateClass = isApprovedForPayment 
                                 ? 'bg-emerald-50/40 dark:bg-emerald-900/10 border-l-4 border-l-emerald-500' 
                                 : isPaid 
