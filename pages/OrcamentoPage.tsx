@@ -275,6 +275,14 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
           v += d.displayPrice; l += d.lucroLiquido;
           return true;
       });
+
+      // Ordenação decrescente pela data (mais recentes primeiro)
+      f.sort((a, b) => {
+          const dateA = getDisplayData(a).dataOrcamento;
+          const dateB = getDisplayData(b).dataOrcamento;
+          return dateB.localeCompare(dateA);
+      });
+
       return { filteredOrcamentos: f, totalVendaFiltrado: v, totalLucroFiltrado: l };
   }, [orcamentos, searchTerm, selectedStatuses, selectedUsers, startDate, endDate, users]);
 
