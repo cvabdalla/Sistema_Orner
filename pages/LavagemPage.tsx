@@ -11,7 +11,7 @@ import {
 import Modal from '../components/Modal';
 import DashboardCard from '../components/DashboardCard';
 import { dataService } from '../services/dataService';
-import type { User, LavagemPackage, LavagemClient, LavagemRecord, FinancialTransaction, FinancialCategory, LavagemContract } from '../types';
+import type { User, LavagemPackage, LavagemClient, LavagemRecord, FinancialCategory, LavagemContract } from '../types';
 
 const toSentenceCase = (str: string) => {
     if (!str) return '';
@@ -180,6 +180,23 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
 
         const totalAccumulated = clientContracts.reduce((acc, c) => acc + Number(c.total_value), 0);
 
+        // Lógica de oportunidade de 1 ano
+        const lastExecutedWash = clientRecords
+            .filter(r => r.status === 'executed')
+            .sort((a, b) => b.date.localeCompare(a.date))[0];
+        
+        const lastEventDate = lastExecutedWash?.date || client.installation_end_date;
+        let isHighOpportunity = false;
+        
+        if (lastEventDate) {
+            const dateObj = new Date(lastEventDate);
+            const today = new Date();
+            const diffTime = Math.abs(today.getTime() - dateObj.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            // Consideramos "aproximando de um ano" se tiver mais de 330 dias (11 meses)
+            isHighOpportunity = diffDays >= 330;
+        }
+
         return { 
             pkg, 
             executedCount, 
@@ -192,7 +209,8 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
             pricePerPlate,
             totalAccumulated,
             clientContracts,
-            travelCost: client.travel_cost || 0
+            travelCost: client.travel_cost || 0,
+            isHighOpportunity
         };
     };
 
@@ -372,7 +390,6 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
             });
             
             const categories = await dataService.getAll<FinancialCategory>('financial_categories');
-            // Busca categoria específica solicitada ou fallback inteligente
             const targetCategoryName = "Receita de Mão de Obra – Lavagem";
             let categoryId = categories.find(c => c.name === targetCategoryName)?.id || 
                              categories.find(c => c.name.toLowerCase().includes('lavagem') && c.type === 'receita')?.id ||
@@ -387,7 +404,7 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                 dueDate: launchDate.toISOString().split('T')[0],
                 launchDate: launchDate.toISOString().split('T')[0],
                 categoryId: categoryId,
-                status: 'pendente' // Lançado como pendente conforme solicitado
+                status: 'pendente'
             });
             await loadData();
             setIsLaunchServiceModalOpen(false);
@@ -500,10 +517,31 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                                     const percent = info.washQtyLimit > 0 ? (info.executedCount / info.washQtyLimit) * 100 : 0;
                                     const isFinished = client.package_id && info.executedCount >= info.washQtyLimit && info.washQtyLimit > 0;
                                     const hasOverdue = info.allScheduled.some(r => r.date < (new Date().toISOString().split('T')[0]));
+                                    
+                                    // NOVO: Destaque de 1 ano para clientes sem pacotes ativos (ou com ciclos zerados)
+                                    const isHighlight = group.key === 'pending' && !client.package_id && info.isHighOpportunity;
+
                                     return (
-                                        <div key={client.id} className={`bg-white dark:bg-gray-800 rounded-3xl border p-5 shadow-sm hover:shadow-xl transition-all group overflow-hidden flex flex-col relative ${hasOverdue ? 'border-red-200 dark:border-red-900/50 ring-2 ring-red-500/10' : 'border-gray-100 dark:border-gray-700'}`}>
+                                        <div 
+                                            key={client.id} 
+                                            className={`bg-white dark:bg-gray-800 rounded-3xl border p-5 shadow-sm hover:shadow-xl transition-all group overflow-hidden flex flex-col relative 
+                                                ${hasOverdue ? 'border-red-200 dark:border-red-900/50 ring-2 ring-red-500/10' : 
+                                                  isHighlight ? 'border-amber-400 dark:border-amber-600 ring-4 ring-amber-500/10 bg-amber-50/10 shadow-lg shadow-amber-500/5' : 'border-gray-100 dark:border-gray-700'}`}
+                                        >
                                             {hasOverdue && (<div className="absolute top-0 right-0 bg-red-500 text-white px-3 py-1 rounded-bl-xl text-[8px] font-black uppercase tracking-widest animate-pulse z-10 shadow-sm">Atrasado</div>)}
-                                            <div className="flex justify-between items-start mb-4"><div className="space-y-0.5"><div className="flex items-center gap-1.5"><h4 className="font-black text-gray-800 dark:text-white text-base leading-tight">{toSentenceCase(client.name)}</h4>{info.totalAccumulated > info.contractTotalValue && <StarIcon className="w-3 h-3 text-amber-500 fill-amber-500" title="Cliente Fiel" />}</div><p className="text-[10px] text-gray-400 font-black flex items-center gap-1"><MapPinIcon className="w-3 h-3" /> {client.city || 'S/ local'} • {client.plates_count} placas</p></div><button onClick={() => { setEditingClient(client); setClientForm({...client, installation_end_date: client.installation_end_date || ''}); setIsClientModalOpen(true); }} className="p-1.5 text-gray-300 hover:text-cyan-600"><EditIcon className="w-4 h-4" /></button></div>
+                                            {isHighlight && (<div className="absolute top-0 right-0 bg-amber-500 text-white px-3 py-1 rounded-bl-xl text-[8px] font-black uppercase tracking-widest z-10 shadow-sm animate-pulse">Reativação Pendente ⚠️</div>)}
+                                            
+                                            <div className="flex justify-between items-start mb-4">
+                                                <div className="space-y-0.5">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <h4 className={`font-black ${isHighlight ? 'text-amber-800 dark:text-amber-400' : 'text-gray-800 dark:text-white'} text-base leading-tight`}>{toSentenceCase(client.name)}</h4>
+                                                        {info.totalAccumulated > info.contractTotalValue && <StarIcon className="w-3 h-3 text-amber-500 fill-amber-500" title="Cliente Fiel" />}
+                                                    </div>
+                                                    <p className="text-[10px] text-gray-400 font-black flex items-center gap-1"><MapPinIcon className="w-3 h-3" /> {client.city || 'S/ local'} • {client.plates_count} placas</p>
+                                                </div>
+                                                <button onClick={() => { setEditingClient(client); setClientForm({...client, installation_end_date: client.installation_end_date || ''}); setIsClientModalOpen(true); }} className="p-1.5 text-gray-300 hover:text-cyan-600"><EditIcon className="w-4 h-4" /></button>
+                                            </div>
+
                                             <div className="flex-1 space-y-4">
                                                 {(info.allScheduled.length > 0 || info.pendingToScheduleCount > 0) ? (
                                                     <div style={{ backgroundColor: packageColor }} className="rounded-2xl text-white shadow-lg shadow-black/5 overflow-hidden">
@@ -527,9 +565,25 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                                                         </div>
                                                     </div>
                                                 ) : (
-                                                    <div className="p-4 bg-slate-50 dark:bg-slate-900/10 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl text-center"><p className="text-[10px] font-black text-slate-700 mb-2">{isFinished ? 'Ciclo finalizado ✅' : 'Aguardando agenda'}</p><button onClick={() => isFinished ? handleOpenLaunchModal(client.id) : (() => { setSelectedClient(client); const init = Array(info.washQtyLimit - info.executedCount).fill(new Date().toISOString().split('T')[0]); setScheduleDates(init); setFrequency('semestral'); setIsWashModalOpen(true); })()} className={`w-full py-2 rounded-xl font-black text-[9px] tracking-tight shadow-md ${isFinished ? 'bg-indigo-600 text-white' : 'bg-slate-500 text-white'}`}>{isFinished ? 'Renovar agora' : 'Gerar cronograma'}</button></div>
+                                                    <div className={`p-4 ${isHighlight ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-300' : 'bg-slate-50 dark:bg-slate-900/10 border-slate-200 dark:border-slate-800'} border-2 border-dashed rounded-2xl text-center`}>
+                                                        {isHighlight && (
+                                                            <div className="flex flex-col items-center mb-3">
+                                                                <div className="p-2 bg-amber-100 dark:bg-amber-900/40 rounded-full text-amber-600 mb-2">
+                                                                    <ExclamationTriangleIcon className="w-6 h-6" />
+                                                                </div>
+                                                                <p className="text-[11px] font-black text-amber-700 dark:text-amber-400 uppercase tracking-tighter">Último evento há 1 ano!</p>
+                                                            </div>
+                                                        )}
+                                                        <p className="text-[10px] font-black text-slate-700 dark:text-gray-400 mb-2">{isFinished ? 'Ciclo finalizado ✅' : isHighlight ? 'Oportunidade de Reativação' : 'Aguardando agenda'}</p>
+                                                        <button 
+                                                            onClick={() => (isFinished || isHighlight) ? handleOpenLaunchModal(client.id) : (() => { setSelectedClient(client); const init = Array(info.washQtyLimit - info.executedCount).fill(new Date().toISOString().split('T')[0]); setScheduleDates(init); setFrequency('semestral'); setIsWashModalOpen(true); })()} 
+                                                            className={`w-full py-2.5 rounded-xl font-black text-[9px] uppercase tracking-wider shadow-md transition-all active:scale-95 ${isHighlight ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/20' : isFinished ? 'bg-indigo-600 text-white' : 'bg-slate-500 text-white'}`}
+                                                        >
+                                                            {isFinished ? 'Renovar Plano' : isHighlight ? 'Oferecer Novo Plano' : 'Gerar cronograma'}
+                                                        </button>
+                                                    </div>
                                                 )}
-                                                <div className="space-y-1.5 pt-2"><div className="flex justify-between items-end px-1"><div className="flex flex-col"><span className="text-[9px] font-black text-gray-400 tracking-tighter uppercase">{info.pkg?.name || '---'}</span><button onClick={() => { setSelectedClient(client); setIsContractDetailModalOpen(true); }} className="text-[11px] font-black text-indigo-600 hover:text-indigo-800 transition-colors flex items-center gap-1">{formatCurrency(info.contractTotalValue)}<ChevronDownIcon className="w-2.5 h-2.5 opacity-50" /></button></div><div className="flex flex-col text-right"><span className="text-[8px] font-black text-gray-400 uppercase">Inv. Total</span><button onClick={() => { setSelectedClient(client); setIsContractDetailModalOpen(true); }} className={`text-[10px] font-black flex items-center justify-end gap-1 transition-all ${info.totalAccumulated > 0 ? 'text-amber-600 hover:text-amber-700' : 'text-gray-400'}`}>{formatCurrency(info.totalAccumulated)}<DocumentReportIcon className="w-2.5 h-2.5 opacity-60" /></button></div></div><div className="w-full h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden"><div className="h-full transition-all duration-700 rounded-full" style={{ width: `${percent}%`, backgroundColor: packageColor }} /></div></div>
+                                                <div className="space-y-1.5 pt-2"><div className="flex justify-between items-end px-1"><div className="flex flex-col"><span className="text-[9px] font-black text-gray-400 tracking-tighter uppercase">{info.pkg?.name || '---'}</span><button onClick={() => { setSelectedClient(client); setIsContractDetailModalOpen(true); }} className="text-[11px] font-black text-indigo-600 hover:text-indigo-800 transition-colors flex items-center gap-1">{formatCurrency(info.contractTotalValue)}<ChevronDownIcon className="w-2.5 h-2.5 opacity-50" /></button></div><div className="flex flex-col text-right"><span className="text-[8px] font-black text-gray-400 uppercase">Inv. Total</span><button onClick={() => { setSelectedClient(client); setIsContractDetailModalOpen(true); }} className={`text-[10px] font-black flex items-center justify-end gap-1 transition-all ${info.totalAccumulated > 0 ? 'text-amber-600 hover:text-amber-700' : 'text-gray-400'}`}>{formatCurrency(info.totalAccumulated)}<DocumentReportIcon className="w-2.5 h-2.5 opacity-60" /></button></div></div><div className="w-full h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden"><div className="h-full transition-all duration-700 rounded-full" style={{ width: `${percent}%`, backgroundColor: isHighlight ? '#f59e0b' : packageColor }} /></div></div>
                                             </div>
                                             <div className="flex gap-2 mt-4 pt-4 border-t dark:border-gray-700"><button onClick={() => { setSelectedClient(client); setIsHistoryModalOpen(true); }} className="flex-1 py-2 text-[9px] font-black text-gray-400 border border-gray-100 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-900 transition-all tracking-tight flex items-center justify-center gap-1.5"><ClipboardListIcon className="w-3 h-3" /> Histórico de Visitas</button></div>
                                         </div>
@@ -612,7 +666,6 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                 </Modal>
             )}
 
-            {/* Modais de Ação (Aparecem por cima de tudo) */}
             {isEditWashDateModalOpen && pendingAction && (
                 <Modal title="Editar Registro de Lavagem" onClose={() => setIsEditWashDateModalOpen(false)} maxWidth="max-w-sm">
                     <div className="space-y-6 pt-2">
