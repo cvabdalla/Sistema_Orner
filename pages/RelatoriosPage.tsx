@@ -32,7 +32,11 @@ const SectionTitle: React.FC<{ children: React.ReactNode; color?: string }> = ({
     </h3>
 );
 
-const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onSave, onEditReport, currentUser }) => {
+interface ExtendedRelatoriosPageProps extends RelatoriosPageProps {
+    onLogoUpdated?: () => void;
+}
+
+const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToEdit, onSave, onEditReport, currentUser, onLogoUpdated }) => {
   const [solicitante, setSolicitante] = useState('');
   const [setor, setSetor] = useState('');
   const [periodStart, setPeriodStart] = useState('');
@@ -49,6 +53,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
   const [statusFilterValue, setStatusFilterValue] = useState<ExpenseReportStatus | 'Todos'>('Todos');
   const [configKmValue, setConfigKmValue] = useState(1.20);
   const [configInstValue, setConfigInstValue] = useState(120.00);
+  const [companyLogoValue, setCompanyLogoValue] = useState<string | null>(null);
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [newSupplierName, setNewSupplierName] = useState('');
@@ -57,6 +62,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
 
   const [isEditingKm, setIsEditingKm] = useState(false);
   const [isEditingInst, setIsEditingInst] = useState(false);
+  const [isEditingLogo, setIsEditingLogo] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccessModalOpen, setSuccessModalOpen] = useState(false);
@@ -76,6 +82,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
   ]);
   const [attachments, setAttachments] = useState<ExpenseAttachment[]>([]);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const isAdmin = useMemo(() => currentUser.profileId === '001' || currentUser.profileId === '00000000-0000-0000-0000-000000000001', [currentUser]);
   const isReadOnly = useMemo(() => reportToEdit ? reportToEdit.status !== 'Rascunho' : false, [reportToEdit]);
@@ -107,11 +114,15 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
           const remoteConfigs = await dataService.getAll<any>('system_configs', undefined, true);
           const remoteKm = remoteConfigs.find(c => c.id === 'km_value');
           const remoteInst = remoteConfigs.find(c => c.id === 'installation_value');
+          const remoteLogo = remoteConfigs.find(c => c.id === 'company_logo');
+          
           if (remoteKm) {
               const val = parseFloat(remoteKm.value);
               setConfigKmValue(val); setValorPorKm(val);
           }
           if (remoteInst) setConfigInstValue(parseFloat(remoteInst.value));
+          if (remoteLogo) setCompanyLogoValue(remoteLogo.value);
+
       } catch (e) { console.error("Erro configs:", e); }
   }, []);
 
@@ -267,7 +278,6 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
             if (targetTxs) {
                 for (const tx of targetTxs) {
                     try {
-                        // Crucial: define invoiceSent e relatedReportId para o Financeiro conseguir rastrear e atualizar o status do RD depois
                         await dataService.save('financial_transactions', { 
                             ...tx, 
                             invoiceSent: true, 
@@ -278,7 +288,6 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                     }
                 }
             }
-            // Atualiza status do relatório para Aguardando Pagamento (Env. p/ Pagamento)
             await dataService.save('expense_reports', { ...reportInAction, status: 'Env. p/ Pagamento' });
             setModalMessage("Aprovado! Os itens vinculados agora aparecem como 'Liberados p/ Pagar' no Financeiro.");
         } else {
@@ -292,7 +301,6 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
             }
             const dueDate = new Date(); dueDate.setDate(dueDate.getDate() + 7);
             
-            // Cria transação financeira explícita para o reembolso padrão
             await dataService.save('financial_transactions', {
                 id: `tx-reemb-${reportId}`, 
                 owner_id: reportInAction.owner_id,
@@ -303,8 +311,8 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                 launchDate: new Date().toISOString().split('T')[0], 
                 categoryId: category.id, 
                 status: 'pendente',
-                relatedReportId: reportId, // Garante rastreabilidade
-                invoiceSent: true // Reembolsos aprovados já nascem liberados
+                relatedReportId: reportId,
+                invoiceSent: true 
             });
             
             await dataService.save('expense_reports', { ...reportInAction, status: 'Env. p/ Pagamento' });
@@ -327,11 +335,9 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
       try {
           await dataService.save('expense_reports', { ...reportInAction, status: 'Cancelado', cancelReason });
           
-          // Reembolso padrão
           const { data: relatedTx } = await supabase.from('financial_transactions').select('*').eq('id', `tx-reemb-${reportInAction.id}`).single();
           if (relatedTx) await dataService.save('financial_transactions', { ...relatedTx, status: 'cancelado', cancelReason: `Cancelado via RD: ${cancelReason}` });
           
-          // Faturamento técnico
           if (reportInAction.isInstallmentWash) {
               const txIds = reportInAction.items.map(i => i.id);
               const { data: targetTxs } = await supabase.from('financial_transactions').select('*').in('id', txIds);
@@ -398,46 +404,109 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
       } catch (e) { alert('Erro.'); } finally { setIsLoading(false); }
   };
 
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const img = new Image();
+            img.src = reader.result as string;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const MAX_SIZE = 400;
+                let width = img.width;
+                let height = img.height;
+                if (width > height) { if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; } }
+                else { if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; } }
+                canvas.width = width; canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx?.drawImage(img, 0, 0, width, height);
+                setCompanyLogoValue(canvas.toDataURL('image/jpeg', 0.8));
+            };
+        };
+        reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSaveLogo = async () => {
+    setIsLoading(true);
+    try {
+        await dataService.save('system_configs', { id: 'company_logo', value: companyLogoValue || '' });
+        setIsEditingLogo(false);
+        if (onLogoUpdated) onLogoUpdated();
+        alert('Identidade visual atualizada!');
+    } catch (e) { alert('Erro ao salvar logo.'); } finally { setIsLoading(false); }
+  };
+
   const renderContent = () => {
     if (view === 'config') return (
         <div className="max-w-4xl mx-auto space-y-6 animate-fade-in pb-10">
             <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                 <div className="flex items-center gap-4 mb-8">
                     <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200"><CogIcon className="w-6 h-6 text-white" /></div>
-                    <div><h1 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">Configurações Gerais</h1><p className="text-[11px] text-gray-400 font-bold tracking-tight">Defina valores de referência e cadastros base</p></div>
+                    <div><h1 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">Configurações Gerais</h1><p className="text-[11px] text-gray-400 font-bold tracking-tight">Defina valores de referência e identidade visual</p></div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="bg-gray-50 dark:bg-gray-900/40 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 space-y-4">
-                        <SectionTitle color="bg-blue-500">Valores de referência</SectionTitle>
-                        <div className="space-y-4">
-                            <div>
-                                <FormLabel>Valor do KM (Reembolsos)</FormLabel>
-                                <div className="flex gap-2">
-                                    <div className="relative flex-1">
-                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">R$</span>
-                                        <input type="number" step="0.01" value={configKmValue} onChange={e => setConfigKmValue(parseFloat(e.target.value))} disabled={!isEditingKm} className="w-full pl-9 rounded-lg border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 text-xs font-bold text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-70" />
+                    <div className="space-y-6">
+                        <div className="bg-gray-50 dark:bg-gray-900/40 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 space-y-4">
+                            <SectionTitle color="bg-blue-500">Valores de referência</SectionTitle>
+                            <div className="space-y-4">
+                                <div>
+                                    <FormLabel>Valor do KM (Reembolsos)</FormLabel>
+                                    <div className="flex gap-2">
+                                        <div className="relative flex-1">
+                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">R$</span>
+                                            <input type="number" step="0.01" value={configKmValue} onChange={e => setConfigKmValue(parseFloat(e.target.value))} disabled={!isEditingKm} className="w-full pl-9 rounded-lg border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 text-xs font-bold text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-70" />
+                                        </div>
+                                        {isEditingKm ? (
+                                            <button onClick={handleSaveKmConfig} className="p-2 bg-green-600 text-white rounded-lg shadow-sm hover:bg-green-700"><SaveIcon className="w-4 h-4" /></button>
+                                        ) : (
+                                            <button onClick={() => setIsEditingKm(true)} className="p-2 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-300"><EditIcon className="w-4 h-4" /></button>
+                                        )}
                                     </div>
-                                    {isEditingKm ? (
-                                        <button onClick={handleSaveKmConfig} className="p-2 bg-green-600 text-white rounded-lg shadow-sm hover:bg-green-700"><SaveIcon className="w-4 h-4" /></button>
-                                    ) : (
-                                        <button onClick={() => setIsEditingKm(true)} className="p-2 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-300"><EditIcon className="w-4 h-4" /></button>
-                                    )}
+                                </div>
+                                <div>
+                                    <FormLabel>Valor Instalação p/ Placa (Orçamentos)</FormLabel>
+                                    <div className="flex gap-2">
+                                        <div className="relative flex-1">
+                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">R$</span>
+                                            <input type="number" step="0.01" value={configInstValue} onChange={e => setConfigInstValue(parseFloat(e.target.value))} disabled={!isEditingInst} className="w-full pl-9 rounded-lg border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 text-xs font-bold text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-70" />
+                                        </div>
+                                        {isEditingInst ? (
+                                            <button onClick={handleSaveInstConfig} className="p-2 bg-green-600 text-white rounded-lg shadow-sm hover:bg-green-700"><SaveIcon className="w-4 h-4" /></button>
+                                        ) : (
+                                            <button onClick={() => setIsEditingInst(true)} className="p-2 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-300"><EditIcon className="w-4 h-4" /></button>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
-                            <div>
-                                <FormLabel>Valor Instalação p/ Placa (Orçamentos)</FormLabel>
-                                <div className="flex gap-2">
-                                    <div className="relative flex-1">
-                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">R$</span>
-                                        <input type="number" step="0.01" value={configInstValue} onChange={e => setConfigInstValue(parseFloat(e.target.value))} disabled={!isEditingInst} className="w-full pl-9 rounded-lg border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 text-xs font-bold text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-70" />
-                                    </div>
-                                    {isEditingInst ? (
-                                        <button onClick={handleSaveInstConfig} className="p-2 bg-green-600 text-white rounded-lg shadow-sm hover:bg-green-700"><SaveIcon className="w-4 h-4" /></button>
+                        </div>
+
+                        <div className="bg-gray-50 dark:bg-gray-900/40 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 space-y-4">
+                            <div className="flex justify-between items-center">
+                                <SectionTitle color="bg-indigo-500">Identidade Visual</SectionTitle>
+                                {isEditingLogo ? (
+                                    <button onClick={handleSaveLogo} className="p-1.5 bg-green-600 text-white rounded-lg shadow-sm"><SaveIcon className="w-4 h-4" /></button>
+                                ) : (
+                                    <button onClick={() => setIsEditingLogo(true)} className="p-1.5 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg"><EditIcon className="w-4 h-4" /></button>
+                                )}
+                            </div>
+                            <div className="flex flex-col items-center gap-4">
+                                <div className="w-32 h-32 rounded-2xl border-4 border-dashed border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex items-center justify-center overflow-hidden relative group">
+                                    {companyLogoValue ? (
+                                        <img src={companyLogoValue} className="max-w-full max-h-full object-contain" alt="Logo" />
                                     ) : (
-                                        <button onClick={() => setIsEditingInst(true)} className="p-2 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-300"><EditIcon className="w-4 h-4" /></button>
+                                        <PhotographIcon className="w-12 h-12 text-gray-200" />
+                                    )}
+                                    {isEditingLogo && (
+                                        <label className="absolute inset-0 bg-black/40 flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <UploadIcon className="w-8 h-8 text-white" />
+                                            <input type="file" className="hidden" accept="image/*" onChange={handleLogoUpload} />
+                                        </label>
                                     )}
                                 </div>
+                                <p className="text-[10px] font-bold text-gray-400 text-center">Este logotipo será exibido na barra lateral, tela de login e documentos gerados.</p>
                             </div>
                         </div>
                     </div>
@@ -448,9 +517,9 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
                             <input type="text" placeholder="Nome do fornecedor..." value={newSupplierName} onChange={e => setNewSupplierName(e.target.value)} className="flex-1 rounded-lg border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/20" />
                             <button onClick={handleAddSupplier} className="p-2 bg-indigo-600 text-white rounded-lg shadow-lg active:scale-95"><PlusIcon className="w-4 h-4" /></button>
                         </div>
-                        <div className="flex-1 overflow-y-auto max-h-64 custom-scrollbar space-y-1.5 pr-1">
+                        <div className="flex-1 overflow-y-auto max-h-96 custom-scrollbar space-y-1.5 pr-1">
                             {suppliers.map(sup => (
-                                <div key={sup.id} className="flex items-center justify-between p-2.5 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 group hover:border-indigo-200 transition-all">
+                                <div key={sup.id} className="flex items-center justify-between p-2.5 bg-white dark:bg-gray-800 rounded-xl border border border-gray-100 dark:border-gray-700 group hover:border-indigo-200 transition-all">
                                     {editingSupplierId === sup.id ? (
                                         <div className="flex gap-2 w-full">
                                             <input autoFocus type="text" value={editSupplierNameValue} onChange={e => setEditSupplierNameValue(e.target.value)} className="flex-1 bg-gray-50 dark:bg-gray-900 border-none rounded p-1 text-[11px] font-bold" />
@@ -645,7 +714,7 @@ const RelatoriosPage: React.FC<RelatoriosPageProps> = ({ view, reportToEdit, onS
               <div key={idx} className="group relative aspect-square bg-gray-50 dark:bg-gray-900 rounded-xl border overflow-hidden shadow-sm flex items-center justify-center">
                   {isPdf ? <DocumentReportIcon className="w-8 h-8 text-red-500" /> : <img src={file.data} className="w-full h-full object-cover" alt="" />}
                   <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 z-10">
-                      <button onClick={() => handleViewFile(file)} className="p-1.5 bg-white text-gray-900 rounded-full shadow-lg hover:bg-gray-100" title="Visualizar"><EyeIcon className="w-4 h-4" /></button>
+                      <button onClick={() => handleViewFile(file)} className="p-1.5 bg-white text-gray-900 rounded-full shadow-lg hover:bg-indigo-50" title="Visualizar"><EyeIcon className="w-4 h-4" /></button>
                       <button onClick={() => handleDownloadFile(file)} className="p-1.5 bg-indigo-600 text-white rounded-full shadow-lg hover:bg-indigo-700" title="Baixar"><ArrowDownIcon className="w-4 h-4" /></button>
                   </div>
               </div>

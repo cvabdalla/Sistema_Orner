@@ -13,6 +13,7 @@ interface SidebarProps {
   currentUser: User;
   userPermissions: string[];
   onLogout: () => void;
+  companyLogo?: string | null;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
@@ -22,7 +23,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   setSidebarOpen, 
   currentUser, 
   userPermissions,
-  onLogout 
+  onLogout,
+  companyLogo
 }) => {
   const [openSubMenu, setOpenSubMenu] = useState<string | null>(null);
 
@@ -82,7 +84,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       <aside className={`fixed md:relative inset-y-0 left-0 bg-gray-900 text-gray-300 w-60 space-y-4 py-6 px-2 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-transform duration-300 ease-in-out z-30 flex flex-col flex-shrink-0 border-r border-gray-800 text-sm print:hidden`}>
         <div className="px-6 mb-6 mt-2 flex justify-center md:justify-start min-h-[40px]">
           <a href="#" onClick={(e) => { e.preventDefault(); setCurrentPage('DASHBOARD'); }} className="flex items-center">
-            <Logo variant="light" />
+            <Logo variant="light" customLogo={companyLogo} />
           </a>
         </div>
 

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
     CubeIcon, TrashIcon, PlusIcon, 
@@ -352,6 +353,7 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
 
     const handleManageRequest = (req: PurchaseRequest) => {
         setRequestToEdit(req);
+        /* Fix: Cast req.purchaseType to the expected literal union to fix type assignment error */
         setRequestForm({
             itemName: req.itemName,
             quantity: req.quantity,
@@ -360,7 +362,7 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
             clientName: req.clientName || '',
             observation: req.observation || '',
             purchaseLink: req.purchaseLink || '',
-            purchaseType: req.purchaseType || 'Reposição',
+            purchaseType: (req.purchaseType as 'Reposição' | 'Obra' | 'Avulso') || 'Reposição',
             requestDate: req.date
         });
         const inCatalog = items.some(i => i.name === req.itemName);
@@ -406,7 +408,7 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                     responsible: c.responsible
                 };
             })
-            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+            .sort((a, b) => new Date(a.date).getTime() - new Date(a.date).getTime());
     }, [selectedItemForReservation, checkins]);
 
     if (view === 'visao_geral') {
@@ -765,7 +767,7 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
         const canManageCatalog = isAdmin || String(currentUser.profileId) === 'vendedor-001';
         return (
             <div className="space-y-6 animate-fade-in">
-                <header className="flex justify-between items-center bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700">
+                <header className="flex justify-between items-center bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 gap-4">
                     <div>
                         <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Cadastrar produtos</h2>
                         <p className="text-xs text-gray-500 font-bold mt-1 tracking-wide">Gerenciamento de materiais e equipamentos</p>

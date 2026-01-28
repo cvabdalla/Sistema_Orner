@@ -62,7 +62,7 @@ type PendingAction = {
     record: LavagemRecord;
     payload?: {
         date: string;
-        status: 'scheduled' | 'executed';
+        status: 'scheduled' | 'executed' | 'cancelled';
     };
 };
 
@@ -114,7 +114,8 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
         installationEndDate: new Date().toISOString().split('T')[0],
         travelCost: 0
     });
-    const [editWashValue, setEditWashValue] = useState<{ date: string, status: 'scheduled' | 'executed' }>({ date: '', status: 'scheduled' });
+    /* Fix: Updated state type to include 'cancelled' status to match LavagemRecord status options */
+    const [editWashValue, setEditWashValue] = useState<{ date: string, status: 'scheduled' | 'executed' | 'cancelled' }>({ date: '', status: 'scheduled' });
 
     const lastFetchedCep = useRef('');
 
@@ -688,6 +689,7 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                                 >
                                     <option value="scheduled">Agendada</option>
                                     <option value="executed">Concluída</option>
+                                    <option value="cancelled">Cancelada</option>
                                 </select>
                             </div>
                         </div>

@@ -7,9 +7,10 @@ import type { User } from '../types';
 
 interface LoginPageProps {
     onLoginSuccess: (user: User) => void;
+    companyLogo?: string | null;
 }
 
-const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
+const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, companyLogo }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -47,7 +48,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             <div className="w-full max-w-md animate-fade-in relative z-10">
                 <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl border border-gray-200 dark:border-gray-800 overflow-hidden">
                     <div className="p-8 pb-2 flex flex-col items-center">
-                        <Logo variant="dark" className="scale-110 mb-6" />
+                        <Logo variant="dark" className="scale-110 mb-6" customLogo={companyLogo} />
                         <h2 className="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">Bem-vindo</h2>
                         <p className="text-sm text-gray-500 font-medium mt-1 text-center">Acesse a plataforma orner energia solar</p>
                     </div>

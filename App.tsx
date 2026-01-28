@@ -34,8 +34,21 @@ const App: React.FC = () => {
   const [userPermissions, setUserPermissions] = useState<string[]>([]);
   const [hasGlobalView, setHasGlobalView] = useState(false);
   const [isUserInitialized, setIsUserInitialized] = useState(false);
+  const [companyLogo, setCompanyLogo] = useState<string | null>(null);
 
   const ADMIN_PROFILE_ID = '001';
+
+  const fetchCompanyLogo = async () => {
+    try {
+      const configs = await dataService.getAll<any>('system_configs', undefined, true);
+      const logoConfig = configs.find(c => c.id === 'company_logo');
+      if (logoConfig && logoConfig.value) {
+        setCompanyLogo(logoConfig.value);
+      }
+    } catch (e) {
+      console.warn("Erro ao carregar logo da empresa:", e);
+    }
+  };
 
   useEffect(() => {
     if (currentUser?.darkMode) {
@@ -80,6 +93,7 @@ const App: React.FC = () => {
         setCurrentUser(session);
         fetchPermissions(session.profileId);
     }
+    fetchCompanyLogo();
     setIsUserInitialized(true);
   }, []);
 
@@ -159,7 +173,8 @@ const App: React.FC = () => {
       case 'DASHBOARD': return <DashboardPage />;
       case 'ORCAMENTO': return <OrcamentoPage setCurrentPage={handleSetCurrentPage} onEdit={handleEditOrcamento} currentUser={currentUser} hasGlobalView={hasGlobalView} />;
       case 'NOVO_ORCAMENTO': return <NovoOrcamentoPage setCurrentPage={handleSetCurrentPage} orcamentoToEdit={editingOrcamento} clearEditingOrcamento={() => setEditingOrcamento(null)} currentUser={currentUser} />;
-      case 'RESUMO_VENDAS': return <ResumoVendasPage currentUser={currentUser} hasGlobalView={hasGlobalView} />;
+      /* Fix: ResumoVendasPage does not accept hasGlobalView prop */
+      case 'RESUMO_VENDAS': return <ResumoVendasPage currentUser={currentUser} />;
       case 'FINANCEIRO_VISAO_GERAL': return <FinanceiroPage view="dashboard" currentUser={currentUser} hasGlobalView={hasGlobalView} />;
       case 'FINANCEIRO_DRE': return <FinanceiroPage view="dre" currentUser={currentUser} hasGlobalView={hasGlobalView} />;
       case 'FINANCEIRO_CATEGORIAS': return <FinanceiroPage view="categorias" currentUser={currentUser} />;
@@ -175,11 +190,13 @@ const App: React.FC = () => {
       case 'RELATORIOS_NOVO': return <RelatoriosPage view="reembolso" reportToEdit={editingReport} onSave={handleSaveReport} currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
       case 'RELATORIOS_STATUS': return <RelatoriosPage view="status" onEditReport={handleEditReport} currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
       case 'RELATORIOS_HISTORICO': return <RelatoriosPage view="historico" onEditReport={handleEditReport} currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
-      case 'RELATORIOS_CONFIG': return <RelatoriosPage view="config" currentUser={currentUser} />;
+      /* Fix: RelatoriosPage requires userPermissions prop even in config view */
+      case 'RELATORIOS_CONFIG': return <RelatoriosPage view="config" currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} onLogoUpdated={fetchCompanyLogo} />;
       case 'INSTALACAO_LAVAGEM_SOLIC': return <InstalacaoLavagemPage currentUser={currentUser} reportToEdit={editingReport} onSave={handleSaveReport} hasGlobalView={hasGlobalView} />;
       case 'INSTALACOES_CALENDARIO': return <InstalacoesPage currentUser={currentUser} hasGlobalView={hasGlobalView} />;
       case 'INSTALACOES_CADASTRO': return <InstalacoesCadastroPage currentUser={currentUser} />;
-      case 'INSTALACOES_LAVAGEM': return <LavagemPage currentUser={currentUser} hasGlobalView={hasGlobalView} />;
+      /* Fix: LavagemPage does not accept hasGlobalView prop */
+      case 'INSTALACOES_LAVAGEM': return <LavagemPage currentUser={currentUser} />;
       case 'USUARIOS_GESTAO': return <UsuariosPage view="gestao" currentUser={currentUser} />;
       case 'USUARIOS_PERFIL': return <UsuariosPage view="perfil" currentUser={currentUser} />;
       default: return <DashboardPage />;
@@ -187,11 +204,11 @@ const App: React.FC = () => {
   };
 
   if (!isUserInitialized) return null;
-  if (!currentUser) return <LoginPage onLoginSuccess={handleLoginSuccess} />;
+  if (!currentUser) return <LoginPage onLoginSuccess={handleLoginSuccess} companyLogo={companyLogo} />;
 
   return (
     <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 transition-colors duration-300">
-      <Sidebar currentPage={currentPage} setCurrentPage={handleSetCurrentPage} isSidebarOpen={isSidebarOpen} setSidebarOpen={setSidebarOpen} currentUser={currentUser} userPermissions={userPermissions} onLogout={handleLogout} />
+      <Sidebar currentPage={currentPage} setCurrentPage={handleSetCurrentPage} isSidebarOpen={isSidebarOpen} setSidebarOpen={setSidebarOpen} currentUser={currentUser} userPermissions={userPermissions} onLogout={handleLogout} companyLogo={companyLogo} />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <Header title="Sistema Orner" onMenuClick={() => setSidebarOpen(!isSidebarOpen)} />
         <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6 md:p-8">
