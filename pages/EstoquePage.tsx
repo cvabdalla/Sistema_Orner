@@ -12,7 +12,7 @@ import Modal from '../components/Modal';
 import DashboardCard from '../components/DashboardCard';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
-const UNITS = ["un", "mt", "kg", "cx", "par", "kit", "pç", "m²", "lt"];
+const UNITS = ["un", "cm", "mt", "kg", "cx", "par", "kit", "pç", "m²", "lt"];
 const ADMIN_PROFILE_ID = '001';
 
 // Componente para labels de formulário padronizado
@@ -497,7 +497,7 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                     </div>
                                 </div>
 
-                                {showHistorySuggestions && (
+                                {setShowHistorySuggestions && (
                                     <div className="absolute top-full left-0 z-50 w-full bg-white dark:bg-gray-800 mt-1 rounded-xl shadow-2xl border border-indigo-50 dark:border-gray-700 py-2 max-h-52 overflow-y-auto custom-scrollbar animate-fade-in">
                                         <button
                                             type="button"
