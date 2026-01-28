@@ -24,7 +24,7 @@ const toSentenceCase = (str: string) => {
 };
 
 const FormLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 mb-1 ml-0.5 tracking-tight uppercase">{children}</label>
+    <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5 tracking-tight">{children}</label>
 );
 
 const SectionHeader: React.FC<{ icon: React.ReactElement<any>; title: string; color?: string }> = ({ icon, title, color = "bg-indigo-600" }) => (
@@ -71,9 +71,9 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
         responsible_user_id: '',
         status: 'Em Análise',
         files: {
-            procuracao: undefined,
-            contaEnergia: undefined,
-            documentoFoto: undefined
+            procuracao: [],
+            contaEnergia: [],
+            documentoFoto: []
         }
     });
 
@@ -81,17 +81,13 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
         setSuccessModalOpen(false);
     };
 
-    // Apenas o Master Admin ID 001 tem visão global total
     const isMasterAdmin = useMemo(() => String(currentUser.profileId) === ADMIN_PROFILE_ID, [currentUser]);
 
     const loadData = async () => {
         setIsLoading(true);
         try {
-            // Buscamos as homologações filtradas por usuário (já isolado no service ou localmente)
             const [homoData, checkinData, userData, profileData] = await Promise.all([
                 dataService.getAll<HomologacaoEntry>('homologacao_entries', currentUser.id, isMasterAdmin),
-                // CRÍTICO: Check-ins precisam ser carregados sem o filtro de ID do usuário para que o botão "Ver Check-in" funcione 
-                // para projetos criados por outros técnicos mas atribuídos a este usuário para homologação.
                 dataService.getAll<ChecklistEntry>('checklist_checkin', undefined, true), 
                 dataService.getAll<User>('system_users', undefined, true),
                 dataService.getAll<UserProfile>('system_profiles', undefined, true)
@@ -124,8 +120,6 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
             const matchesSearch = e.clientName.toLowerCase().includes(searchTerm.toLowerCase());
             const isCompleted = e.status === 'Aprovada';
             const matchesTab = activeMainTab === 'concluidas' ? isCompleted : !isCompleted;
-            
-            // Filtro de Segurança Reforçado: Se não for Master Admin, só vê o que está no seu nome (responsible_user_id)
             const isResponsible = e.responsible_user_id === currentUser.id;
             const canSee = isMasterAdmin || isResponsible;
 
@@ -135,12 +129,22 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
 
     const handleEditEntry = (entry: HomologacaoEntry) => {
         setEditingEntryId(entry.id);
+        
+        const normalizeFile = (f: any): ExpenseAttachment[] => {
+            if (!f) return [];
+            return Array.isArray(f) ? f : [f];
+        };
+
         setForm({
             checkinId: entry.checkinId,
             clientName: entry.clientName,
             responsible_user_id: entry.responsible_user_id,
             status: entry.status,
-            files: { ...entry.files },
+            files: {
+                procuracao: normalizeFile(entry.files?.procuracao),
+                contaEnergia: normalizeFile(entry.files?.contaEnergia),
+                documentoFoto: normalizeFile(entry.files?.documentoFoto)
+            },
             observations: entry.observations
         });
         setModalOpen(true);
@@ -161,12 +165,22 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                     ...prev,
                     files: {
                         ...(prev.files || {}),
-                        [field]: attachment
+                        [field]: [...(prev.files?.[field] || []), attachment]
                     }
                 }));
             }
         };
         reader.readAsDataURL(file);
+    };
+
+    const handleRemoveFile = (field: keyof HomologacaoEntry['files'], index: number) => {
+        setForm(prev => ({
+            ...prev,
+            files: {
+                ...(prev.files || {}),
+                [field]: (prev.files?.[field] || []).filter((_, i) => i !== index)
+            }
+        }));
     };
 
     const handleSelectCheckin = (checkinId: string) => {
@@ -206,7 +220,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
             await dataService.save('homologacao_entries', entry);
             setModalOpen(false);
             setEditingEntryId(null);
-            setForm({ checkinId: '', clientName: '', responsible_user_id: '', status: 'Em Análise', files: {} });
+            setForm({ checkinId: '', clientName: '', responsible_user_id: '', status: 'Em Análise', files: { procuracao: [], contaEnergia: [], documentoFoto: [] } });
             setModalMessage(editingEntryId ? "Homologação atualizada!" : "Homologação registrada!");
             setSuccessModalOpen(true);
             await loadData();
@@ -255,28 +269,13 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
         }
     };
 
-    const getFileBlob = (file: ExpenseAttachment) => {
+    const handleDownload = (file: ExpenseAttachment) => {
         const parts = file.data.split(';base64,');
         const contentType = parts[0].split(':')[1];
         const raw = window.atob(parts[1]);
         const uInt8Array = new Uint8Array(raw.length);
         for (let i = 0; i < raw.length; ++i) { uInt8Array[i] = raw.charCodeAt(i); }
-        return new Blob([uInt8Array], { type: contentType });
-    };
-
-    const handleViewFile = (file: ExpenseAttachment) => {
-        const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.data.startsWith('data:application/pdf');
-        if (isPdf) {
-            const blob = getFileBlob(file);
-            const url = URL.createObjectURL(blob);
-            window.open(url, '_blank');
-        } else {
-            setHdPhoto(file.data);
-        }
-    };
-
-    const handleDownload = (file: ExpenseAttachment) => {
-        const blob = getFileBlob(file);
+        const blob = new Blob([uInt8Array], { type: contentType });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -287,39 +286,91 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
         URL.revokeObjectURL(url);
     };
 
-    const renderFilePreview = (label: string, file?: ExpenseAttachment, field?: keyof HomologacaoEntry['files']) => {
-        const isPdf = file?.name.toLowerCase().endsWith('.pdf') || file?.data.startsWith('data:application/pdf');
-        
+    const renderFileList = (files: ExpenseAttachment[] = [], field: keyof HomologacaoEntry['files']) => {
         return (
-            <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 flex flex-col gap-2">
-                <FormLabel>{label}</FormLabel>
-                {file ? (
-                    <div className="flex items-center justify-between gap-3 bg-white dark:bg-gray-800 p-2.5 rounded-xl border border-indigo-100 dark:border-indigo-900 shadow-sm group">
-                        <div className="flex items-center gap-3 overflow-hidden">
-                            {isPdf ? (
-                                <DocumentReportIcon className="w-5 h-5 text-red-500 shrink-0" />
-                            ) : (
-                                <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 border border-gray-100">
-                                    <img src={file.data} className="w-full h-full object-cover" alt="" />
-                                </div>
-                            )}
-                            <span className="text-[10px] font-bold text-gray-700 dark:text-gray-200 truncate">{file.name}</span>
+            <div className="space-y-2 mt-2">
+                {files.map((file, idx) => {
+                    const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.data.startsWith('data:application/pdf');
+                    return (
+                        <div key={idx} className="flex items-center justify-between gap-3 bg-white dark:bg-gray-800 p-2.5 rounded-xl border border-indigo-100 dark:border-indigo-900 shadow-sm group">
+                            <div className="flex items-center gap-3 overflow-hidden">
+                                {isPdf ? (
+                                    <DocumentReportIcon className="w-5 h-5 text-red-500 shrink-0" />
+                                ) : (
+                                    <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 border border-gray-100">
+                                        <img src={file.data} className="w-full h-full object-cover" alt="" />
+                                    </div>
+                                )}
+                                <span className="text-[10px] font-bold text-gray-700 dark:text-gray-200 truncate">{file.name}</span>
+                            </div>
+                            <div className="flex gap-1 shrink-0">
+                                <button type="button" onClick={() => handleViewFile(file)} className="p-1 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-all"><EyeIcon className="w-3.5 h-3.5" /></button>
+                                <button type="button" onClick={() => handleDownload(file)} className="p-1 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-all"><ArrowDownIcon className="w-3.5 h-3.5" /></button>
+                                {!isSaving && (
+                                    <button type="button" onClick={() => handleRemoveFile(field, idx)} className="p-1 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-all"><TrashIcon className="w-3.5 h-3.5" /></button>
+                                )}
+                            </div>
                         </div>
-                        <div className="flex gap-1 shrink-0">
-                            <button type="button" onClick={() => handleViewFile(file)} className="p-1 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-all"><EyeIcon className="w-3.5 h-3.5" /></button>
-                            <button type="button" onClick={() => handleDownload(file)} className="p-1 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-all"><ArrowDownIcon className="w-3.5 h-3.5" /></button>
-                            {field && !isSaving && (
-                                <button type="button" onClick={() => setForm(prev => ({ ...prev, files: { ...prev.files, [field]: undefined } }))} className="p-1 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-all"><TrashIcon className="w-3.5 h-3.5" /></button>
-                            )}
+                    );
+                })}
+                <label className="flex flex-col items-center justify-center py-4 px-4 bg-white dark:bg-gray-800 border-2 border-dashed border-indigo-100 dark:border-indigo-900 rounded-2xl cursor-pointer hover:border-indigo-300 hover:bg-indigo-50/20 transition-all group">
+                    <UploadIcon className="w-5 h-5 text-indigo-400 group-hover:scale-110 transition-transform" />
+                    <span className="text-[9px] font-black text-indigo-600 mt-1.5">Adicionar anexo</span>
+                    <input type="file" className="hidden" accept="image/*,application/pdf" onChange={(e) => handleFileUpload(e, field)} />
+                </label>
+            </div>
+        );
+    };
+
+    const handleViewFile = (file: ExpenseAttachment) => {
+        const parts = file.data.split(';base64,');
+        const contentType = parts[0].split(':')[1];
+        const raw = window.atob(parts[1]);
+        const uInt8Array = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; ++i) { uInt8Array[i] = raw.charCodeAt(i); }
+        const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.data.startsWith('data:application/pdf');
+        if (isPdf) {
+            const blob = new Blob([uInt8Array], { type: contentType });
+            const url = URL.createObjectURL(blob);
+            window.open(url, '_blank');
+        } else {
+            setHdPhoto(file.data);
+        }
+    };
+
+    const renderEntryFilesSummary = (files: ExpenseAttachment[] = [], label: string, colorClass: string, Icon: any) => {
+        if (!files || files.length === 0) return null;
+        return (
+            <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-100 dark:border-gray-700">
+                    <div className="flex items-center gap-2">
+                        <div className={`p-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-sm ${colorClass}`}>
+                            <Icon className="w-4 h-4" />
                         </div>
+                        <span className="text-[11px] font-bold text-gray-700 dark:text-gray-300">{label} ({files.length})</span>
                     </div>
-                ) : (
-                    <label className="flex flex-col items-center justify-center py-4 px-4 bg-white dark:bg-gray-800 border-2 border-dashed border-indigo-100 dark:border-indigo-900 rounded-2xl cursor-pointer hover:border-indigo-300 hover:bg-indigo-50/20 transition-all group">
-                        <UploadIcon className="w-5 h-5 text-indigo-400 group-hover:scale-110 transition-transform" />
-                        <span className="text-[9px] font-black text-indigo-600 mt-1.5">Anexar arquivo</span>
-                        <input type="file" className="hidden" accept="image/*,application/pdf" onChange={(e) => field && handleFileUpload(e, field)} />
-                    </label>
-                )}
+                    <div className="flex gap-1 items-center">
+                        <div className="flex -space-x-1.5 mr-2">
+                            {files.map((f, i) => (
+                                <button 
+                                    key={i} 
+                                    onClick={() => handleViewFile(f)}
+                                    title={`Visualizar ${f.name}`}
+                                    className="w-6 h-6 rounded-full border border-white dark:border-gray-800 bg-indigo-100 hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center text-[9px] font-black text-indigo-600 shadow-sm z-10 hover:z-20 scale-100 hover:scale-110 active:scale-95"
+                                >
+                                    {i + 1}
+                                </button>
+                            ))}
+                        </div>
+                        <button 
+                            onClick={() => handleViewFile(files[0])} 
+                            className="p-1.5 text-indigo-500 hover:bg-white rounded-lg transition-all shadow-sm"
+                            title="Visualizar primeiro arquivo"
+                        >
+                            <EyeIcon className="w-4 h-4" />
+                        </button>
+                    </div>
+                </div>
             </div>
         );
     };
@@ -362,7 +413,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                     </div>
                 </div>
                 <button 
-                    onClick={() => { setEditingEntryId(null); setForm({ checkinId: '', clientName: '', responsible_user_id: '', status: 'Em Análise', files: {} }); setModalOpen(true); }} 
+                    onClick={() => { setEditingEntryId(null); setForm({ checkinId: '', clientName: '', responsible_user_id: '', status: 'Em Análise', files: { procuracao: [], contaEnergia: [], documentoFoto: [] } }); setModalOpen(true); }} 
                     className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-xs shadow-xl hover:bg-indigo-700 transition-all active:scale-95 flex items-center gap-2"
                 >
                     <PlusIcon className="w-5 h-5" /> Nova Homologação
@@ -395,6 +446,12 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filteredEntries.map(entry => {
                         const responsibleUser = systemUsers.find(u => u.id === entry.responsible_user_id);
+                        
+                        const normalize = (f: any) => Array.isArray(f) ? f : (f ? [f] : []);
+                        const procuracaoFiles = normalize(entry.files?.procuracao);
+                        const contaEnergiaFiles = normalize(entry.files?.contaEnergia);
+                        const documentoFotoFiles = normalize(entry.files?.documentoFoto);
+
                         return (
                             <div key={entry.id} className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 p-6 shadow-sm hover:shadow-xl transition-all group flex flex-col relative overflow-hidden">
                                 <div className="flex justify-between items-start mb-6">
@@ -443,25 +500,10 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                                     </button>
 
                                     <div className="grid grid-cols-1 gap-2.5">
-                                        <p className="text-[9px] font-black text-gray-400 px-1 tracking-tight">Documentação Digital</p>
-                                        {entry.files.procuracao && (
-                                            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-100 dark:border-gray-700 group/file">
-                                                <div className="flex items-center gap-2"><div className="p-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-sm text-indigo-500"><DocumentReportIcon className="w-4 h-4" /></div><span className="text-[11px] font-bold text-gray-700 dark:text-gray-300">Procuração</span></div>
-                                                <div className="flex gap-1"><button onClick={() => handleViewFile(entry.files.procuracao!)} className="p-1.5 text-indigo-500 hover:bg-white rounded-lg transition-all shadow-sm group-hover/file:bg-white"><EyeIcon className="w-4 h-4" /></button><button onClick={() => handleDownload(entry.files.procuracao!)} className="p-1.5 text-green-500 hover:bg-white rounded-lg transition-all shadow-sm group-hover/file:bg-white"><ArrowDownIcon className="w-4 h-4" /></button></div>
-                                            </div>
-                                        )}
-                                        {entry.files.contaEnergia && (
-                                            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-100 dark:border-gray-700 group/file">
-                                                <div className="flex items-center gap-2"><div className="p-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-sm text-amber-500"><BoltIcon className="w-4 h-4" /></div><span className="text-[11px] font-bold text-gray-700 dark:text-gray-300">Conta de Energia</span></div>
-                                                <div className="flex gap-1"><button onClick={() => handleViewFile(entry.files.contaEnergia!)} className="p-1.5 text-indigo-500 hover:bg-white rounded-lg transition-all shadow-sm group-hover/file:bg-white"><EyeIcon className="w-4 h-4" /></button><button onClick={() => handleDownload(entry.files.contaEnergia!)} className="p-1.5 text-green-500 hover:bg-white rounded-lg transition-all shadow-sm group-hover/file:bg-white"><ArrowDownIcon className="w-4 h-4" /></button></div>
-                                            </div>
-                                        )}
-                                        {entry.files.documentoFoto && (
-                                            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-100 dark:border-gray-700 group/file">
-                                                <div className="flex items-center gap-2"><div className="p-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-sm text-blue-500"><UsersIcon className="w-4 h-4" /></div><span className="text-[11px] font-bold text-gray-700 dark:text-gray-300">Documento com Foto</span></div>
-                                                <div className="flex gap-1"><button onClick={() => handleViewFile(entry.files.documentoFoto!)} className="p-1.5 text-indigo-500 hover:bg-white rounded-lg transition-all shadow-sm group-hover/file:bg-white"><EyeIcon className="w-4 h-4" /></button><button onClick={() => handleDownload(entry.files.documentoFoto!)} className="p-1.5 text-green-500 hover:bg-white rounded-lg transition-all shadow-sm group-hover/file:bg-white"><ArrowDownIcon className="w-4 h-4" /></button></div>
-                                            </div>
-                                        )}
+                                        <p className="text-[9px] font-black text-gray-400 px-1 tracking-tight uppercase">Documentação Digital</p>
+                                        {renderEntryFilesSummary(procuracaoFiles, "Procuração", "text-indigo-500", DocumentReportIcon)}
+                                        {renderEntryFilesSummary(contaEnergiaFiles, "Conta de Energia", "text-amber-500", BoltIcon)}
+                                        {renderEntryFilesSummary(documentoFotoFiles, "Documento com Foto", "text-blue-500", UsersIcon)}
                                     </div>
                                 </div>
 
@@ -472,7 +514,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                                         </button>
                                         {entry.status !== 'Aprovada' && (
                                             <button onClick={() => handleEditEntry(entry)} className="p-2 text-gray-300 hover:text-indigo-600 transition-colors">
-                                                <EditIcon className="w-5 h-5" />
+                                                <EditIcon className="w-4 h-4" />
                                             </button>
                                         )}
                                     </div>
@@ -570,10 +612,19 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                             <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight font-bold">Anexos ilegíveis causam reprovação imediata na concessionária.</p>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            {renderFilePreview("Procuração", form.files?.procuracao, 'procuracao')}
-                            {renderFilePreview("Conta Luz", form.files?.contaEnergia, 'contaEnergia')}
-                            {renderFilePreview("Documento", form.files?.documentoFoto, 'documentoFoto')}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 flex flex-col gap-2">
+                                <FormLabel>Procuração</FormLabel>
+                                {renderFileList(form.files?.procuracao, 'procuracao')}
+                            </div>
+                            <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 flex flex-col gap-2">
+                                <FormLabel>Conta de Energia</FormLabel>
+                                {renderFileList(form.files?.contaEnergia, 'contaEnergia')}
+                            </div>
+                            <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 flex flex-col gap-2">
+                                <FormLabel>Documento com Foto</FormLabel>
+                                {renderFileList(form.files?.documentoFoto, 'documentoFoto')}
+                            </div>
                         </div>
 
                         <div className="flex gap-3 pt-4 border-t dark:border-gray-700">
@@ -616,18 +667,16 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                 </Modal>
             )}
 
-            {/* Modal de Visualização Técnica Completa (5 Passos) */}
             {isViewCheckinModalOpen && selectedCheckin && (
                 <Modal title={`Dados técnicos: ${selectedCheckin.project}`} onClose={() => setViewCheckinModalOpen(false)} maxWidth="max-w-4xl">
                     <div className="px-1">
-                        {/* Indicador de Passos */}
-                        <div className="flex items-center justify-center gap-2 mb-8 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-inner overflow-x-auto custom-scrollbar">
+                        <div className="flex items-center justify-center gap-2 mb-8 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-inner overflow-x-auto custom-scrollbar">
                             {[1, 2, 3, 4, 5].map(step => (
                                 <button key={step} onClick={() => setActiveCheckinStep(step)} className="flex items-center group shrink-0">
                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-black transition-all ${activeCheckinStep === step ? 'bg-indigo-600 text-white shadow-lg scale-110' : 'bg-gray-200 dark:bg-gray-700 text-gray-500'}`}>
                                         {step}
                                     </div>
-                                    {step < 5 && <div className={`w-4 sm:w-12 h-0.5 mx-1 rounded-full ${activeCheckinStep > step ? 'bg-indigo-400' : 'bg-gray-200 dark:bg-gray-700'}`} />}
+                                    {step < 5 && <div className={`w-4 sm:w-12 h-0.5 mx-1 rounded-full ${activeCheckinStep > step ? 'bg-indigo-400' : 'bg-gray-200 dark:border-gray-700'}`} />}
                                 </button>
                             ))}
                         </div>
@@ -683,7 +732,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                                         <SectionHeader icon={<CogIcon />} title="Configuração de painéis" />
                                         <div className="space-y-2">
                                             {(selectedCheckin.details?.paineisConfig || []).map((p: PainelConfig, idx: number) => (
-                                                <div key={p.id} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800">
+                                                <div key={p.id} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-700">
                                                     <span className="text-[11px] font-black text-indigo-600">Fileira {idx + 1}</span>
                                                     <span className="text-xs font-bold">{p.linhas}L x {p.modulos}M ({p.orientacao})</span>
                                                 </div>
@@ -786,7 +835,6 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                 </Modal>
             )}
 
-            {/* Visualização de Foto em HD */}
             {hdPhoto && (
                 <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => setHdPhoto(null)}>
                     <div className="relative max-w-5xl w-full h-full flex flex-col items-center justify-center gap-4">
@@ -799,7 +847,6 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                 </div>
             )}
 
-            {/* Modal de Sucesso */}
             {isSuccessModalOpen && (
                 <Modal title="" onClose={handleSuccessModalClose}>
                     <div className="text-center py-10 space-y-6 animate-fade-in">

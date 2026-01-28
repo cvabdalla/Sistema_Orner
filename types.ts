@@ -147,9 +147,9 @@ export interface HomologacaoEntry {
     date: string;
     status: 'Em Análise' | 'Aprovada' | 'Pendente';
     files: {
-        procuracao?: ExpenseAttachment;
-        contaEnergia?: ExpenseAttachment;
-        documentoFoto?: ExpenseAttachment;
+        procuracao?: ExpenseAttachment[];
+        contaEnergia?: ExpenseAttachment[];
+        documentoFoto?: ExpenseAttachment[];
     };
     observations?: string;
 }
