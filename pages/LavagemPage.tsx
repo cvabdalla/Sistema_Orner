@@ -37,7 +37,7 @@ const SectionHeader: React.FC<{ icon: React.ReactElement<any>; title: string; co
                     className={`p-1 rounded-lg text-white ${!isHex ? color : ''}`}
                     style={isHex ? { backgroundColor: color } : {}}
                 >
-                    {React.cloneElement(icon, { className: "w-3 h-3" })}
+                    {React.cloneElement(icon, { className: "w-3.5 h-3.5" })}
                 </div>
                 <h4 className="text-[10px] font-black text-gray-500 dark:text-gray-400 tracking-wider">{title}</h4>
             </div>
@@ -114,7 +114,6 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
         installationEndDate: new Date().toISOString().split('T')[0],
         travelCost: 0
     });
-    /* Fix: Updated state type to include 'cancelled' status to match LavagemRecord status options */
     const [editWashValue, setEditWashValue] = useState<{ date: string, status: 'scheduled' | 'executed' | 'cancelled' }>({ date: '', status: 'scheduled' });
 
     const lastFetchedCep = useRef('');
@@ -181,7 +180,6 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
 
         const totalAccumulated = clientContracts.reduce((acc, c) => acc + Number(c.total_value), 0);
 
-        // Lógica de oportunidade de 1 ano
         const lastExecutedWash = clientRecords
             .filter(r => r.status === 'executed')
             .sort((a, b) => b.date.localeCompare(a.date))[0];
@@ -194,7 +192,6 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
             const today = new Date();
             const diffTime = Math.abs(today.getTime() - dateObj.getTime());
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            // Consideramos "aproximando de um ano" se tiver mais de 330 dias (11 meses)
             isHighOpportunity = diffDays >= 330;
         }
 
@@ -253,6 +250,14 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                 if (filterStatus === 'Oportunidade 1 Ano' && !isHot) return false;
             }
             return true;
+        }).sort((a, b) => {
+            // Ordenação para a aba de oportunidades: Instalações mais antigas primeiro
+            if (activeTab === 'oportunidades') {
+                const dateA = a.client.installation_end_date || '9999-12-31';
+                const dateB = b.client.installation_end_date || '9999-12-31';
+                return dateA.localeCompare(dateB);
+            }
+            return 0;
         });
     }, [clients, packages, records, contracts, activeTab, searchTerm, filterStatus, usePeriodFilter, periodStart, periodEnd]);
 
@@ -519,7 +524,6 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                                     const isFinished = client.package_id && info.executedCount >= info.washQtyLimit && info.washQtyLimit > 0;
                                     const hasOverdue = info.allScheduled.some(r => r.date < (new Date().toISOString().split('T')[0]));
                                     
-                                    // NOVO: Destaque de 1 ano para clientes sem pacotes ativos (ou com ciclos zerados)
                                     const isHighlight = group.key === 'pending' && !client.package_id && info.isHighOpportunity;
 
                                     return (
