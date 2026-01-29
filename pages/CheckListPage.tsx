@@ -287,7 +287,8 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
             const processedCurrent = rawCurrent.map(item => ({ ...item, type: view }));
             const processedAllCheckins = rawAllCheckins.map(item => ({ ...item, type: 'checkin' }));
 
-            setEntries(processedCurrent.sort((a, b) => (b.date || '').localeCompare(a.date || '')));
+            // Alterado para ordenação alfabética por projeto/cliente conforme solicitado
+            setEntries(processedCurrent.sort((a, b) => (a.project || '').localeCompare(b.project || '')));
             setStockItems(rawStock.sort((a:any, b:any) => a.name.localeCompare(b.name)));
             setOrcamentos(rawOrcamentos);
             setAllCheckins(processedAllCheckins);
