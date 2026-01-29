@@ -66,7 +66,7 @@ export const MENU_ITEMS: MenuItem[] = [
       label: 'Financeiro', 
       icon: FinanceiroIcon,
       children: [
-          { id: 'FINANCEIRO_VISAO_GERAL', label: 'Visão Geral', icon: FinanceiroIcon },
+          { id: 'FINANCEIRO_VISAO_GERAL', label: 'Fluxo de Caixa', icon: FinanceiroIcon },
           { id: 'FINANCEIRO_DRE', label: 'DRE Gerencial', icon: DocumentReportIcon },
           { id: 'FINANCEIRO_CATEGORIAS', label: 'Categorias Financeiras', icon: ClipboardListIcon },
           { id: 'FINANCEIRO_BANCOS', label: 'Bancos', icon: TableIcon },
