@@ -1099,72 +1099,6 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                 </table>
             </div>
 
-            {isConfirmStatusModalOpen && (
-                <Modal title="Confirmar ação" onClose={() => { setIsConfirmStatusModalOpen(false); setConfirmRequest(null); setNextStatus(null); }} maxWidth="max-w-sm">
-                    <div className="text-center p-4 space-y-6">
-                        <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-indigo-50 text-indigo-600">
-                            <ExclamationTriangleIcon className="w-10 h-10" />
-                        </div>
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">Deseja efetivar essa ação?</h3>
-                        <div className="flex gap-4">
-                            <button onClick={() => { setIsConfirmStatusModalOpen(false); setConfirmRequest(null); setNextStatus(null); }} className="flex-1 py-3 bg-gray-100 rounded-xl font-bold text-sm">Não</button>
-                            <button onClick={handleUpdateStatus} disabled={isSaving} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20">{isSaving ? '...' : 'Sim'}</button>
-                        </div>
-                    </div>
-                </Modal>
-            )}
-
-            {isNFModalOpen && requestToEdit && (
-                <Modal title="Efetivar compra - nota fiscal" onClose={() => { setIsNFModalOpen(false); setRequestToEdit(null); }} maxWidth="max-w-lg">
-                    <form onSubmit={handleConfirmFinalization} className="space-y-6">
-                        <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-800">
-                            <p className="text-[11px] font-bold text-indigo-600 mb-2">Item recebido</p>
-                            <p className="font-bold text-gray-900 dark:text-white">{requestToEdit.itemName} - {requestToEdit.quantity} {requestToEdit.unit}</p>
-                        </div>
-                        <div className="space-y-4">
-                            <div>
-                                <label className={labelSentenceClass}>Número da nota fiscal (nf-e)</label>
-                                <input required type="text" placeholder="000.000.000" value={nfForm.invoiceNumber} onChange={e => setNfForm({...nfForm, invoiceNumber: e.target.value})} className={editableFieldClass} />
-                            </div>
-                            <div>
-                                <label className={labelSentenceClass}>Chave de acesso da nota fiscal (44 dígitos)</label>
-                                <input type="text" placeholder="0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000" maxLength={44} value={nfForm.invoiceKey} onChange={e => setNfForm({...nfForm, invoiceKey: e.target.value.replace(/\D/g, '')})} className={editableFieldClass.replace('font-bold', 'font-mono')} />
-                            </div>
-                            <div>
-                                <label className={labelSentenceClass}>Valor total dos itens (R$)</label>
-                                <input required type="number" step="0.01" placeholder="0,00" value={nfForm.totalValue || ''} onChange={e => setNfForm({...nfForm, totalValue: parseFloat(e.target.value) || 0})} className={editableFieldClass.replace('text-gray-800', 'text-indigo-600')} />
-                            </div>
-                            <div>
-                                <label className={labelSentenceClass}>Anexar arquivo da nota fiscal</label>
-                                <div className="flex items-center justify-center w-full">
-                                    <label className={`flex flex-col items-center justify-center w-full min-h-[120px] border-4 border-dashed rounded-2xl cursor-pointer transition-colors ${nfForm.invoiceFile ? 'border-green-400 bg-green-50 dark:bg-green-900/20' : 'border-indigo-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 hover:bg-indigo-50'}`}>
-                                        <div className="flex flex-col items-center justify-center pt-5 pb-6 px-4 text-center">
-                                            {nfForm.invoiceFile ? (
-                                                <>
-                                                    <CheckCircleIcon className="w-10 h-10 text-green-500 mb-2" />
-                                                    <p className="text-sm text-green-700 dark:text-green-400 font-bold truncate max-w-full">Arquivo carregado: {nfForm.invoiceFileName}</p>
-                                                    <p className="text-[10px] text-green-600 dark:text-green-500 font-medium mt-1">Clique para substituir</p>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <UploadIcon className="w-10 h-10 text-indigo-400 mb-2" />
-                                                    <p className="text-sm text-gray-500 dark:text-gray-400 font-bold">Clique para selecionar ou arraste o pdf/imagem</p>
-                                                </>
-                                            )}
-                                        </div>
-                                        <input type="file" className="hidden" onChange={handleNFFileUpload} accept=".pdf,image/*" />
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="flex gap-4 pt-4">
-                            <button type="button" onClick={() => { setIsNFModalOpen(false); setRequestToEdit(null); }} className="flex-1 py-4 bg-gray-100 rounded-2xl font-bold text-sm">Cancelar</button>
-                            <button type="submit" disabled={isSaving || !nfForm.invoiceNumber} className="flex-1 py-4 bg-green-600 text-white rounded-2xl font-bold text-sm shadow-lg hover:bg-green-700 transition-all active:scale-95 disabled:opacity-50">{isSaving ? 'Gravando...' : 'Confirmar e finalizar'}</button>
-                        </div>
-                    </form>
-                </Modal>
-            )}
-
             {isRequestModalOpen && (
                 <Modal title={requestToEdit ? "Gerenciar pedido de compra" : "Novo pedido de compra"} onClose={() => { setIsRequestModalOpen(false); setRequestToEdit(null); }} maxWidth="max-w-2xl">
                     <form onSubmit={handleSaveRequest} className="space-y-4">
@@ -1340,7 +1274,7 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                 </>
                             ) : (
                                 <>
-                                    <button type="button" onClick={() => setIsRequestModalOpen(false)} className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 text-gray-500 rounded-xl font-bold text-xs hover:bg-gray-200 transition-colors">Cancelar</button>
+                                    <button type="button" onClick={() => setIsRequestModalOpen(false)} className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 text-gray-500 rounded-xl font-bold text-xs hover:bg-gray-200 transition-all">Cancelar</button>
                                     <button type="submit" disabled={isSaving} className="flex-[2] py-3 bg-indigo-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-indigo-700 transition-all active:scale-[0.98]">
                                         {isSaving ? 'Gravando...' : 'Finalizar solicitação'}
                                     </button>
@@ -1348,6 +1282,72 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                             )}
                         </div>
                     </form>
+                </Modal>
+            )}
+
+            {isNFModalOpen && requestToEdit && (
+                <Modal title="Efetivar compra - nota fiscal" onClose={() => { setIsNFModalOpen(false); setRequestToEdit(null); }} maxWidth="max-w-lg">
+                    <form onSubmit={handleConfirmFinalization} className="space-y-6">
+                        <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-800">
+                            <p className="text-[11px] font-bold text-indigo-600 mb-2">Item recebido</p>
+                            <p className="font-bold text-gray-900 dark:text-white">{requestToEdit.itemName} - {requestToEdit.quantity} {requestToEdit.unit}</p>
+                        </div>
+                        <div className="space-y-4">
+                            <div>
+                                <label className={labelSentenceClass}>Número da nota fiscal (nf-e)</label>
+                                <input required type="text" placeholder="000.000.000" value={nfForm.invoiceNumber} onChange={e => setNfForm({...nfForm, invoiceNumber: e.target.value})} className={editableFieldClass} />
+                            </div>
+                            <div>
+                                <label className={labelSentenceClass}>Chave de acesso da nota fiscal (44 dígitos)</label>
+                                <input type="text" placeholder="0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000" maxLength={44} value={nfForm.invoiceKey} onChange={e => setNfForm({...nfForm, invoiceKey: e.target.value.replace(/\D/g, '')})} className={editableFieldClass.replace('font-bold', 'font-mono')} />
+                            </div>
+                            <div>
+                                <label className={labelSentenceClass}>Valor total dos itens (R$)</label>
+                                <input required type="number" step="0.01" placeholder="0,00" value={nfForm.totalValue || ''} onChange={e => setNfForm({...nfForm, totalValue: parseFloat(e.target.value) || 0})} className={editableFieldClass.replace('text-gray-800', 'text-indigo-600')} />
+                            </div>
+                            <div>
+                                <label className={labelSentenceClass}>Anexar arquivo da nota fiscal</label>
+                                <div className="flex items-center justify-center w-full">
+                                    <label className={`flex flex-col items-center justify-center w-full min-h-[120px] border-4 border-dashed rounded-2xl cursor-pointer transition-colors ${nfForm.invoiceFile ? 'border-green-400 bg-green-50 dark:bg-green-900/20' : 'border-indigo-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 hover:bg-indigo-50'}`}>
+                                        <div className="flex flex-col items-center justify-center pt-5 pb-6 px-4 text-center">
+                                            {nfForm.invoiceFile ? (
+                                                <>
+                                                    <CheckCircleIcon className="w-10 h-10 text-green-500 mb-2" />
+                                                    <p className="text-sm text-green-700 dark:text-green-400 font-bold truncate max-w-full">Arquivo carregado: {nfForm.invoiceFileName}</p>
+                                                    <p className="text-[10px] text-green-600 dark:text-green-500 font-medium mt-1">Clique para substituir</p>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <UploadIcon className="w-10 h-10 text-indigo-400 mb-2" />
+                                                    <p className="text-sm text-gray-500 dark:text-gray-400 font-bold">Clique para selecionar ou arraste o pdf/imagem</p>
+                                                </>
+                                            )}
+                                        </div>
+                                        <input type="file" className="hidden" onChange={handleNFFileUpload} accept=".pdf,image/*" />
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex gap-4 pt-4">
+                            <button type="button" onClick={() => { setIsNFModalOpen(false); setRequestToEdit(null); }} className="flex-1 py-4 bg-gray-100 rounded-2xl font-bold text-sm">Cancelar</button>
+                            <button type="submit" disabled={isSaving || !nfForm.invoiceNumber} className="flex-1 py-4 bg-green-600 text-white rounded-2xl font-bold text-sm shadow-lg hover:bg-green-700 transition-all active:scale-95 disabled:opacity-50">{isSaving ? 'Gravando...' : 'Confirmar e finalizar'}</button>
+                        </div>
+                    </form>
+                </Modal>
+            )}
+
+            {isConfirmStatusModalOpen && (
+                <Modal title="Confirmar ação" onClose={() => { setIsConfirmStatusModalOpen(false); setConfirmRequest(null); setNextStatus(null); }} maxWidth="max-w-sm">
+                    <div className="text-center p-4 space-y-6">
+                        <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-indigo-50 text-indigo-600">
+                            <ExclamationTriangleIcon className="w-10 h-10" />
+                        </div>
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">Deseja efetivar essa ação?</h3>
+                        <div className="flex gap-4">
+                            <button onClick={() => { setIsConfirmStatusModalOpen(false); setConfirmRequest(null); setNextStatus(null); }} className="flex-1 py-3 bg-gray-100 rounded-xl font-bold text-sm">Não</button>
+                            <button onClick={handleUpdateStatus} disabled={isSaving} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20">{isSaving ? '...' : 'Sim'}</button>
+                        </div>
+                    </div>
                 </Modal>
             )}
         </div>
