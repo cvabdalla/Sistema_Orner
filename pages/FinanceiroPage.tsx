@@ -47,21 +47,34 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
 
     const ADMIN_PROFILE_ID = '001';
 
+    // Hook para gerenciar as datas automáticas por aba
     useEffect(() => {
         if (view !== 'dre' && view !== 'bancos') {
-            const date = new Date();
-            const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
-            const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth();
+            
             const formatDate = (d: Date) => {
-                const year = d.getFullYear();
-                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
                 const day = String(d.getDate()).padStart(2, '0');
-                return `${year}-${month}-${day}`;
+                return `${y}-${m}-${day}`;
             };
-            setStartDate(formatDate(firstDay));
-            setEndDate(formatDate(lastDay));
+
+            const lastDayOfMonth = new Date(year, month + 1, 0);
+
+            if (activeTab === 'visaoGeral') {
+                // Início do ano até fim do mês vigente
+                setStartDate(`${year}-01-01`);
+                setEndDate(formatDate(lastDayOfMonth));
+            } else {
+                // Início do mês vigente até fim do mês vigente
+                const firstDayOfMonth = new Date(year, month, 1);
+                setStartDate(formatDate(firstDayOfMonth));
+                setEndDate(formatDate(lastDayOfMonth));
+            }
         }
-    }, [view]);
+    }, [view, activeTab]);
 
     useEffect(() => {
         if (view === 'dre') {
@@ -242,33 +255,21 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
         }
     };
 
-    // Função auxiliar para sincronizar o status do relatório com base nos pagamentos financeiros
     const syncReportStatus = async (txId: string, relatedReportId?: string) => {
-        // Tenta descobrir o ID do relatório por prefixo ou campo explícito
         const reportId = relatedReportId || (txId.startsWith('tx-reemb-') ? txId.replace('tx-reemb-', '') : null);
-        
         if (!reportId) return;
-
         try {
             const allReports = await dataService.getAll<ExpenseReport>('expense_reports');
             const report = allReports.find(r => r.id === reportId);
-            
             if (!report) return;
-
-            // Para faturamentos técnicos (Instalação/Lavagem), o relatório pode ter vários itens no financeiro
             if (report.isInstallmentWash) {
                 const allTxs = await dataService.getAll<FinancialTransaction>('financial_transactions');
                 const relatedTxs = allTxs.filter(t => t.relatedReportId === reportId);
-                
-                // Um relatório de instalação/lavagem só vira "Pago" se TODOS os seus itens no financeiro forem pagos
-                // (Exceto o que acabamos de marcar como pago, que pode não estar refletido no getAll ainda)
                 const allPaid = relatedTxs.every(t => t.id === txId || t.status === 'pago');
-                
                 if (allPaid) {
                     await dataService.save('expense_reports', { ...report, status: 'Pago' });
                 }
             } else {
-                // Para reembolsos RD padrão (1 relatório = 1 transação gerada)
                 await dataService.save('expense_reports', { ...report, status: 'Pago' });
             }
         } catch (e) {
@@ -284,20 +285,15 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
                 status, 
                 paymentDate: status === 'pago' ? new Date().toISOString().split('T')[0] : undefined 
             };
-            
-            // Atualiza localmente primeiro para UX rápida
             setTransactions(prev => prev.map(t => t.id === id ? updatedTx : t));
-            
             try {
                 await dataService.save('financial_transactions', updatedTx);
-                
-                // Se o status mudou para PAGO, sincroniza com o módulo de reembolsos
                 if (status === 'pago') {
                     await syncReportStatus(id, tx.relatedReportId);
                 }
             } catch (e) {
                 console.error("Erro ao atualizar status:", e);
-                loadData(); // Reverte em caso de erro
+                loadData(); 
             }
         }
     };
