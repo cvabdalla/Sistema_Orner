@@ -6,7 +6,8 @@ import {
     CheckCircleIcon, DollarIcon, ExclamationTriangleIcon, 
     DocumentReportIcon, XCircleIcon, LockClosedIcon,
     ArrowLeftIcon, EyeIcon, CalendarIcon, TableIcon, FilterIcon, UsersIcon, ChevronDownIcon,
-    UploadIcon, PhotographIcon, ClockIcon, SearchIcon, TrendUpIcon, SparklesIcon, TruckIcon, ArrowDownIcon
+    UploadIcon, PhotographIcon, ClockIcon, SearchIcon, TrendUpIcon, SparklesIcon, TruckIcon, ArrowDownIcon,
+    WrenchIcon
 } from '../assets/icons';
 import Modal from '../components/Modal';
 import DashboardCard from '../components/DashboardCard';
@@ -19,7 +20,7 @@ import type { RelatoriosPageProps, ExpenseReportItem, ExpenseReport, ExpenseRepo
 import { dataService } from '../services/dataService';
 import { supabase } from '../supabaseClient';
 
-const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#0ea5e9', '#14b8a6'];
 
 const FormLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5 tracking-tight">{children}</label>
@@ -128,9 +129,22 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
 
   useEffect(() => { 
     loadReports(); loadConfig(); loadSuppliers();
-    const date = new Date();
-    setFilterStart(new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0]);
-    setFilterEnd(new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0]);
+    
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    
+    setFilterStart(`${year}-01-01`);
+    
+    const lastDayOfMonth = new Date(year, month + 1, 0);
+    const formatDate = (d: Date) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    };
+    setFilterEnd(formatDate(lastDayOfMonth));
+
     const handleClickOutside = (event: MouseEvent) => {
         if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) setIsUserDropdownOpen(false);
     };
@@ -221,23 +235,59 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
     });
     const paid = filtered.filter(r => r.status === 'Pago').reduce((acc, r) => acc + (r.totalValue || 0), 0);
     const pending = filtered.filter(r => r.status === 'Transferido' || r.status === 'Env. p/ Pagamento').reduce((acc, r) => acc + (r.totalValue || 0), 0);
-    let tk=0, tt=0, tf=0, tc=0, to=0;
+    
+    let tk=0, tt=0, tf=0, tc=0, to=0, tInst=0, tWash=0;
+    
     filtered.forEach(r => { 
         if (r.status === 'Pago') { 
             r.items.forEach(item => {
-                tk += Math.ceil(((item.km || 0) * (r.kmValueUsed || 1.20)) * 100) / 100;
-                tt += (item.toll || 0); tf += (item.food || 0);
-                tc += (item.components || 0); to += (item.others || 0);
+                if (r.isInstallmentWash) {
+                    const desc = (item.description || '').toLowerCase();
+                    if (desc.includes('lavag')) {
+                        tWash += (item.others || 0);
+                    } else {
+                        tInst += (item.others || 0);
+                    }
+                } else {
+                    tk += Math.ceil(((item.km || 0) * (r.kmValueUsed || 1.20)) * 100) / 100;
+                    tt += (item.toll || 0); 
+                    tf += (item.food || 0);
+                    tc += (item.components || 0); 
+                    to += (item.others || 0);
+                }
             });
         } 
     });
-    const pieData = [{name:'Km',value:tk},{name:'Pedágios',value:tt},{name:'Alim.',value:tf},{name:'Comp.',value:tc},{name:'Outros',value:to}].filter(d => d.value > 0);
+
+    const pieData = [
+        { name: 'Km', value: tk },
+        { name: 'Pedágios', value: tt },
+        { name: 'Alimentação', value: tf },
+        { name: 'Componentes', value: tc },
+        { name: 'Instalação', value: tInst },
+        { name: 'Lavagem', value: tWash },
+        { name: 'Outros', value: to }
+    ].filter(d => d.value > 0);
+
     const monthlyGroups: Record<string, number> = {};
     filtered.filter(r => r.status === 'Pago').forEach(r => {
         const month = new Date(r.createdAt).toLocaleString('pt-BR', { month: 'short', year: '2-digit' });
         monthlyGroups[month] = (monthlyGroups[month] || 0) + r.totalValue;
     });
-    return { paid, pending, filteredReports: filtered, totalKmValue: tk, totalTollValue: tt, totalFoodValue: tf, totalComponentsValue: tc, totalOthersValue: to, pieData, barData: Object.entries(monthlyGroups).map(([name, value]) => ({ name, value })) };
+
+    return { 
+        paid, pending, 
+        filteredReports: filtered, 
+        totalKmValue: tk, 
+        totalTollValue: tt, 
+        totalFoodValue: tf, 
+        totalComponentsValue: tc, 
+        totalOthersValue: to, 
+        totalInstValue: tInst,
+        totalWashValue: tWash,
+        pieData, 
+        barData: Object.entries(monthlyGroups).map(([name, value]) => ({ name, value })) 
+    };
   }, [reports, filterStart, filterEnd, selectedUserFilter]);
 
   const validateItemsDates = (reportItems: ExpenseReportItem[]): boolean => {
@@ -273,7 +323,7 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
         
         if (reportInAction.isInstallmentWash) {
             const txIds = reportInAction.items.map(i => i.id);
-            const { data: targetTxs } = await supabase.from('financial_transactions').select('*').in('id', txIds);
+            const { data: targetTxs } = await supabase.from('financial_transactions').select('*').in('id', txIds.length > 0 ? txIds : []);
             
             if (targetTxs) {
                 for (const tx of targetTxs) {
@@ -340,7 +390,7 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
           
           if (reportInAction.isInstallmentWash) {
               const txIds = reportInAction.items.map(i => i.id);
-              const { data: targetTxs } = await supabase.from('financial_transactions').select('*').in('id', txIds);
+              const { data: targetTxs } = await supabase.from('financial_transactions').select('*').in('id', txIds.length > 0 ? txIds : []);
               if (targetTxs) {
                   for (const tx of targetTxs) {
                       try { await dataService.save('financial_transactions', { ...tx, invoiceSent: false, relatedReportId: null }); } catch (e) { /* silent */ }
@@ -511,7 +561,7 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
                         </div>
                     </div>
 
-                    <div className="bg-gray-50 dark:bg-gray-900/40 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 flex flex-col">
+                    <div className="bg-gray-50 dark:bg-gray-900/40 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 space-y-4 flex flex-col">
                         <SectionTitle color="bg-amber-500">Fornecedores de Kits</SectionTitle>
                         <div className="flex gap-2 mb-4">
                             <input type="text" placeholder="Nome do fornecedor..." value={newSupplierName} onChange={e => setNewSupplierName(e.target.value)} className="flex-1 rounded-lg border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/20" />
@@ -530,8 +580,8 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
                                         <>
                                             <span className="text-[11px] font-bold text-gray-700 dark:text-gray-200">{sup.name}</span>
                                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button onClick={() => handleEditSupplierClick(sup)} className="p-1 text-gray-400 hover:text-indigo-600"><EditIcon className="w-3.5 h-3.5" /></button>
-                                                <button onClick={() => handleDeleteSupplier(sup.id)} className="p-1 text-gray-400 hover:text-red-600"><TrashIcon className="w-3.5 h-3.5" /></button>
+                                                <button onClick={() => handleEditSupplierClick(sup)} className="p-1 text-gray-400 hover:text-indigo-600 transition-colors"><EditIcon className="w-4 h-4" /></button>
+                                                <button onClick={() => handleDeleteSupplier(sup.id)} className="p-1 text-gray-400 hover:text-red-600 transition-colors"><TrashIcon className="w-4 h-4" /></button>
                                             </div>
                                         </>
                                     )}
@@ -581,12 +631,16 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
               </div>
               <button onClick={() => window.print()} className="flex items-center gap-2 px-6 py-2.5 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-black transition-all shadow-lg active:scale-95"><PrinterIcon className="w-4 h-4" /> Imprimir relatório</button>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              <DashboardCard title="Reembolsos pagos" value={formatCurrency(analysisData.paid)} icon={CheckCircleIcon} color="bg-green-500" />
-              <DashboardCard title="Em aprovação" value={formatCurrency(analysisData.pending)} icon={ClockIcon} color="bg-indigo-500" />
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              <DashboardCard title="Reembolsos Pagos" value={formatCurrency(analysisData.paid)} icon={CheckCircleIcon} color="bg-green-500" />
+              <DashboardCard title="Em Aprovação" value={formatCurrency(analysisData.pending)} icon={ClockIcon} color="bg-indigo-500" />
               <DashboardCard title="Total em km" value={formatCurrency(analysisData.totalKmValue)} icon={TrendUpIcon} color="bg-blue-500" />
-              <DashboardCard title="Total pedágio" value={formatCurrency(analysisData.totalTollValue)} icon={DollarIcon} color="bg-purple-500" />
+              <DashboardCard title="Total Pedágio" value={formatCurrency(analysisData.totalTollValue)} icon={DollarIcon} color="bg-purple-500" />
+              <DashboardCard title="Total Instalação" value={formatCurrency(analysisData.totalInstValue)} icon={WrenchIcon} color="bg-amber-500" />
+              <DashboardCard title="Total Lavagem" value={formatCurrency(analysisData.totalWashValue)} icon={SparklesIcon} color="bg-cyan-500" />
           </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 h-[400px] flex flex-col">
                   <SectionTitle color="bg-indigo-500">Distribuição por categoria (pagas)</SectionTitle>
@@ -637,7 +691,7 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
                   <table className="w-full text-left">
                     <thead className="bg-gray-50/50 dark:bg-gray-900/40 text-[10px] font-bold text-gray-400 tracking-tight border-b dark:border-gray-700">
                       <tr>
-                        <th className="px-6 py-4">Data</th><th className="px-6 py-4">Solicitante</th><th className="px-6 py-4">Origem</th><th className="px-6 py-4 text-right">Valor total</th><th className="px-6 py-4 text-center">Status</th><th className="px-6 py-4 text-center w-48">Ações</th>
+                        <th className="px-6 py-4">Data</th><th className="px-6 py-4">Solicitante</th><th className="px-6 py-4 text-right">Valor total</th><th className="px-6 py-4 text-center">Status</th><th className="px-6 py-4 text-center w-48">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -650,7 +704,6 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
                           <tr key={report.id} className="hover:bg-indigo-50/30 dark:hover:bg-indigo-900/10 transition-colors">
                             <td className="px-6 py-4 text-[11px] font-bold text-gray-600 dark:text-gray-400">{new Date(report.createdAt).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
                             <td className="px-6 py-4 text-xs font-black text-gray-800 dark:text-white">{report.requester}</td>
-                            <td className="px-6 py-4">{report.isInstallmentWash ? <span className="flex items-center gap-1.5 px-2 py-1 bg-cyan-50 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300 rounded-lg text-[9px] font-black border border-cyan-100 dark:border-cyan-800"><SparklesIcon className="w-3 h-3" /> Instalação/Lavagem</span> : <span className="flex items-center gap-1.5 px-2 py-1 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 rounded-lg text-[9px] font-black border border-indigo-100 dark:border-indigo-800"><DocumentReportIcon className="w-3 h-3" /> Reembolso</span>}</td>
                             <td className="px-6 py-4 text-right text-xs font-black text-indigo-600 dark:text-indigo-400">{formatCurrency(report.totalValue)}</td>
                             <td className="px-6 py-4 text-center"><span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black ${report.status === 'Pago' ? 'bg-green-100 text-green-700' : report.status === 'Transferido' ? 'bg-blue-100 text-blue-700' : report.status === 'Env. p/ Pagamento' ? 'bg-orange-100 text-orange-700' : report.status === 'Cancelado' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{report.status}</span></td>
                             <td className="px-6 py-4 text-center">
