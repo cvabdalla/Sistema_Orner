@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import DashboardPage from './pages/DashboardPage';
@@ -37,6 +37,9 @@ const App: React.FC = () => {
   const [companyLogo, setCompanyLogo] = useState<string | null>(null);
 
   const ADMIN_PROFILE_ID = '001';
+  const IDLE_TIMEOUT = 30 * 60 * 1000; // 30 minutos em milissegundos
+  // Fix: use ReturnType<typeof setTimeout> instead of NodeJS.Timeout to avoid namespace error in browser environments
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchCompanyLogo = async () => {
     try {
@@ -49,6 +52,51 @@ const App: React.FC = () => {
       console.warn("Erro ao carregar logo da empresa:", e);
     }
   };
+
+  const handleLogout = useCallback(() => {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      authService.logout();
+      setCurrentUser(null);
+      setUserPermissions([]);
+      setHasGlobalView(false);
+      setCurrentPage('DASHBOARD');
+  }, []);
+
+  const resetIdleTimer = useCallback(() => {
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    
+    // Só ativa o timer se houver um usuário logado
+    if (currentUser) {
+        idleTimerRef.current = setTimeout(() => {
+            console.log("Sessão expirada por inatividade.");
+            handleLogout();
+            alert("Sua sessão expirou por inatividade. Por favor, entre novamente.");
+        }, IDLE_TIMEOUT);
+    }
+  }, [currentUser, handleLogout]);
+
+  // Efeito para monitorar atividade do usuário
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    
+    const handleActivity = () => resetIdleTimer();
+
+    events.forEach(event => {
+        window.addEventListener(event, handleActivity);
+    });
+
+    // Inicia o timer pela primeira vez ao logar
+    resetIdleTimer();
+
+    return () => {
+        events.forEach(event => {
+            window.removeEventListener(event, handleActivity);
+        });
+        if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    };
+  }, [currentUser, resetIdleTimer]);
 
   useEffect(() => {
     if (currentUser?.darkMode) {
@@ -100,14 +148,6 @@ const App: React.FC = () => {
   const handleLoginSuccess = (user: User) => {
       setCurrentUser(user);
       fetchPermissions(user.profileId);
-  };
-
-  const handleLogout = () => {
-      authService.logout();
-      setCurrentUser(null);
-      setUserPermissions([]);
-      setHasGlobalView(false);
-      setCurrentPage('DASHBOARD');
   };
 
   const handleSetCurrentPage = (page: Page) => {
@@ -173,7 +213,6 @@ const App: React.FC = () => {
       case 'DASHBOARD': return <DashboardPage />;
       case 'ORCAMENTO': return <OrcamentoPage setCurrentPage={handleSetCurrentPage} onEdit={handleEditOrcamento} currentUser={currentUser} hasGlobalView={hasGlobalView} />;
       case 'NOVO_ORCAMENTO': return <NovoOrcamentoPage setCurrentPage={handleSetCurrentPage} orcamentoToEdit={editingOrcamento} clearEditingOrcamento={() => setEditingOrcamento(null)} currentUser={currentUser} />;
-      /* Fix: ResumoVendasPage does not accept hasGlobalView prop */
       case 'RESUMO_VENDAS': return <ResumoVendasPage currentUser={currentUser} />;
       case 'FINANCEIRO_VISAO_GERAL': return <FinanceiroPage view="dashboard" currentUser={currentUser} hasGlobalView={hasGlobalView} />;
       case 'FINANCEIRO_DRE': return <FinanceiroPage view="dre" currentUser={currentUser} hasGlobalView={hasGlobalView} />;
@@ -190,12 +229,10 @@ const App: React.FC = () => {
       case 'RELATORIOS_NOVO': return <RelatoriosPage view="reembolso" reportToEdit={editingReport} onSave={handleSaveReport} currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
       case 'RELATORIOS_STATUS': return <RelatoriosPage view="status" onEditReport={handleEditReport} currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
       case 'RELATORIOS_HISTORICO': return <RelatoriosPage view="historico" onEditReport={handleEditReport} currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
-      /* Fix: RelatoriosPage requires userPermissions prop even in config view */
       case 'RELATORIOS_CONFIG': return <RelatoriosPage view="config" currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} onLogoUpdated={fetchCompanyLogo} />;
       case 'INSTALACAO_LAVAGEM_SOLIC': return <InstalacaoLavagemPage currentUser={currentUser} reportToEdit={editingReport} onSave={handleSaveReport} hasGlobalView={hasGlobalView} />;
       case 'INSTALACOES_CALENDARIO': return <InstalacoesPage currentUser={currentUser} hasGlobalView={hasGlobalView} />;
       case 'INSTALACOES_CADASTRO': return <InstalacoesCadastroPage currentUser={currentUser} />;
-      /* Fix: LavagemPage does not accept hasGlobalView prop */
       case 'INSTALACOES_LAVAGEM': return <LavagemPage currentUser={currentUser} />;
       case 'USUARIOS_GESTAO': return <UsuariosPage view="gestao" currentUser={currentUser} />;
       case 'USUARIOS_PERFIL': return <UsuariosPage view="perfil" currentUser={currentUser} />;
