@@ -74,16 +74,24 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
     loadData();
 
     const date = new Date();
-    const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
-    const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    
+    // Primeiro dia do ano vigente (Janeiro é mês 0)
+    const firstDayOfYear = new Date(year, 0, 1);
+    
+    // Último dia do mês vigente
+    const lastDayOfMonth = new Date(year, month + 1, 0);
+
     const formatDate = (d: Date) => {
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
+        return `${y}-${m}-${day}`;
     };
-    setStartDate(formatDate(firstDay));
-    setEndDate(formatDate(lastDay));
+    
+    setStartDate(formatDate(firstDayOfYear));
+    setEndDate(formatDate(lastDayOfMonth));
 
     const handleClickOutside = (event: MouseEvent) => {
         if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
@@ -329,7 +337,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
 
                 {isAdminUser && (
                     <div className="relative w-full lg:w-48" ref={userDropdownRef}>
-                        <button onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)} className="flex items-center justify-between w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 p-2 rounded-lg text-sm font-semibold text-gray-700 dark:text-gray-200 transition-all hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                        <button onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)} className="flex items-center justify-between w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 p-2 rounded-lg text-sm font-semibold text-gray-700 dark:text-gray-200 transition-all hover:bg-gray-100 dark:hover:bg-gray-700/50">
                             <div className="flex items-center gap-2 truncate"><UsersIcon className="w-4 h-4 text-gray-400" /><span>{selectedUsers.length === 0 ? 'Usuário' : `${selectedUsers.length} sel.`}</span></div>
                             <ChevronDownIcon className={`w-4 h-4 transition-transform ${isUserDropdownOpen ? 'rotate-180' : ''}`} />
                         </button>
@@ -337,7 +345,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                             <div className="absolute top-full left-0 mt-2 w-full bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 z-50 animate-fade-in py-2 max-h-64 overflow-y-auto custom-scrollbar">
                                 <p className="px-4 py-1.5 text-[9px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 dark:border-gray-700 mb-1">Vendedor / Admin</p>
                                 {users.map(user => (
-                                    <label key={user.id} className="flex items-center px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-900/40 cursor-pointer group transition-colors">
+                                    <label key={user.id} className="flex items-center px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer group transition-colors">
                                         <input type="checkbox" className="hidden" checked={selectedUsers.includes(String(user.id))} onChange={() => toggleUserFilter(String(user.id))} />
                                         <div className={`w-4.5 h-4.5 rounded border mr-3 flex items-center justify-center transition-all ${selectedUsers.includes(String(user.id)) ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300'}`}>{selectedUsers.includes(String(user.id)) && <CheckCircleIcon className="w-3.5 h-3.5 text-white" />}</div>
                                         <span className={`text-xs font-bold ${selectedUsers.includes(String(user.id)) ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-600 dark:text-gray-300'}`}>{user.name}</span>
