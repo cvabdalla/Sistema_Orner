@@ -544,7 +544,7 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                                     const packageColor = info.pkg?.color || '#94a3b8';
                                     const percent = info.washQtyLimit > 0 ? (info.executedCount / info.washQtyLimit) * 100 : 0;
                                     const isFinished = client.package_id && info.executedCount >= info.washQtyLimit && info.washQtyLimit > 0;
-                                    const hasOverdue = info.allScheduled.some(r => r.date < (new Date().toISOString().split('T')[0]));
+                                    const hasOverdue = info.allScheduled.some((r: any) => r.date < (new Date().toISOString().split('T')[0]));
                                     
                                     // Cores para os status de ação necessária baseados no tempo
                                     const statusColors: Record<string, string> = {
@@ -609,7 +609,7 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                                                             </div>
                                                         </div>
                                                         <div className="p-3 grid grid-cols-3 gap-1.5 max-h-[220px] overflow-y-auto custom-scrollbar">
-                                                            {info.allScheduled.map((record, idx) => (
+                                                            {info.allScheduled.map((record: any, idx: number) => (
                                                                 <div key={record.id} className={`relative bg-white/10 hover:bg-white/20 p-1.5 rounded-lg border transition-all flex flex-col items-center justify-center text-center gap-1 ${idx === 0 ? 'border-white border-2 scale-105 shadow-md' : 'border-white/10'}`}>
                                                                     <p className="text-[9px] font-black leading-none">{new Date(record.date).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</p>
                                                                     <div className="flex items-center gap-1 mt-0.5"><button onClick={() => { setPendingAction({ type: 'execute', record: record }); setIsConfirmActionModalOpen(true); }} className="p-0.5 bg-white text-indigo-600 rounded-md shadow-sm hover:scale-110 transition-all" style={{ color: packageColor }}><CheckCircleIcon className="w-3.5 h-3.5" /></button><button onClick={() => { setPendingAction({ type: 'update', record: record }); setEditWashValue({ date: record.date, status: record.status }); setIsEditWashDateModalOpen(true); }} className="p-0.5 bg-black/20 text-white rounded-md hover:scale-110 transition-all"><EditIcon className="w-3.5 h-3.5" /></button></div>

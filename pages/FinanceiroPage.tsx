@@ -305,7 +305,7 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
             name: data.name,
             type: data.type,
             classification: data.classification || (data.type === 'receita' ? 'RECEITA_VENDA' : 'DESPESA_OPERACIONAL'),
-            group: data.group,
+            group: data.group || 'Geral',
             showInDre: data.showInDre ?? true,
             active: data.active ?? true
         };

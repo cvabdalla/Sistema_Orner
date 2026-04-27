@@ -180,9 +180,9 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                       };
 
                       const extraCosts = 
-                          saleItem.visitaTecnica + saleItem.homologation + saleItem.installation + 
-                          saleItem.travelCost + saleItem.adequationCost + saleItem.materialCost + 
-                          saleItem.invoicedTax + saleItem.commission + saleItem.bankFees;
+                          (saleItem.visitaTecnica ?? 0) + (saleItem.homologation ?? 0) + (saleItem.installation ?? 0) + 
+                          (saleItem.travelCost ?? 0) + (saleItem.adequationCost ?? 0) + (saleItem.materialCost ?? 0) + 
+                          (saleItem.invoicedTax ?? 0) + (saleItem.commission ?? 0) + (saleItem.bankFees ?? 0);
 
                       saleItem.totalCost = extraCosts;
                       saleItem.netProfit = saleItem.closedValue - saleItem.systemCost - extraCosts;

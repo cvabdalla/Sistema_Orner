@@ -92,8 +92,20 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
         });
     }, [transactions, statusFilter, cards]);
 
-    const totalExibido = useMemo(() => {
-        return processedTransactions.reduce((acc, curr) => acc + curr.amount, 0);
+    const stats = useMemo(() => {
+        return processedTransactions.reduce((acc, curr) => {
+            acc.total += curr.amount;
+            if (curr.status === 'pago') {
+                acc.pago += curr.amount;
+            } else if (curr.status !== 'cancelado') {
+                acc.pendente += curr.amount;
+            }
+            return acc;
+        }, { total: 0, pago: 0, pendente: 0 });
+    }, [processedTransactions]);
+
+    const isReceita = useMemo(() => {
+        return processedTransactions.length > 0 && processedTransactions.some(t => t.type === 'receita');
     }, [processedTransactions]);
     
     const getCategoryName = (categoryId: string) => {
@@ -114,38 +126,65 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
 
     return (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden flex flex-col">
-            <div className="p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-gray-50 dark:border-gray-700">
+            <div className="p-6 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 border-b border-gray-50 dark:border-gray-700">
                 <div className="flex items-center gap-4">
                     <h3 className="text-xl font-bold text-gray-900 dark:text-white">{title}</h3>
                 </div>
                 
-                <div className="flex flex-1 justify-end items-center gap-4">
-                    <div className="hidden lg:flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/30 px-4 py-2 rounded-xl border border-indigo-100 dark:border-indigo-800 shadow-sm mr-44">
-                        <DollarIcon className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                        <div className="flex flex-col">
-                            <span className="text-[9px] font-bold text-gray-400 leading-none mb-0.5">Total exibido</span>
-                            <span className="text-sm font-black text-indigo-700 dark:text-indigo-300 leading-none">
-                                {formatCurrency(totalExibido)}
-                            </span>
+                <div className="flex flex-1 flex-col sm:flex-row justify-end items-start sm:items-center gap-4 w-full">
+                    {/* Desktop/Tablet Stats */}
+                    <div className="hidden md:flex items-center gap-3">
+                        <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1.5 rounded-xl border border-emerald-100 dark:border-emerald-800 shadow-sm">
+                            <div className="flex flex-col">
+                                <span className="text-[8px] font-black text-emerald-600 dark:text-emerald-400 uppercase leading-none mb-0.5">{isReceita ? 'Já Recebido' : 'Já Pago'}</span>
+                                <span className="text-[13px] font-black text-emerald-700 dark:text-emerald-300 tracking-tight leading-none">
+                                    {formatCurrency(stats.pago)}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/20 px-3 py-1.5 rounded-xl border border-amber-100 dark:border-amber-800 shadow-sm">
+                            <div className="flex flex-col">
+                                <span className="text-[8px] font-black text-amber-600 dark:text-amber-400 uppercase leading-none mb-0.5">Em Aberto</span>
+                                <span className="text-[13px] font-black text-amber-700 dark:text-amber-300 tracking-tight leading-none">
+                                    {formatCurrency(stats.pendente)}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 rounded-xl border border-indigo-100 dark:border-indigo-800 shadow-sm mr-4">
+                            <div className="flex flex-col">
+                                <span className="text-[8px] font-black text-indigo-600 dark:text-indigo-400 uppercase leading-none mb-0.5">Total</span>
+                                <span className="text-[13px] font-black text-indigo-700 dark:text-indigo-300 tracking-tight leading-none">
+                                    {formatCurrency(stats.total)}
+                                </span>
+                            </div>
                         </div>
                     </div>
 
-                    <div className="lg:hidden flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/30 px-4 py-2 rounded-xl border border-indigo-100 dark:border-indigo-800 shadow-sm">
-                        <div className="flex flex-col">
-                            <span className="text-[9px] font-bold text-gray-400 leading-none mb-0.5">Total exibido</span>
-                            <span className="text-xs font-black text-indigo-700 dark:text-indigo-300 leading-none">
-                                {formatCurrency(totalExibido)}
-                            </span>
+                    {/* Mobile Stats */}
+                    <div className="md:hidden grid grid-cols-3 gap-2 w-full">
+                        <div className="bg-emerald-50 dark:bg-emerald-900/20 p-2 rounded-lg border border-emerald-100 dark:border-emerald-800">
+                             <span className="text-[7px] font-black text-emerald-600 dark:text-emerald-400 block uppercase mb-1">{isReceita ? 'Recebido' : 'Pago'}</span>
+                             <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 block">{formatCurrency(stats.pago)}</span>
+                        </div>
+                        <div className="bg-amber-50 dark:bg-amber-900/20 p-2 rounded-lg border border-amber-100 dark:border-amber-800">
+                             <span className="text-[7px] font-black text-amber-600 dark:text-amber-400 block uppercase mb-1">Aberto</span>
+                             <span className="text-[10px] font-black text-amber-700 dark:text-amber-300 block">{formatCurrency(stats.pendente)}</span>
+                        </div>
+                        <div className="bg-indigo-50 dark:bg-indigo-900/30 p-2 rounded-lg border border-indigo-100 dark:border-indigo-800">
+                             <span className="text-[7px] font-black text-indigo-600 dark:text-indigo-400 block uppercase mb-1">Total</span>
+                             <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 block">{formatCurrency(stats.total)}</span>
                         </div>
                     </div>
 
                     {!isCancelledView && (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 ml-auto sm:ml-0">
                             <FilterIcon className="text-gray-500 dark:text-gray-400 w-4 h-4" />
                             <select
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value as any)}
-                                className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-[11px] font-bold rounded-lg block p-2 outline-none"
+                                className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-[11px] font-bold rounded-lg block p-2 outline-none shadow-sm"
                             >
                                 <option value="all">Todos os status</option>
                                 <option value="pendente">Pendentes</option>

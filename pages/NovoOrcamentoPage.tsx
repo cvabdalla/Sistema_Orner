@@ -99,7 +99,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                 setVariants([{ id: '1', name: 'Opção 1', isPrincipal: true, formState: newState, calculated: {} }]);
             } else if (formState.terceiroInstalacaoCusto === 120 && !isReadOnly) {
                 // Se for edição de orçamento aberto e o custo ainda é o padrão hardcoded, atualiza para o global
-                setFormState(prev => ({ ...prev, standby: true, terceiroInstalacaoCusto: finalInstCost }));
+                setFormState((prev: any) => ({ ...prev, standby: true, terceiroInstalacaoCusto: finalInstCost }));
             }
         }
         loadInitialData();
@@ -107,12 +107,12 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
 
     const selectedStockTableItems = useMemo(() => {
         const currentDataIds = Object.keys(formState.fixedItemsData || {});
-        return allStockItems.filter(i => currentDataIds.includes(String(i.id)));
+        return allStockItems.filter((i: any) => currentDataIds.includes(String(i.id)));
     }, [allStockItems, formState.fixedItemsData]);
 
     // Novo memo para unificar e ordenar alfabeticamente os itens da tabela
     const combinedSortedItems = useMemo(() => {
-        const fromStock = selectedStockTableItems.map(item => ({
+        const fromStock = selectedStockTableItems.map((item: any) => ({
             ...item,
             id: String(item.id),
             isFromStock: true,
@@ -124,7 +124,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
             }
         }));
 
-        const fromExternal = (formState.offStockItems || []).map(item => ({
+        const fromExternal = (formState.offStockItems || []).map((item: any) => ({
             ...item,
             isFromStock: false
         }));
@@ -134,7 +134,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
 
     const availableStockToAdd = useMemo(() => {
         const currentDataIds = Object.keys(formState.fixedItemsData || {});
-        return allStockItems.filter(i => !currentDataIds.includes(String(i.id)));
+        return allStockItems.filter((i: any) => !currentDataIds.includes(String(i.id)));
     }, [allStockItems, formState.fixedItemsData]);
 
     useEffect(() => {
@@ -233,7 +233,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
 
     const handleOffStockItemChange = (offId: string, field: 'qty' | 'cost' | 'markup', value: any) => {
         if (isReadOnly) return;
-        const updatedOffStockItems = (formState.offStockItems || []).map(item => {
+        const updatedOffStockItems = (formState.offStockItems || []).map((item: any) => {
             if (item.id === offId) {
                 return { ...item, [field]: value };
             }
@@ -288,7 +288,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
 
     const removeOffStockItem = (id: string) => {
         if (isReadOnly) return;
-        const updatedOffStockItems = (formState.offStockItems || []).filter(i => i.id !== id);
+        const updatedOffStockItems = (formState.offStockItems || []).filter((i: any) => i.id !== id);
         const updatedFormState = { ...formState, offStockItems: updatedOffStockItems };
         updateVariantsWithFormState(updatedFormState);
     };
@@ -311,7 +311,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         const valorVendaMaoDeObra = n_maoDeObraGeral;
         const totalInstalacao = n_visitaTecnicaCusto + n_projetoHomologacaoCusto + instalacaoCusto + n_custoViagem + n_adequacaoLocalCusto;
 
-        const totalStockStructure = selectedStockTableItems.reduce((acc, item) => {
+        const totalStockStructure = selectedStockTableItems.reduce((acc: number, item: any) => {
             const itemId = String(item.id);
             const data = (formState.fixedItemsData || {})[itemId] || { 
                 qty: 0, 
@@ -325,7 +325,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
             return acc + (n_qty * effectiveUnitCost);
         }, 0);
 
-        const totalOffStockStructure = (formState.offStockItems || []).reduce((acc, item) => {
+        const totalOffStockStructure = (formState.offStockItems || []).reduce((acc: number, item: any) => {
             const n_qty = parseNumber(item.qty);
             const n_cost = parseNumber(item.cost);
             const n_markup = parseNumber(item.markup);
@@ -405,7 +405,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         const instalacaoCusto = n_terceiroInstalacaoQtd * n_terceiroInstalacaoCusto;
         const totalInstalacaoParcial = n_visitaTecnicaCusto + n_projetoHomologacaoCusto + instalacaoCusto + n_custoViagem + n_adequacaoLocalCusto;
         
-        const totalStockStructure = selectedStockTableItems.reduce((acc, item) => {
+        const totalStockStructure = selectedStockTableItems.reduce((acc: number, item: any) => {
             const data = (formState.fixedItemsData || {})[String(item.id)] || { qty: 0, cost: item.averagePrice || 0, markup: 0 };
             const n_qty = parseNumber(data.qty);
             const n_cost = parseNumber(data.cost);
@@ -414,7 +414,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
             return acc + (n_qty * effectiveUnitCost);
         }, 0);
 
-        const totalOffStockStructure = (formState.offStockItems || []).reduce((acc, item) => {
+        const totalOffStockStructure = (formState.offStockItems || []).reduce((acc: number, item: any) => {
             const n_qty = parseNumber(item.qty);
             const n_cost = parseNumber(item.cost);
             const n_markup = parseNumber(item.markup);
@@ -461,7 +461,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
 
         const totalInstalacao = n_visitaTecnicaCusto + n_projetoHomologacaoCusto + (n_terceiroInstalacaoQtd * n_terceiroInstalacaoCusto) + n_custoViagem + n_adequacaoLocalCusto;
         
-        const totalStockStructure = selectedStockTableItems.reduce((acc, item) => {
+        const totalStockStructure = selectedStockTableItems.reduce((acc: number, item: any) => {
             const data = (formState.fixedItemsData || {})[String(item.id)] || { qty: 0, cost: item.averagePrice || 0, markup: 0 };
             const n_qty = parseNumber(data.qty);
             const n_cost = parseNumber(data.cost);
@@ -470,7 +470,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
             return acc + (n_qty * effectiveUnitCost);
         }, 0);
 
-        const totalOffStockStructure = (formState.offStockItems || []).reduce((acc, item) => {
+        const totalOffStockStructure = (formState.offStockItems || []).reduce((acc: number, item: any) => {
             const n_qty = parseNumber(item.qty);
             const n_cost = parseNumber(item.cost);
             const n_markup = parseNumber(item.markup);

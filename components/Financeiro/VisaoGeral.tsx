@@ -39,21 +39,35 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, allTransactions, 
     
     const metrics = useMemo(() => {
         const activeTxs = transactions.filter(t => t.status !== 'cancelado');
+        
+        // A Receber
+        const receitasPagas = activeTxs.filter(t => t.type === 'receita' && t.status === 'pago').reduce((sum, t) => sum + t.amount, 0);
         const aReceberPendente = activeTxs.filter(t => t.type === 'receita' && t.status === 'pendente').reduce((sum, t) => sum + t.amount, 0);
+        const totalReceber = receitasPagas + aReceberPendente;
+
+        // A Pagar
+        const despesasPagas = activeTxs.filter(t => t.type === 'despesa' && t.status === 'pago').reduce((sum, t) => sum + t.amount, 0);
         const aPagarPendente = activeTxs.filter(t => t.type === 'despesa' && t.status === 'pendente').reduce((sum, t) => sum + t.amount, 0);
+        const totalPagar = despesasPagas + aPagarPendente;
         
         // Saldo inicial de todas as contas ativas
         const totalSaldoInicial = bankAccounts.filter(b => b.active).reduce((sum, b) => sum + (b.initialBalance || 0), 0);
         
-        // Movimentação realizada dentro do filtro de data
-        const receitasPagas = activeTxs.filter(t => t.type === 'receita' && t.status === 'pago').reduce((sum, t) => sum + t.amount, 0);
-        const despesasPagas = activeTxs.filter(t => t.type === 'despesa' && t.status === 'pago').reduce((sum, t) => sum + t.amount, 0);
-        
+        // Saldo Atual
         const saldoAtual = totalSaldoInicial + receitasPagas - despesasPagas;
-        const receitasDoPeriodo = receitasPagas;
-        const despesasDoPeriodo = despesasPagas;
         
-        return { aReceberPendente, aPagarPendente, saldoAtual, receitasDoPeriodo, despesasDoPeriodo, resultadoDoPeriodo: receitasDoPeriodo - despesasDoPeriodo };
+        return { 
+            aReceberPendente, 
+            receitasPagas, 
+            totalReceber,
+            aPagarPendente, 
+            despesasPagas, 
+            totalPagar,
+            saldoAtual, 
+            receitasDoPeriodo: receitasPagas, 
+            despesasDoPeriodo: despesasPagas, 
+            resultadoDoPeriodo: receitasPagas - despesasPagas 
+        };
     }, [transactions, bankAccounts]);
     
     const processList = (type: 'receita' | 'despesa') => {
@@ -166,13 +180,65 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, allTransactions, 
                 </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                <DashboardCard title="A Receber (Pendente)" value={formatCurrency(metrics.aReceberPendente)} icon={ArrowUpIcon} color="bg-green-500" />
-                <DashboardCard title="A Pagar (Pendente)" value={formatCurrency(metrics.aPagarPendente)} icon={ArrowDownIcon} color="bg-red-500" />
-                <DashboardCard title="Saldo em Caixa (Líquido)" value={formatCurrency(metrics.saldoAtual)} icon={DollarIcon} color="bg-blue-600" />
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                {/* A Receber Card */}
+                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-5 border border-gray-100 dark:border-gray-700 hover:shadow-md transition-all duration-300">
+                    <div className="flex items-center space-x-4 mb-4">
+                        <div className="p-3 rounded-xl bg-green-500 shadow-lg shadow-green-500/10">
+                            <ArrowUpIcon className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black text-gray-400 tracking-widest uppercase">A Receber (No Mês)</p>
+                            <p className="text-xl font-black text-gray-900 dark:text-white leading-none">{formatCurrency(metrics.totalReceber)}</p>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 pt-3 border-t border-gray-50 dark:border-gray-700/50">
+                        <div>
+                            <p className="text-[8px] font-bold text-gray-400 uppercase tracking-tight">Já Recebido</p>
+                            <p className="text-[11px] font-black text-green-600 truncate">{formatCurrency(metrics.receitasPagas)}</p>
+                        </div>
+                        <div className="text-center border-x border-gray-100 dark:border-gray-700/50 px-1">
+                            <p className="text-[8px] font-bold text-gray-400 uppercase tracking-tight">Em Aberto</p>
+                            <p className="text-[11px] font-black text-orange-500 truncate">{formatCurrency(metrics.aReceberPendente)}</p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-[8px] font-bold text-gray-400 uppercase tracking-tight">Total</p>
+                            <p className="text-[11px] font-black text-gray-700 dark:text-gray-200 truncate">{formatCurrency(metrics.totalReceber)}</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* A Pagar Card */}
+                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-5 border border-gray-100 dark:border-gray-700 hover:shadow-md transition-all duration-300">
+                    <div className="flex items-center space-x-4 mb-4">
+                        <div className="p-3 rounded-xl bg-red-500 shadow-lg shadow-red-500/10">
+                            <ArrowDownIcon className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black text-gray-400 tracking-widest uppercase">A Pagar (No Mês)</p>
+                            <p className="text-xl font-black text-gray-900 dark:text-white leading-none">{formatCurrency(metrics.totalPagar)}</p>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 pt-3 border-t border-gray-50 dark:border-gray-700/50">
+                        <div>
+                            <p className="text-[8px] font-bold text-gray-400 uppercase tracking-tight">Já Pago</p>
+                            <p className="text-[11px] font-black text-red-600 truncate">{formatCurrency(metrics.despesasPagas)}</p>
+                        </div>
+                        <div className="text-center border-x border-gray-100 dark:border-gray-700/50 px-1">
+                            <p className="text-[8px] font-bold text-gray-400 uppercase tracking-tight">Em Aberto</p>
+                            <p className="text-[11px] font-black text-orange-500 truncate">{formatCurrency(metrics.aPagarPendente)}</p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-[8px] font-bold text-gray-400 uppercase tracking-tight">Total</p>
+                            <p className="text-[11px] font-black text-gray-700 dark:text-gray-200 truncate">{formatCurrency(metrics.totalPagar)}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <DashboardCard title="Saldo em Caixa" value={formatCurrency(metrics.saldoAtual)} icon={DollarIcon} color="bg-blue-600" />
+                <DashboardCard title="Resultado do Período" value={formatCurrency(metrics.resultadoDoPeriodo)} icon={CalendarIcon} color="bg-purple-500" />
                 <DashboardCard title="Receitas Realizadas" value={formatCurrency(metrics.receitasDoPeriodo)} icon={ArrowUpIcon} color="bg-teal-500" />
                 <DashboardCard title="Despesas Realizadas" value={formatCurrency(metrics.despesasDoPeriodo)} icon={ArrowDownIcon} color="bg-orange-500" />
-                <DashboardCard title="Resultado do Período" value={formatCurrency(metrics.resultadoDoPeriodo)} icon={CalendarIcon} color="bg-purple-500" />
             </div>
 
             <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700">
@@ -182,10 +248,28 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, allTransactions, 
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                  <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700">
-                    <h3 className="text-lg font-bold mb-5 text-gray-900 dark:text-white flex items-center gap-2">
-                        <div className="p-1.5 bg-green-100 text-green-600 rounded-lg"><ArrowUpIcon className="w-4 h-4" /></div>
-                        Contas a Receber
-                    </h3>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-5 gap-4">
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 text-nowrap">
+                            <div className="p-1.5 bg-green-100 text-green-600 rounded-lg"><ArrowUpIcon className="w-4 h-4" /></div>
+                            Contas a Receber
+                        </h3>
+                        <div className="flex gap-4 items-center bg-gray-50 dark:bg-gray-700/30 px-3 py-1.5 rounded-lg border border-gray-100 dark:border-gray-700">
+                            <div className="text-center px-1">
+                                <p className="text-[7px] font-bold text-gray-400 uppercase tracking-tighter">Já Recebido</p>
+                                <p className="text-[10px] font-black text-green-600">{formatCurrency(metrics.receitasPagas)}</p>
+                            </div>
+                            <div className="w-px h-6 bg-gray-200 dark:bg-gray-600" />
+                            <div className="text-center px-1">
+                                <p className="text-[7px] font-bold text-gray-400 uppercase tracking-tighter">Em Aberto</p>
+                                <p className="text-[10px] font-black text-orange-500">{formatCurrency(metrics.aReceberPendente)}</p>
+                            </div>
+                            <div className="w-px h-6 bg-gray-200 dark:bg-gray-600" />
+                            <div className="text-center px-1">
+                                <p className="text-[7px] font-bold text-gray-400 uppercase tracking-tighter">Total</p>
+                                <p className="text-[10px] font-black text-gray-700 dark:text-gray-200">{formatCurrency(metrics.totalReceber)}</p>
+                            </div>
+                        </div>
+                    </div>
                     <div className="space-y-2.5">
                         {receitasList.length > 0 ? receitasList.map(t => <RenderItem key={t.id} t={t} />) : (
                             <p className="text-center text-gray-400 py-10 text-xs font-bold italic">Nenhuma receita para exibir.</p>
@@ -194,10 +278,28 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, allTransactions, 
                 </div>
 
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700">
-                    <h3 className="text-lg font-bold mb-5 text-gray-900 dark:text-white flex items-center gap-2">
-                        <div className="p-1.5 bg-red-100 text-red-600 rounded-lg"><ArrowDownIcon className="w-4 h-4" /></div>
-                        Contas a Pagar
-                    </h3>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-5 gap-4">
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 text-nowrap">
+                            <div className="p-1.5 bg-red-100 text-red-600 rounded-lg"><ArrowDownIcon className="w-4 h-4" /></div>
+                            Contas a Pagar
+                        </h3>
+                        <div className="flex gap-4 items-center bg-gray-50 dark:bg-gray-700/30 px-3 py-1.5 rounded-lg border border-gray-100 dark:border-gray-700">
+                            <div className="text-center px-1">
+                                <p className="text-[7px] font-bold text-gray-400 uppercase tracking-tighter">Já Pago</p>
+                                <p className="text-[10px] font-black text-red-600">{formatCurrency(metrics.despesasPagas)}</p>
+                            </div>
+                            <div className="w-px h-6 bg-gray-200 dark:bg-gray-600" />
+                            <div className="text-center px-1">
+                                <p className="text-[7px] font-bold text-gray-400 uppercase tracking-tighter">Em Aberto</p>
+                                <p className="text-[10px] font-black text-orange-500">{formatCurrency(metrics.aPagarPendente)}</p>
+                            </div>
+                            <div className="w-px h-6 bg-gray-200 dark:bg-gray-600" />
+                            <div className="text-center px-1">
+                                <p className="text-[7px] font-bold text-gray-400 uppercase tracking-tighter">Total</p>
+                                <p className="text-[10px] font-black text-gray-700 dark:text-gray-200">{formatCurrency(metrics.totalPagar)}</p>
+                            </div>
+                        </div>
+                    </div>
                     <div className="space-y-2.5">
                         {despesasList.length > 0 ? despesasList.map(t => <RenderItem key={t.id} t={t} />) : (
                             <p className="text-center text-gray-400 py-10 text-xs font-bold italic">Nenhuma despesa para exibir.</p>

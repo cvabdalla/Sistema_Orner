@@ -345,7 +345,7 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
             let category = financialCategories.find(c => c.name === 'Solicitação Pagto RD');
             if (!category) {
                 category = await dataService.save('financial_categories', {
-                    id: `cat-reemb-${Date.now()}`, name: 'Solicitação Pagto RD', type: 'despesa',
+                    id: `cat-reemb-${Date.now()}`, name: 'Solicitação Pagto RD', type: 'despesa' as const,
                     classification: 'DESPESA_OPERACIONAL', group: 'Solicitações Pagto', active: true, showInDre: true
                 });
             }
@@ -359,7 +359,7 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
                 type: 'despesa', 
                 dueDate: dueDate.toISOString().split('T')[0],
                 launchDate: new Date().toISOString().split('T')[0], 
-                categoryId: category.id, 
+                categoryId: category?.id || '', 
                 status: 'pendente',
                 relatedReportId: reportId,
                 invoiceSent: true 

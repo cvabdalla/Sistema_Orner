@@ -224,7 +224,7 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
             endDate: apptForm.endDate!,
             startTime: apptForm.startTime,
             endTime: apptForm.endTime,
-            isAllDay: apptForm.isAllDay,
+            isAllDay: !!apptForm.isAllDay,
             cep: isPersonal ? undefined : apptForm.cep,
             address: isPersonal ? 'Agenda pessoal' : apptForm.address!,
             number: isPersonal ? undefined : apptForm.number,

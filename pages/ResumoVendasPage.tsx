@@ -273,15 +273,15 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                 fmt(item.closedValue),
                 fmt(item.systemCost),
                 item.supplier || 'N/A',
-                fmt(item.visitaTecnica),
-                fmt(item.homologation),
-                fmt(item.installation),
-                fmt(item.travelCost),
-                fmt(item.adequationCost),
-                fmt(item.materialCost),
-                fmt(item.invoicedTax),
-                fmt(item.commission),
-                fmt(item.bankFees),
+                fmt(item.visitaTecnica ?? 0),
+                fmt(item.homologation ?? 0),
+                fmt(item.installation ?? 0),
+                fmt(item.travelCost ?? 0),
+                fmt(item.adequationCost ?? 0),
+                fmt(item.materialCost ?? 0),
+                fmt(item.invoicedTax ?? 0),
+                fmt(item.commission ?? 0),
+                fmt(item.bankFees ?? 0),
                 fmt(item.totalCost),
                 fmt(item.netProfit),
                 fmt(item.finalMargin),
@@ -451,16 +451,16 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                                     <td className={`${tdClass} font-bold text-blue-700 dark:text-blue-400`}>{formatCurrency(item.closedValue)}</td>
                                     <td className={tdClass}>{formatCurrency(item.systemCost)}</td>
                                     <td className={`${tdClass} text-center font-medium text-gray-500`}>{item.supplier || 'N/A'}</td>
-                                    <td className={tdClass}>{formatCurrency(item.visitaTecnica)}</td>
-                                    <td className={tdClass}>{formatCurrency(item.homologation)}</td>
-                                    <td className={tdClass}>{formatCurrency(item.installation)}</td>
-                                    <td className={tdClass}>{formatCurrency(item.travelCost)}</td>
-                                    <td className={tdClass}>{formatCurrency(item.adequationCost)}</td>
-                                    <td className={tdClass}>{formatCurrency(item.materialCost)}</td>
+                                    <td className={tdClass}>{formatCurrency(item.visitaTecnica ?? 0)}</td>
+                                    <td className={tdClass}>{formatCurrency(item.homologation ?? 0)}</td>
+                                    <td className={tdClass}>{formatCurrency(item.installation ?? 0)}</td>
+                                    <td className={tdClass}>{formatCurrency(item.travelCost ?? 0)}</td>
+                                    <td className={tdClass}>{formatCurrency(item.adequationCost ?? 0)}</td>
+                                    <td className={tdClass}>{formatCurrency(item.materialCost ?? 0)}</td>
                                     <td className={`${tdClass} bg-indigo-50/20 dark:bg-indigo-900/10`}>
                                         <EditableCell item={item} field="invoicedTax" />
                                     </td>
-                                    <td className={tdClass}>{formatCurrency(item.commission)}</td>
+                                    <td className={tdClass}>{formatCurrency(item.commission ?? 0)}</td>
                                     <td className={`${tdClass} bg-indigo-50/20 dark:bg-indigo-900/10`}>
                                         <EditableCell item={item} field="bankFees" />
                                     </td>
