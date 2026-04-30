@@ -122,7 +122,8 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
 
     const filteredEntries = useMemo(() => {
         return entries.filter(e => {
-            const matchesSearch = e.clientName.toLowerCase().includes(searchTerm.toLowerCase());
+            const clientName = e.clientName || '';
+            const matchesSearch = clientName.toLowerCase().includes(searchTerm.toLowerCase());
             const isCompleted = e.status === 'Aprovada';
             const matchesTab = activeMainTab === 'concluidas' ? isCompleted : !isCompleted;
             
@@ -486,7 +487,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                                                         )}
                                                     </div>
                                                     <span className="text-[10px] font-black text-indigo-600 tracking-tight">
-                                                        Resp: {toSentenceCase(responsibleUser.name.split(' ')[0])}
+                                                        Resp: {toSentenceCase((responsibleUser.name || '---').split(' ')[0])}
                                                     </span>
                                                 </div>
                                             )}

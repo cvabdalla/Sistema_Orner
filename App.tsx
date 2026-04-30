@@ -106,14 +106,20 @@ const App: React.FC = () => {
     }
   }, [currentUser?.darkMode]);
 
-  const fetchPermissions = async (profileId: string) => {
+  const fetchPermissions = async (user: User) => {
+    const profileId = user.profileId;
+    const isSuperAdminEmail = user.email.toLowerCase() === 'cvabdalla@gmail.com';
+
     try {
       const profiles = await dataService.getAll<UserProfile>('system_profiles', undefined, true);
       let profile = profiles.find(p => String(p.id) === String(profileId));
       
       if (!profile) profile = MOCK_PROFILES.find(p => String(p.id) === String(profileId));
 
-      if (profile) {
+      if (isSuperAdminEmail) {
+          setUserPermissions(['ALL']);
+          setHasGlobalView(true);
+      } else if (profile) {
           setUserPermissions(profile.permissions || []);
           setHasGlobalView(!!profile.hasGlobalView);
       } else if (profileId === ADMIN_PROFILE_ID) {
@@ -125,7 +131,7 @@ const App: React.FC = () => {
       }
     } catch (e) {
       console.warn("Utilizando permissões de fallback devido a erro de conexão.");
-      if (profileId === ADMIN_PROFILE_ID) {
+      if (profileId === ADMIN_PROFILE_ID || isSuperAdminEmail) {
           setUserPermissions(['ALL']);
           setHasGlobalView(true);
       } else {
@@ -139,7 +145,7 @@ const App: React.FC = () => {
     const session = authService.getSession();
     if (session) {
         setCurrentUser(session);
-        fetchPermissions(session.profileId);
+        fetchPermissions(session);
     }
     fetchCompanyLogo();
     setIsUserInitialized(true);
@@ -147,7 +153,7 @@ const App: React.FC = () => {
 
   const handleLoginSuccess = (user: User) => {
       setCurrentUser(user);
-      fetchPermissions(user.profileId);
+      fetchPermissions(user);
   };
 
   const handleSetCurrentPage = (page: Page) => {
