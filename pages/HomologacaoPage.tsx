@@ -62,7 +62,6 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
     const [selectedCheckin, setSelectedCheckin] = useState<ChecklistEntry | null>(null);
     const [hdPhoto, setHdPhoto] = useState<string | null>(null);
 
-    const [isViewOnly, setIsViewOnly] = useState(false);
     const [isSuccessModalOpen, setSuccessModalOpen] = useState(false);
     const [modalMessage, setModalMessage] = useState('');
 
@@ -82,11 +81,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
         setSuccessModalOpen(false);
     };
 
-    const isMasterAdmin = useMemo(() => {
-        const isDefaultAdmin = String(currentUser.profileId) === ADMIN_PROFILE_ID || hasGlobalView || userPermissions.includes('ALL');
-        const isHomologationEmail = currentUser.email.toLowerCase().includes('homologacao') || currentUser.email.toLowerCase() === 'cvabdalla@gmail.com';
-        return isDefaultAdmin || isHomologationEmail;
-    }, [currentUser, hasGlobalView, userPermissions]);
+    const isMasterAdmin = useMemo(() => String(currentUser.profileId) === ADMIN_PROFILE_ID, [currentUser]);
 
     const loadData = async () => {
         setIsLoading(true);
@@ -122,23 +117,18 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
 
     const filteredEntries = useMemo(() => {
         return entries.filter(e => {
-            const clientName = e.clientName || '';
-            const matchesSearch = clientName.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesSearch = e.clientName.toLowerCase().includes(searchTerm.toLowerCase());
             const isCompleted = e.status === 'Aprovada';
             const matchesTab = activeMainTab === 'concluidas' ? isCompleted : !isCompleted;
-            
-            // Permissão: ver se é admin, ou responsável, ou criador do registro
             const isResponsible = e.responsible_user_id === currentUser.id;
-            const isOwner = e.owner_id === currentUser.id;
-            const canSee = isMasterAdmin || isResponsible || isOwner;
+            const canSee = isMasterAdmin || isResponsible;
 
             return matchesSearch && matchesTab && canSee;
         });
     }, [entries, searchTerm, activeMainTab, isMasterAdmin, currentUser.id]);
 
-    const handleEditEntry = (entry: HomologacaoEntry, viewOnly = false) => {
+    const handleEditEntry = (entry: HomologacaoEntry) => {
         setEditingEntryId(entry.id);
-        setIsViewOnly(viewOnly);
         
         const normalizeFile = (f: any): ExpenseAttachment[] => {
             if (!f) return [];
@@ -326,7 +316,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                 <label className="flex flex-col items-center justify-center py-4 px-4 bg-white dark:bg-gray-800 border-2 border-dashed border-indigo-100 dark:border-indigo-900 rounded-2xl cursor-pointer hover:border-indigo-300 hover:bg-indigo-50/20 transition-all group">
                     <UploadIcon className="w-5 h-5 text-indigo-400 group-hover:scale-110 transition-transform" />
                     <span className="text-[9px] font-black text-indigo-600 mt-1.5">Adicionar anexo</span>
-                    {!isViewOnly && <input type="file" className="hidden" accept="image/*,application/pdf" onChange={(e) => handleFileUpload(e, field)} />}
+                    <input type="file" className="hidden" accept="image/*,application/pdf" onChange={(e) => handleFileUpload(e, field)} />
                 </label>
             </div>
         );
@@ -463,11 +453,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                         const documentoFotoFiles = normalize(entry.files?.documentoFoto);
 
                         return (
-                            <div 
-                                key={entry.id} 
-                                onClick={() => handleEditEntry(entry, entry.status === 'Aprovada')}
-                                className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 p-6 shadow-sm hover:shadow-xl transition-all group flex flex-col relative overflow-hidden cursor-pointer active:scale-[0.99]"
-                            >
+                            <div key={entry.id} className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 p-6 shadow-sm hover:shadow-xl transition-all group flex flex-col relative overflow-hidden">
                                 <div className="flex justify-between items-start mb-6">
                                     <div className="space-y-1">
                                         <h4 className="font-black text-gray-800 dark:text-white text-lg leading-tight tracking-tight">{entry.clientName}</h4>
@@ -487,7 +473,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                                                         )}
                                                     </div>
                                                     <span className="text-[10px] font-black text-indigo-600 tracking-tight">
-                                                        Resp: {toSentenceCase((responsibleUser.name || '---').split(' ')[0])}
+                                                        Resp: {toSentenceCase(responsibleUser.name.split(' ')[0])}
                                                     </span>
                                                 </div>
                                             )}
@@ -521,14 +507,16 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                                     </div>
                                 </div>
 
-                                <div className="mt-6 pt-4 border-t border-gray-50 dark:border-gray-700 flex justify-between items-center" onClick={(e) => e.stopPropagation()}>
+                                <div className="mt-6 pt-4 border-t border-gray-50 dark:border-gray-700 flex justify-between items-center">
                                     <div className="flex gap-2">
                                         <button onClick={() => handleDelete(entry.id)} className="p-2 text-gray-300 hover:text-red-500 transition-colors">
                                             <TrashIcon className="w-5 h-5" />
                                         </button>
-                                        <button onClick={() => handleEditEntry(entry, entry.status === 'Aprovada')} className="p-2 text-gray-300 hover:text-indigo-600 transition-colors">
-                                            {entry.status === 'Aprovada' ? <EyeIcon className="w-5 h-5" /> : <EditIcon className="w-4 h-4" />}
-                                        </button>
+                                        {entry.status !== 'Aprovada' && (
+                                            <button onClick={() => handleEditEntry(entry)} className="p-2 text-gray-300 hover:text-indigo-600 transition-colors">
+                                                <EditIcon className="w-4 h-4" />
+                                            </button>
+                                        )}
                                     </div>
                                     {entry.status !== 'Aprovada' && (
                                         <button 
@@ -552,17 +540,16 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
             )}
 
             {isModalOpen && (
-                <Modal title={isViewOnly ? "Visualizar Homologação" : (editingEntryId ? "Editar Homologação" : "Nova Homologação")} onClose={() => { setModalOpen(false); setEditingEntryId(null); setIsViewOnly(false); }} maxWidth="max-w-2xl">
+                <Modal title={editingEntryId ? "Editar Homologação" : "Nova Homologação"} onClose={() => { setModalOpen(false); setEditingEntryId(null); }} maxWidth="max-w-2xl">
                     <form onSubmit={handleSave} className="space-y-4 pt-2 animate-fade-in">
                         <div className="space-y-4">
                             <div>
                                 <FormLabel>Check-in (Projetos Efetivados)</FormLabel>
                                 <select 
                                     required 
-                                    disabled={isViewOnly}
                                     value={form.checkinId} 
                                     onChange={e => handleSelectCheckin(e.target.value)} 
-                                    className="w-full rounded-xl border-2 border-indigo-100 bg-gray-50 dark:bg-gray-800 p-2 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all disabled:opacity-70"
+                                    className="w-full rounded-xl border-2 border-indigo-100 bg-gray-50 dark:bg-gray-800 p-2 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all"
                                 >
                                     <option value="">Selecione...</option>
                                     {checkins.filter(c => c.status === 'Efetivado' || c.status === 'Finalizado').map(c => (
@@ -575,10 +562,9 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                                 <input 
                                     required
                                     type="text"
-                                    disabled={isViewOnly}
                                     value={form.clientName}
                                     onChange={e => setForm({...form, clientName: e.target.value})}
-                                    className="w-full rounded-xl border-2 border-indigo-50 bg-gray-50 dark:bg-gray-900 p-2 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm transition-all disabled:opacity-70"
+                                    className="w-full rounded-xl border-2 border-indigo-50 bg-gray-50 dark:bg-gray-900 p-2 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm transition-all"
                                 />
                             </div>
                             <div>
@@ -590,13 +576,12 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                                             <button
                                                 key={u.id}
                                                 type="button"
-                                                disabled={isViewOnly}
                                                 onClick={() => setForm(prev => ({ ...prev, responsible_user_id: u.id }))}
-                                                className={`relative flex items-center gap-2 p-2 rounded-xl border-2 transition-all active:scale-95 disabled:cursor-default ${
+                                                className={`relative flex items-center gap-2 p-2 rounded-xl border-2 transition-all active:scale-95 ${
                                                     isSelected 
                                                         ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 shadow-md scale-[1.02]' 
                                                         : 'border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800 hover:border-indigo-200'
-                                                } ${isViewOnly && !isSelected ? 'opacity-40 grayscale-[0.5]' : ''}`}
+                                                }`}
                                             >
                                                 {isSelected && (
                                                     <div className="absolute -top-1.5 -right-1.5 bg-indigo-600 text-white rounded-full p-0.5 shadow-sm z-10">
@@ -622,19 +607,6 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                             </div>
                         </div>
 
-                        <div className="space-y-4">
-                            <div>
-                                <FormLabel>Observações</FormLabel>
-                                <textarea 
-                                    disabled={isViewOnly}
-                                    value={form.observations || ''}
-                                    onChange={e => setForm({...form, observations: e.target.value})}
-                                    className="w-full rounded-xl border-2 border-indigo-50 bg-gray-50 dark:bg-gray-900 p-2 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm transition-all disabled:opacity-70 min-h-[80px]"
-                                    placeholder="Observações adicionais sobre o processo..."
-                                />
-                            </div>
-                        </div>
-
                         <div className="bg-indigo-50/50 dark:bg-indigo-900/10 p-3 rounded-2xl border border-indigo-100 dark:border-indigo-800 flex items-start gap-2">
                             <ExclamationTriangleIcon className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
                             <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight font-bold">Anexos ilegíveis causam reprovação imediata na concessionária.</p>
@@ -656,18 +628,14 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                         </div>
 
                         <div className="flex gap-3 pt-4 border-t dark:border-gray-700">
-                            <button type="button" onClick={() => { setModalOpen(false); setEditingEntryId(null); setIsViewOnly(false); }} className="flex-1 py-3 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-300 rounded-xl font-bold text-xs">
-                                {isViewOnly ? 'Fechar' : 'Cancelar'}
+                            <button type="button" onClick={() => { setModalOpen(false); setEditingEntryId(null); }} className="flex-1 py-3 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-300 rounded-xl font-bold text-xs">Cancelar</button>
+                            <button 
+                                type="submit" 
+                                disabled={isSaving || !form.checkinId || !form.clientName || !form.responsible_user_id} 
+                                className="flex-[2] py-3 bg-indigo-600 text-white rounded-xl font-black text-xs shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 active:scale-95 disabled:opacity-50"
+                            >
+                                {isSaving ? 'Gravando...' : editingEntryId ? 'Salvar' : 'Iniciar'}
                             </button>
-                            {!isViewOnly && (
-                                <button 
-                                    type="submit" 
-                                    disabled={isSaving || !form.checkinId || !form.clientName || !form.responsible_user_id} 
-                                    className="flex-[2] py-3 bg-indigo-600 text-white rounded-xl font-black text-xs shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 active:scale-95 disabled:opacity-50"
-                                >
-                                    {isSaving ? 'Gravando...' : editingEntryId ? 'Salvar' : 'Iniciar'}
-                                </button>
-                            )}
                         </div>
                     </form>
                 </Modal>
