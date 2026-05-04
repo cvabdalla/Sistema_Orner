@@ -95,6 +95,7 @@ class SupabaseDataService implements IDataService {
                 'homologacao_entries'
             ];
 
+            // Se for admin, não filtra. Se não for admin e tiver userId em coleção privada, filtra.
             if (!isAdmin && userId && privateCollections.includes(collection)) {
                 // Caso especial para homologação: o responsável também deve ver o card
                 if (collection === 'homologacao_entries') {
@@ -107,6 +108,14 @@ class SupabaseDataService implements IDataService {
             const { data, error } = await query;
             
             if (error) {
+                console.error(`[DB ERROR] Erro ao carregar ${collection}:`, error.message, error.details);
+                if (error.code === 'PGRST116') {
+                    // Item não encontrado - comum em .single()
+                    return [];
+                }
+                if (error.message.includes('JWT') || error.code === '401' || error.message.includes('key')) {
+                    console.error(`[CRITICAL] Problema de autenticação com o Supabase detectado ao carregar ${collection}.`);
+                }
                 return this.getLocal<T>(collection);
             }
 
@@ -117,6 +126,7 @@ class SupabaseDataService implements IDataService {
             return (data as T[]) || [];
 
         } catch (e: any) {
+            console.error(`[RUNTIME ERROR] Erro inesperado ao carregar ${collection}:`, e.message);
             return this.getLocal<T>(collection);
         }
     }

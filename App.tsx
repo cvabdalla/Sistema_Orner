@@ -22,6 +22,7 @@ import { LockClosedIcon, ExclamationTriangleIcon } from './assets/icons';
 import type { Page, SavedOrcamento, ExpenseReport, User, UserProfile } from './types';
 import { dataService } from './services/dataService';
 import { authService } from './services/authService';
+import { testSupabaseConnection } from './supabaseClient';
 import { MOCK_PROFILES } from './constants';
 
 const App: React.FC = () => {
@@ -34,9 +35,10 @@ const App: React.FC = () => {
   const [userPermissions, setUserPermissions] = useState<string[]>([]);
   const [hasGlobalView, setHasGlobalView] = useState(false);
   const [isUserInitialized, setIsUserInitialized] = useState(false);
+  const [dbError, setDbError] = useState<string | null>(null);
   const [companyLogo, setCompanyLogo] = useState<string | null>(null);
 
-  const ADMIN_PROFILE_ID = '001';
+  const ADMIN_PROFILE_IDS = ['001', '00000000-0000-0000-0000-000000000001'];
   const IDLE_TIMEOUT = 30 * 60 * 1000; // 30 minutos em milissegundos
   // Fix: use ReturnType<typeof setTimeout> instead of NodeJS.Timeout to avoid namespace error in browser environments
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -106,17 +108,23 @@ const App: React.FC = () => {
     }
   }, [currentUser?.darkMode]);
 
-  const fetchPermissions = async (profileId: string) => {
+  const fetchPermissions = async (user: User) => {
+    const profileId = user.profileId;
+    const isSuperAdminEmail = user.email.toLowerCase() === 'cvabdalla@gmail.com';
+
     try {
       const profiles = await dataService.getAll<UserProfile>('system_profiles', undefined, true);
       let profile = profiles.find(p => String(p.id) === String(profileId));
       
       if (!profile) profile = MOCK_PROFILES.find(p => String(p.id) === String(profileId));
 
-      if (profile) {
+      if (isSuperAdminEmail) {
+          setUserPermissions(['ALL']);
+          setHasGlobalView(true);
+      } else if (profile) {
           setUserPermissions(profile.permissions || []);
           setHasGlobalView(!!profile.hasGlobalView);
-      } else if (profileId === ADMIN_PROFILE_ID) {
+      } else if (ADMIN_PROFILE_IDS.includes(String(profileId))) {
           setUserPermissions(['ALL']);
           setHasGlobalView(true);
       } else {
@@ -125,7 +133,7 @@ const App: React.FC = () => {
       }
     } catch (e) {
       console.warn("Utilizando permissões de fallback devido a erro de conexão.");
-      if (profileId === ADMIN_PROFILE_ID) {
+      if (ADMIN_PROFILE_IDS.includes(String(profileId)) || isSuperAdminEmail) {
           setUserPermissions(['ALL']);
           setHasGlobalView(true);
       } else {
@@ -136,25 +144,63 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    const session = authService.getSession();
-    if (session) {
-        setCurrentUser(session);
-        fetchPermissions(session.profileId);
-    }
-    fetchCompanyLogo();
-    setIsUserInitialized(true);
-  }, []);
+    const init = async () => {
+      console.log("[INIT] Iniciando sistema...");
+      const startTime = Date.now();
+      
+      try {
+        console.log("[INIT] Testando conexão com Supabase...");
+        const conn = await testSupabaseConnection();
+        if (!conn.ok) {
+            setDbError(`Falha na conexão com o Supabase. Verifique se o projeto está ativo e se as chaves em supabaseClient.ts estão corretas.`);
+        }
+
+        const session = authService.getSession();
+        if (session) {
+            console.log("[INIT] Sessão encontrada para:", session.email, "Perfil:", session.profileId);
+            setCurrentUser(session);
+            await fetchPermissions(session);
+        } else {
+            console.log("[INIT] Nenhuma sessão ativa.");
+        }
+        
+        console.log("[INIT] Carregando logo da empresa...");
+        await fetchCompanyLogo();
+        
+      } catch (error) {
+        console.error("[INIT ERROR] Erro fatal durante a inicialização:", error);
+      } finally {
+        const duration = Date.now() - startTime;
+        console.log(`[INIT] Inicialização concluída em ${duration}ms`);
+        setIsUserInitialized(true);
+      }
+    };
+    init();
+    
+    // Timeout de segurança: 10 segundos para inicializar ou libera a tela
+    const timer = setTimeout(() => {
+      setIsUserInitialized((current) => {
+        if (!current) {
+          console.warn("[INIT TIMEOUT] O carregamento está demorando muito. Liberando UI...");
+          return true;
+        }
+        return current;
+      });
+    }, 10000);
+    
+    return () => clearTimeout(timer);
+  }, [handleLogout]);
 
   const handleLoginSuccess = (user: User) => {
       setCurrentUser(user);
-      fetchPermissions(user.profileId);
+      fetchPermissions(user);
   };
 
   const handleSetCurrentPage = (page: Page) => {
     if (page !== 'NOVO_ORCAMENTO') setEditingOrcamento(null);
     if (page !== 'RELATORIOS_NOVO' && page !== 'INSTALACAO_LAVAGEM_SOLIC') setEditingReport(null);
     setCurrentPage(page);
-  }
+  };
 
   const handleEditOrcamento = (orcamento: SavedOrcamento) => {
     setEditingOrcamento(orcamento);
@@ -240,7 +286,42 @@ const App: React.FC = () => {
     }
   };
 
-  if (!isUserInitialized) return null;
+  if (!isUserInitialized) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center flex-col gap-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        <p className="text-gray-500 font-medium animate-pulse">Iniciando sistema...</p>
+      </div>
+    );
+  }
+
+  if (dbError && !currentUser) {
+    return (
+        <div className="min-h-screen bg-red-50 flex items-center justify-center p-4">
+            <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border border-red-100 text-center">
+                <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                </div>
+                <h2 className="text-xl font-bold text-gray-800 mb-2">Erro de Conexão</h2>
+                <p className="text-gray-600 mb-6 text-sm">
+                    Não foi possível conectar ao banco de dados. {dbError}
+                </p>
+                <button 
+                    onClick={() => window.location.reload()}
+                    className="w-full bg-gray-800 text-white rounded-xl py-3 font-bold hover:bg-gray-700 transition-colors"
+                >
+                    Tentar Novamente
+                </button>
+                <p className="mt-4 text-[10px] text-gray-400">
+                    Se o problema persistir, revise o arquivo <b>supabaseClient.ts</b>
+                </p>
+            </div>
+        </div>
+    );
+  }
+
   if (!currentUser) return <LoginPage onLoginSuccess={handleLoginSuccess} companyLogo={companyLogo} />;
 
   return (

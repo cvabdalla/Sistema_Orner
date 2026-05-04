@@ -18,6 +18,12 @@ class AuthService {
                 .single();
 
             if (error || !data) {
+                if (error) {
+                    console.error("[AUTH ERROR] Erro na requisição ao Supabase:", error.message, error.details);
+                    if (error.code === '401' || error.message.includes('JWT') || error.message.includes('key')) {
+                        throw new Error(`Erro de autenticação com o banco: Verifique se a Anon Key do Supabase no arquivo supabaseClient.ts está correta. (Erro: ${error.message})`);
+                    }
+                }
                 return null;
             }
 

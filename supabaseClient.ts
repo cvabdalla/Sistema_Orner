@@ -1,10 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = 'https://cisfqeaojyklgqgybzyq.supabase.co';
+const supabaseAnonKey = 'sb_publishable_CAf0jiXLUEm7xzmPc3QIOw_cK--MAEW';
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn("Supabase URL ou Anon Key não estão configurados nas variáveis de ambiente (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY).");
-}
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
+export const testSupabaseConnection = async () => {
+    try {
+        const { error } = await supabase.from('system_configs').select('id').limit(1);
+        if (error) return { ok: false, error };
+        return { ok: true };
+    } catch (err) {
+        return { ok: false, error: err };
+    }
+};
