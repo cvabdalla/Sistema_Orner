@@ -3,6 +3,8 @@ import { supabase } from '../supabaseClient';
 
 interface IDataService {
     getAll<T>(collection: string, userId?: string, isAdmin?: boolean): Promise<T[]>;
+    getPartial<T>(collection: string, fields: string, userId?: string, isAdmin?: boolean): Promise<T[]>;
+    getById<T>(collection: string, id: string | number): Promise<T | null>;
     save<T extends { id: string | number }>(collection: string, item: T): Promise<T>;
     saveAll<T extends { id: string | number }>(collection: string, items: T[]): Promise<T[]>;
     delete(collection: string, id: string | number): Promise<boolean>;
@@ -72,6 +74,61 @@ class SupabaseDataService implements IDataService {
             } else {
                 console.error(`Erro ao salvar cache de ${collection}:`, e);
             }
+        }
+    }
+
+    async getById<T>(collection: string, id: string | number): Promise<T | null> {
+        try {
+            const { data, error } = await supabase
+                .from(collection)
+                .select('*')
+                .eq('id', id)
+                .single();
+            
+            if (error) throw error;
+            return data as T;
+        } catch (e: any) {
+            console.error(`[DB ERROR] Erro ao buscar ${collection}:${id}:`, e.message);
+            // Tenta no cache se falhar
+            const local = this.getLocal<any>(collection);
+            return local.find(i => String(i.id) === String(id)) || null;
+        }
+    }
+
+    async getPartial<T>(collection: string, fields: string, userId?: string, isAdmin?: boolean): Promise<T[]> {
+        try {
+            let query = supabase.from(collection).select(fields);
+            
+            const privateCollections = [
+                'orcamentos', 
+                'financial_transactions', 
+                'expense_reports', 
+                'purchase_requests', 
+                'sales_summary',
+                'lavagem_clients',
+                'lavagem_packages',
+                'lavagem_records',
+                'checklist_checkin',
+                'checklist_checkout',
+                'checklist_manutencao',
+                'suppliers',
+                'homologacao_entries'
+            ];
+
+            if (!isAdmin && userId && privateCollections.includes(collection)) {
+                if (collection === 'homologacao_entries') {
+                    query = query.or(`owner_id.eq.${userId},responsible_user_id.eq.${userId}`);
+                } else {
+                    query = query.eq('owner_id', userId);
+                }
+            }
+
+            const { data, error } = await query;
+            if (error) throw error;
+            return (data as T[]) || [];
+        } catch (e: any) {
+            console.error(`[DB ERROR] Erro parcial carregar ${collection}:`, e.message);
+            return this.getLocal<T>(collection);
         }
     }
 

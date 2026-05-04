@@ -261,11 +261,14 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
         setIsLoading(true);
         const currentTable = getTableName(view);
         try {
+            // Buscamos apenas os campos necessários para a listagem (sem o campo 'details' que tem as imagens pesadas)
+            const listFields = 'id, owner_id, project, responsible, date, status';
+            
             const results = await Promise.allSettled([
-                dataService.getAll<any>(currentTable, currentUser.id, isAdmin),
+                dataService.getPartial<any>(currentTable, listFields, currentUser.id, isAdmin),
                 dataService.getAll<StockItem>('stock_items', currentUser.id, true),
                 dataService.getAll<SavedOrcamento>('orcamentos', currentUser.id, isAdmin),
-                dataService.getAll<any>('checklist_checkin', currentUser.id, isAdmin)
+                dataService.getPartial<any>('checklist_checkin', listFields, currentUser.id, isAdmin)
             ]);
             
             const rawCurrent = results[0].status === 'fulfilled' ? (results[0].value as any[]) : [];
@@ -275,8 +278,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
             
             const processedCurrent = rawCurrent.map(item => ({ ...item, type: view }));
             const processedAllCheckins = rawAllCheckins.map(item => ({ ...item, type: 'checkin' }));
-
-            // Alterado para ordenação alfabética por projeto/cliente conforme solicitado
+            
             setEntries(processedCurrent.sort((a, b) => (a.project || '').localeCompare(b.project || '')));
             setStockItems(rawStock.sort((a:any, b:any) => a.name.localeCompare(b.name)));
             setOrcamentos(rawOrcamentos);
@@ -364,27 +366,55 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
         fetchCidades();
     }, [form.estado, activeFormType]);
 
-    const handleEdit = (entry: ChecklistEntry) => {
-        setEditingEntryId(entry.id);
-        setIsViewOnly(false);
-        setForm({ ...entry.details });
-        setActiveFormType(entry.type);
-        setActiveStep(1);
-        setModalOpen(true);
+    const handleEdit = async (entry: ChecklistEntry) => {
+        setIsLoading(true);
+        try {
+            const fullEntry = await dataService.getById<ChecklistEntry>(getTableName(entry.type), entry.id);
+            if (!fullEntry) throw new Error("Dados não encontrados");
+            
+            setEditingEntryId(entry.id);
+            setIsViewOnly(false);
+            setForm({ ...(fullEntry.details || {}) });
+            setActiveFormType(entry.type);
+            setActiveStep(1);
+            setModalOpen(true);
+        } catch (error) {
+            alert("Erro ao carregar detalhes do registro.");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
-    const handleView = (entry: ChecklistEntry) => {
-        setEditingEntryId(entry.id);
-        setIsViewOnly(true);
-        setForm({ ...(entry.details || {}) });
-        setActiveFormType(entry.type);
-        setActiveStep(1);
-        setModalOpen(true);
+    const handleView = async (entry: ChecklistEntry) => {
+        setIsLoading(true);
+        try {
+            const fullEntry = await dataService.getById<ChecklistEntry>(getTableName(entry.type), entry.id);
+            if (!fullEntry) throw new Error("Dados não encontrados");
+
+            setEditingEntryId(entry.id);
+            setIsViewOnly(true);
+            setForm({ ...(fullEntry.details || {}) });
+            setActiveFormType(entry.type);
+            setActiveStep(1);
+            setModalOpen(true);
+        } catch (error) {
+            alert("Erro ao carregar detalhes do registro.");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
-    const handleOpenStatus = (entry: ChecklistEntry) => {
-        setStatusTargetEntry(entry);
-        setStatusModalOpen(true);
+    const handleOpenStatus = async (entry: ChecklistEntry) => {
+        setIsLoading(true);
+        try {
+            const fullEntry = await dataService.getById<ChecklistEntry>(getTableName(entry.type), entry.id);
+            setStatusTargetEntry(fullEntry);
+            setStatusModalOpen(true);
+        } catch (error) {
+            alert("Erro ao abrir controle de status.");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const processStockDeduction = async (targetEntry: ChecklistEntry) => {

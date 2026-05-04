@@ -92,10 +92,13 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
     const loadData = async () => {
         setIsLoading(true);
         try {
+            // Buscamos apenas os campos necessários para a listagem principal
+            const homoFields = 'id, owner_id, responsible_user_id, clientName, date, status, checkinId, observations';
+            
             const [homoData, checkinData, userData, profileData] = await Promise.all([
-                dataService.getAll<HomologacaoEntry>('homologacao_entries', currentUser.id, isMasterAdmin),
-                dataService.getAll<ChecklistEntry>('checklist_checkin', undefined, true), 
-                dataService.getAll<User>('system_users', undefined, true),
+                dataService.getPartial<HomologacaoEntry>('homologacao_entries', homoFields, currentUser.id, isMasterAdmin),
+                dataService.getPartial<ChecklistEntry>('checklist_checkin', 'id, project, status', undefined, true), 
+                dataService.getPartial<User>('system_users', 'id, name, avatar, profileId', undefined, true),
                 dataService.getAll<UserProfile>('system_profiles', undefined, true)
             ]);
 
@@ -140,29 +143,39 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
         });
     }, [entries, searchTerm, activeMainTab, isMasterAdmin, currentUser.id]);
 
-    const handleEditEntry = (entry: HomologacaoEntry, viewOnly = false) => {
+    const handleEditEntry = async (entry: HomologacaoEntry, viewOnly = false) => {
         if (!entry) return;
-        setEditingEntryId(entry.id);
-        setIsViewOnly(viewOnly);
-        
-        const normalizeFile = (f: any): ExpenseAttachment[] => {
-            if (!f) return [];
-            return Array.isArray(f) ? f : [f];
-        };
+        setIsLoading(true);
+        try {
+            const fullEntry = await dataService.getById<HomologacaoEntry>('homologacao_entries', entry.id);
+            if (!fullEntry) throw new Error("Registro não encontrado");
 
-        setForm({
-            checkinId: entry.checkinId || '',
-            clientName: entry.clientName || '',
-            responsible_user_id: entry.responsible_user_id || '',
-            status: entry.status || 'Em Análise',
-            files: {
-                procuracao: normalizeFile(entry.files?.procuracao),
-                contaEnergia: normalizeFile(entry.files?.contaEnergia),
-                documentoFoto: normalizeFile(entry.files?.documentoFoto)
-            },
-            observations: entry.observations || ''
-        });
-        setModalOpen(true);
+            setEditingEntryId(entry.id);
+            setIsViewOnly(viewOnly);
+            
+            const normalizeFile = (f: any): ExpenseAttachment[] => {
+                if (!f) return [];
+                return Array.isArray(f) ? f : [f];
+            };
+
+            setForm({
+                checkinId: fullEntry.checkinId || '',
+                clientName: fullEntry.clientName || '',
+                responsible_user_id: fullEntry.responsible_user_id || '',
+                status: fullEntry.status || 'Em Análise',
+                files: {
+                    procuracao: normalizeFile(fullEntry.files?.procuracao),
+                    contaEnergia: normalizeFile(fullEntry.files?.contaEnergia),
+                    documentoFoto: normalizeFile(fullEntry.files?.documentoFoto)
+                },
+                observations: fullEntry.observations || ''
+            });
+            setModalOpen(true);
+        } catch (error) {
+            alert("Erro ao carregar detalhes da homologação.");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, field: keyof HomologacaoEntry['files']) => {
@@ -250,7 +263,11 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
         if (!entryToFinalize) return;
         setIsSaving(true);
         try {
-            await dataService.save('homologacao_entries', { ...entryToFinalize, status: 'Aprovada' });
+            // Buscamos o objeto completo primeiro para não perder os arquivos após o upsert
+            const fullEntry = await dataService.getById<HomologacaoEntry>('homologacao_entries', entryToFinalize.id);
+            if (fullEntry) {
+                await dataService.save('homologacao_entries', { ...fullEntry, status: 'Aprovada' });
+            }
             setModalMessage("Processo concluído com sucesso!");
             setSuccessModalOpen(true);
             await loadData();
@@ -273,14 +290,22 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
         }
     };
 
-    const handleViewCheckin = (checkinId: string) => {
-        const checkin = checkins.find(c => String(c.id) === String(checkinId));
-        if (checkin) {
-            setSelectedCheckin(checkin);
-            setActiveCheckinStep(1);
-            setViewCheckinModalOpen(true);
-        } else {
-            alert("Dados técnicos do Check-in não encontrados ou indisponíveis.");
+    const handleViewCheckin = async (checkinId: string) => {
+        setIsLoading(true);
+        try {
+            // Buscamos o checkin completo apenas sob demanda
+            const checkin = await dataService.getById<ChecklistEntry>('checklist_checkin', checkinId);
+            if (checkin) {
+                setSelectedCheckin(checkin);
+                setActiveCheckinStep(1);
+                setViewCheckinModalOpen(true);
+            } else {
+                alert("Dados técnicos do Check-in não encontrados ou indisponíveis.");
+            }
+        } catch (error) {
+            alert("Erro ao carregar dados do Check-in.");
+        } finally {
+            setIsLoading(false);
         }
     };
 
