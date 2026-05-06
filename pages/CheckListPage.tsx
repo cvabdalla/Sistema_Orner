@@ -289,6 +289,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
     useEffect(() => {
         setActiveFormType(view);
         setForm(getInitialForm(view));
+        setStatusFilter('Aberto');
         loadData();
     }, [view, loadData]);
 

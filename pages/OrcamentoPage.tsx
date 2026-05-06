@@ -35,15 +35,13 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
   const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
   const [orcamentoToDeleteId, setOrcamentoToDeleteId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<string>('Em Aberto');
   
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedStatuses, setSelectedStatuses] = useState<OrcamentoStatus[]>([]);
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   
-  const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   
-  const statusDropdownRef = useRef<HTMLDivElement>(null);
   const userDropdownRef = useRef<HTMLDivElement>(null);
   
   const [startDate, setStartDate] = useState('');
@@ -94,9 +92,6 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
     setEndDate(formatDate(lastDayOfMonth));
 
     const handleClickOutside = (event: MouseEvent) => {
-        if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
-            setIsStatusDropdownOpen(false);
-        }
         if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
             setIsUserDropdownOpen(false);
         }
@@ -104,14 +99,6 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [currentUser, isAdminUser]);
-
-  const toggleStatus = (status: OrcamentoStatus) => {
-    setSelectedStatuses(prev => 
-        prev.includes(status) 
-            ? prev.filter(s => s !== status) 
-            : [...prev, status]
-    );
-  };
 
   const toggleUserFilter = (userId: string) => {
     setSelectedUsers(prev => 
@@ -275,8 +262,12 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
       const f = orcamentos.filter(orc => {
           const d = getDisplayData(orc);
           const s = orc.status || 'Em Aberto';
+          
           if (searchTerm && !d.clientName.toLowerCase().includes(searchTerm.toLowerCase())) return false;
-          if (selectedStatuses.length > 0 && !selectedStatuses.includes(s)) return false;
+          
+          // Filtro por Aba
+          if (activeTab !== 'Todos' && s !== activeTab) return false;
+          
           if (selectedUsers.length > 0 && !selectedUsers.includes(String(orc.owner_id))) return false;
           if (startDate && d.dataOrcamento < startDate) return false;
           if (endDate && d.dataOrcamento > endDate) return false;
@@ -292,7 +283,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
       });
 
       return { filteredOrcamentos: f, totalVendaFiltrado: v, totalLucroFiltrado: l };
-  }, [orcamentos, searchTerm, selectedStatuses, selectedUsers, startDate, endDate, users]);
+  }, [orcamentos, searchTerm, activeTab, selectedUsers, startDate, endDate, users]);
 
   if (isLoading) return <div className="flex justify-center p-20"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
 
@@ -311,55 +302,73 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                 </button>
             </div>
 
-            <div className="flex flex-col lg:flex-row gap-4 mb-6 bg-gray-50 dark:bg-gray-700/30 p-4 rounded-xl border border-gray-100 dark:border-gray-600">
-                <div className="flex-1">
-                    <input type="text" placeholder="Buscar cliente..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full p-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm dark:bg-gray-800 outline-none focus:ring-2 focus:ring-indigo-500/20" />
+            <div className="flex flex-col gap-4 mb-6">
+                {/* Abas de Status */}
+                <div className="bg-white dark:bg-gray-800 p-2 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-wrap gap-1">
+                    {[
+                        { id: 'Em Aberto', label: 'Em Aberto', color: 'indigo' },
+                        { id: 'Aprovado', label: 'Aprovados', color: 'green' },
+                        { id: 'Finalizado', label: 'Finalizados', color: 'purple' },
+                        { id: 'Parado', label: 'Parados', color: 'orange' },
+                        { id: 'Perdido', label: 'Perdidos', color: 'red' },
+                        { id: 'Todos', label: 'Todos', color: 'gray' }
+                    ].map((tab) => {
+                        const count = orcamentos.filter(o => tab.id === 'Todos' || (o.status || 'Em Aberto') === tab.id).length;
+                        const isActive = activeTab === tab.id;
+                        
+                        return (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                                    isActive 
+                                    ? `bg-${tab.color}-600 text-white shadow-md` 
+                                    : 'bg-transparent text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                }`}
+                            >
+                                {tab.label}
+                                <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${
+                                    isActive ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'
+                                }`}>
+                                    {count}
+                                </span>
+                            </button>
+                        );
+                    })}
                 </div>
-                
-                <div className="relative w-full lg:w-48" ref={statusDropdownRef}>
-                    <button onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)} className="flex items-center justify-between w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 p-2 rounded-lg text-sm font-semibold text-gray-700 dark:text-gray-200 transition-all hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                        <div className="flex items-center gap-2 truncate"><FilterIcon className="w-4 h-4 text-gray-400" /><span>{selectedStatuses.length === 0 ? 'Status' : `${selectedStatuses.length} sel.`}</span></div>
-                        <ChevronDownIcon className={`w-4 h-4 transition-transform ${isStatusDropdownOpen ? 'rotate-180' : ''}`} />
-                    </button>
-                    {isStatusDropdownOpen && (
-                        <div className="absolute top-full left-0 mt-2 w-full bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 z-50 animate-fade-in py-2 max-h-64 overflow-y-auto custom-scrollbar">
-                            <p className="px-4 py-1.5 text-[9px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 dark:border-gray-700 mb-1">Situação</p>
-                            {STATUS_OPTIONS.map(status => (
-                                <label key={status} className="flex items-center px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-900/40 cursor-pointer group transition-colors">
-                                    <input type="checkbox" className="hidden" checked={selectedStatuses.includes(status)} onChange={() => toggleStatus(status)} />
-                                    <div className={`w-4.5 h-4.5 rounded border mr-3 flex items-center justify-center transition-all ${selectedStatuses.includes(status) ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300 dark:border-gray-600'}`}>{selectedStatuses.includes(status) && <CheckCircleIcon className="w-3.5 h-3.5 text-white" />}</div>
-                                    <span className={`text-xs font-bold ${selectedStatuses.includes(status) ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-600 dark:text-gray-300'}`}>{status}</span>
-                                </label>
-                            ))}
+
+                {/* Filtros Secundários */}
+                <div className="flex flex-col lg:flex-row gap-4 bg-gray-50 dark:bg-gray-700/30 p-4 rounded-xl border border-gray-100 dark:border-gray-600">
+                    <div className="flex-1">
+                        <input type="text" placeholder="Buscar cliente..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full p-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm dark:bg-gray-800 outline-none focus:ring-2 focus:ring-indigo-500/20" />
+                    </div>
+
+                    {isAdminUser && (
+                        <div className="relative w-full lg:w-48" ref={userDropdownRef}>
+                            <button onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)} className="flex items-center justify-between w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 p-2 rounded-lg text-sm font-semibold text-gray-700 dark:text-gray-200 transition-all hover:bg-gray-100 dark:hover:bg-gray-700/50">
+                                <div className="flex items-center gap-2 truncate"><UsersIcon className="w-4 h-4 text-gray-400" /><span>{selectedUsers.length === 0 ? 'Usuário' : `${selectedUsers.length} sel.`}</span></div>
+                                <ChevronDownIcon className={`w-4 h-4 transition-transform ${isUserDropdownOpen ? 'rotate-180' : ''}`} />
+                            </button>
+                            {isUserDropdownOpen && (
+                                <div className="absolute top-full left-0 mt-2 w-full bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 z-50 animate-fade-in py-2 max-h-64 overflow-y-auto custom-scrollbar">
+                                    <p className="px-4 py-1.5 text-[9px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 dark:border-gray-700 mb-1">Vendedor / Admin</p>
+                                    {users.map(user => (
+                                        <label key={user.id} className="flex items-center px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer group transition-colors">
+                                            <input type="checkbox" className="hidden" checked={selectedUsers.includes(String(user.id))} onChange={() => toggleUserFilter(String(user.id))} />
+                                            <div className={`w-4.5 h-4.5 rounded border mr-3 flex items-center justify-center transition-all ${selectedUsers.includes(String(user.id)) ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300'}`}>{selectedUsers.includes(String(user.id)) && <CheckCircleIcon className="w-3.5 h-3.5 text-white" />}</div>
+                                            <span className={`text-xs font-bold ${selectedUsers.includes(String(user.id)) ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-600 dark:text-gray-300'}`}>{user.name}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
-                </div>
 
-                {isAdminUser && (
-                    <div className="relative w-full lg:w-48" ref={userDropdownRef}>
-                        <button onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)} className="flex items-center justify-between w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 p-2 rounded-lg text-sm font-semibold text-gray-700 dark:text-gray-200 transition-all hover:bg-gray-100 dark:hover:bg-gray-700/50">
-                            <div className="flex items-center gap-2 truncate"><UsersIcon className="w-4 h-4 text-gray-400" /><span>{selectedUsers.length === 0 ? 'Usuário' : `${selectedUsers.length} sel.`}</span></div>
-                            <ChevronDownIcon className={`w-4 h-4 transition-transform ${isUserDropdownOpen ? 'rotate-180' : ''}`} />
-                        </button>
-                        {isUserDropdownOpen && (
-                            <div className="absolute top-full left-0 mt-2 w-full bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 z-50 animate-fade-in py-2 max-h-64 overflow-y-auto custom-scrollbar">
-                                <p className="px-4 py-1.5 text-[9px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 dark:border-gray-700 mb-1">Vendedor / Admin</p>
-                                {users.map(user => (
-                                    <label key={user.id} className="flex items-center px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer group transition-colors">
-                                        <input type="checkbox" className="hidden" checked={selectedUsers.includes(String(user.id))} onChange={() => toggleUserFilter(String(user.id))} />
-                                        <div className={`w-4.5 h-4.5 rounded border mr-3 flex items-center justify-center transition-all ${selectedUsers.includes(String(user.id)) ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300'}`}>{selectedUsers.includes(String(user.id)) && <CheckCircleIcon className="w-3.5 h-3.5 text-white" />}</div>
-                                        <span className={`text-xs font-bold ${selectedUsers.includes(String(user.id)) ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-600 dark:text-gray-300'}`}>{user.name}</span>
-                                    </label>
-                                ))}
-                            </div>
-                        )}
+                    <div className="flex items-center gap-2 bg-white dark:bg-gray-800 p-1 border border-gray-300 dark:border-gray-600 rounded-lg">
+                        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="text-sm p-1 dark:bg-gray-800 outline-none" />
+                        <span className="text-gray-400">-</span>
+                        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="text-sm p-1 dark:bg-gray-800 outline-none" />
                     </div>
-                )}
-
-                <div className="flex items-center gap-2 bg-white dark:bg-gray-800 p-1 border border-gray-300 dark:border-gray-600 rounded-lg">
-                    <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="text-sm p-1 dark:bg-gray-800 outline-none" />
-                    <span className="text-gray-400">-</span>
-                    <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="text-sm p-1 dark:bg-gray-800 outline-none" />
                 </div>
             </div>
 
