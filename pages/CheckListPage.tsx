@@ -255,7 +255,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
     const [isSaving, setIsSaving] = useState(false);
     
     const [searchQuery, setSearchQuery] = useState('');
-    const [statusFilter, setStatusFilter] = useState<'Todos' | 'Aberto' | 'Efetivado' | 'Perdido' | 'Finalizado'>('Todos');
+    const [statusFilter, setStatusFilter] = useState<string>('Aberto');
 
     const loadData = useCallback(async () => {
         setIsLoading(true);
@@ -763,9 +763,60 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
                 </div>
             </div>
 
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col md:flex-row gap-4">
-                <div className="flex-1 relative"><SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" /><input type="text" placeholder="Buscar por cliente ou responsável..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-2 rounded-lg bg-gray-50 dark:bg-gray-700/50 border-none text-sm font-semibold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"/></div>
-                <div className="flex items-center gap-2"><FilterIcon className="w-4 h-4 text-gray-400" /><select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)} className="bg-gray-50 dark:bg-gray-700/50 border-none rounded-lg py-2 pl-3 pr-8 text-sm font-semibold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"><option value="Todos">Todos status</option><option value="Aberto">Abertos</option><option value="Efetivado">Efetivados</option><option value="Finalizado">Finalizados</option><option value="Perdido">Perdedos</option></select></div>
+            <div className="flex flex-col gap-4">
+                <div className="bg-white dark:bg-gray-800 p-2 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-wrap gap-1">
+                    {(() => {
+                        const baseTabs = [
+                            { id: 'Aberto', label: 'Abertos', color: 'indigo' },
+                            { id: 'Efetivado', label: 'Efetivados', color: 'green' },
+                            { id: 'Finalizado', label: 'Finalizados', color: 'purple' },
+                            { id: 'Perdido', label: 'Perdidos', color: 'red' },
+                            { id: 'Todos', label: 'Todos', color: 'gray' }
+                        ];
+                        
+                        // Filtrar abas baseadas na view
+                        const activeTabs = view === 'checkin' 
+                            ? baseTabs 
+                            : baseTabs.filter(t => ['Aberto', 'Finalizado', 'Todos'].includes(t.id));
+
+                        return activeTabs.map((tab) => {
+                            const count = entries.filter(e => tab.id === 'Todos' || (e.status || 'Aberto') === tab.id).length;
+                            const isActive = statusFilter === tab.id;
+                            
+                            return (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setStatusFilter(tab.id)}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                                        isActive 
+                                        ? `bg-${tab.color}-600 text-white shadow-md` 
+                                        : 'bg-transparent text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                    }`}
+                                >
+                                    {tab.label}
+                                    <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${
+                                        isActive ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'
+                                    }`}>
+                                        {count}
+                                    </span>
+                                </button>
+                            );
+                        });
+                    })()}
+                </div>
+
+                <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                    <div className="relative">
+                        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input 
+                            type="text" 
+                            placeholder="Buscar por cliente ou responsável..." 
+                            value={searchQuery} 
+                            onChange={(e) => setSearchQuery(e.target.value)} 
+                            className="w-full pl-10 pr-4 py-2 rounded-lg bg-gray-50 dark:bg-gray-700/50 border-none text-sm font-semibold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"
+                        />
+                    </div>
+                </div>
             </div>
 
             {isLoading ? (
