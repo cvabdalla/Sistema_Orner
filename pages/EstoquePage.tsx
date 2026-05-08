@@ -433,46 +433,78 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
         style.id = 'print-overrides';
         style.textContent = `
             @media print {
-                /* Reset absoluto para evitar cortes de página */
-                html, body {
+                /* Reset absoluto do layout para permitir múltiplas páginas */
+                html, body, #root, .flex, .flex-col, .flex-1, main {
                     height: auto !important;
                     min-height: 0 !important;
                     overflow: visible !important;
-                }
-
-                /* Resetar todos os wrappers que podem ter h-screen ou overflow-hidden */
-                #root, .flex.h-screen, .flex-1.overflow-hidden, .overflow-y-auto {
-                    height: auto !important;
-                    overflow: visible !important;
                     display: block !important;
-                    position: relative !important;
+                    position: static !important;
+                    max-height: none !important;
                 }
 
-                /* Esconder elementos desnecessários */
-                .print\\:hidden, header, sidebar, .no-print {
+                /* Ocultar elementos desnecessários com seletores ultra-específicos */
+                aside, 
+                header:not(#printable-area-shell header), 
+                nav, 
+                .print\\:hidden, 
+                button, 
+                .no-print,
+                [class*="sidebar"],
+                [class*="Sidebar"],
+                [class*="Header"]:not(#printable-area-shell *) {
                     display: none !important;
                 }
 
-                /* Garantir que o conteúdo de impressão ocupe tudo */
-                #printable-area-shell {
-                    background: white !important;
+                /* Garantir que o container do modal não limite o conteúdo */
+                .fixed {
                     position: static !important;
-                    width: 100% !important;
-                    padding: 0 !important;
-                    margin: 0 !important;
                     display: block !important;
+                    background: white !important;
+                    padding: 0 !important;
+                    width: 100% !important;
+                    height: auto !important;
                 }
 
-                /* Forçar repetição de cabeçalho e rodapé de tabela */
-                .table-header-group { display: table-header-group !important; }
-                .table-footer-group { display: table-footer-group !important; }
+                .max-w-5xl {
+                    max-width: none !important;
+                    width: 100% !important;
+                    box-shadow: none !important;
+                    border: none !important;
+                }
 
-                /* Evitar quebras dentro de linhas e garantir cores */
-                tr { page-break-inside: avoid !important; }
-                * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                /* Área de impressão real */
+                #printable-area-shell {
+                    background: white !important;
+                    display: block !important;
+                    width: 100% !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                }
+
+                /* FORÇAR REPETIÇÃO DE CABEÇALHO */
+                .repeat-header {
+                    display: table-header-group !important;
+                }
+                
+                .repeat-footer {
+                    display: table-footer-group !important;
+                }
+
+                /* Evitar cortes feios de linhas */
+                tr {
+                    page-break-inside: avoid !important;
+                    break-inside: avoid !important;
+                }
+
+                /* Manter cores vivas na impressão */
+                * {
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                }
 
                 @page {
-                    margin: 1.5cm;
+                    margin: 1cm;
                     size: auto;
                 }
             }
@@ -745,12 +777,12 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                             <div className="flex-1 overflow-y-auto p-4 md:p-12 bg-gray-200/50 custom-scrollbar print:overflow-visible print:bg-white print:p-0">
                                 <div className="bg-white w-full shadow-2xl mx-auto p-12 print:shadow-none print:p-0 print:m-0" id="printable-area-shell">
                                     <table className="w-full border-collapse">
-                                        <thead className="table-header-group">
+                                        <thead className="repeat-header">
                                             <tr>
-                                                <td>
+                                                <th className="font-normal p-0 text-left">
                                                     <div className="flex justify-between items-start border-b-4 border-gray-900 pb-6 mb-8">
                                                         <div>
-                                                            <h1 className="text-3xl font-black tracking-tighter text-gray-900">Inventário de Estoque</h1>
+                                                            <h1 className="text-3xl font-black tracking-tighter text-gray-900">Inventário de estoque</h1>
                                                             <p className="text-xs font-bold text-gray-500 mt-1 tracking-widest">Relatório para conferência física</p>
                                                             <p className="text-[10px] font-medium text-gray-400 mt-4 italic">Gerado por: {currentUser.name} em {new Date().toLocaleString('pt-BR')}</p>
                                                         </div>
@@ -768,15 +800,15 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                                             </div>
                                                         </div>
                                                     </div>
-                                                </td>
+                                                </th>
                                             </tr>
                                         </thead>
                                         
                                         <tbody className="table-row-group">
                                             <tr>
-                                                <td>
+                                                <td className="p-0">
                                                     <table className="w-full text-[10px] border-collapse mb-10">
-                                                        <thead>
+                                                        <thead className="repeat-header">
                                                             <tr className="bg-gray-100 border-y-2 border-gray-900 font-black tracking-wider text-gray-700">
                                                                 <th className="px-3 py-3 text-left">Item / Componente</th>
                                                                 <th className="px-1 py-3 text-center">Un</th>
@@ -821,21 +853,21 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                             </tr>
                                         </tbody>
 
-                                        <tfoot className="table-footer-group">
+                                        <tfoot className="repeat-footer">
                                             <tr>
-                                                <td>
+                                                <td className="p-0">
                                                     <div className="mt-8 grid grid-cols-2 gap-20">
                                                         <div className="text-center">
                                                             <div className="border-b-2 border-gray-400 w-full mb-2"></div>
-                                                            <p className="text-[8px] font-black text-gray-400 tracking-widest">Responsável pela Conferência</p>
+                                                            <p className="text-[8px] font-black text-gray-400 tracking-widest">Responsável pela conferência</p>
                                                         </div>
                                                         <div className="text-center">
                                                             <div className="border-b-2 border-gray-400 w-full mb-2"></div>
-                                                            <p className="text-[8px] font-black text-gray-400 tracking-widest">Data e Assinatura Supervisor</p>
+                                                            <p className="text-[8px] font-black text-gray-400 tracking-widest">Data e assinatura supervisor</p>
                                                         </div>
                                                     </div>
                                                     <footer className="mt-12 pt-4 border-t border-gray-100 flex justify-between items-center opacity-30 italic">
-                                                        <p className="text-[8px] font-bold text-gray-400">© {new Date().getFullYear()} ORNER SISTEMAS - Todos os direitos reservados.</p>
+                                                        <p className="text-[8px] font-bold text-gray-400">© {new Date().getFullYear()} Orner Sistemas - Todos os direitos reservados.</p>
                                                         <p className="text-[8px] font-bold text-gray-400">Este documento é para fins de controle interno.</p>
                                                     </footer>
                                                 </td>
