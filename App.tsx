@@ -264,9 +264,9 @@ const App: React.FC = () => {
       case 'FINANCEIRO_DRE': return <FinanceiroPage view="dre" currentUser={currentUser} hasGlobalView={hasGlobalView} />;
       case 'FINANCEIRO_CATEGORIAS': return <FinanceiroPage view="categorias" currentUser={currentUser} />;
       case 'FINANCEIRO_BANCOS': return <FinanceiroPage view="bancos" currentUser={currentUser} hasGlobalView={hasGlobalView} />;
-      case 'ESTOQUE_VISAO_GERAL': return <EstoquePage view="visao_geral" setCurrentPage={handleSetCurrentPage} currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
-      case 'ESTOQUE_NOVO_PRODUTO': return <EstoquePage view="cadastro" setCurrentPage={handleSetCurrentPage} currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
-      case 'ESTOQUE_COMPRAS': return <EstoquePage view="compras" setCurrentPage={handleSetCurrentPage} currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
+      case 'ESTOQUE_VISAO_GERAL': return <EstoquePage view="visao_geral" setCurrentPage={handleSetCurrentPage} currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} companyLogo={companyLogo} />;
+      case 'ESTOQUE_NOVO_PRODUTO': return <EstoquePage view="cadastro" setCurrentPage={handleSetCurrentPage} currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} companyLogo={companyLogo} />;
+      case 'ESTOQUE_COMPRAS': return <EstoquePage view="compras" setCurrentPage={handleSetCurrentPage} currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} companyLogo={companyLogo} />;
       case 'CHECKLIST_CHECKIN': return <CheckListPage view="checkin" currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
       case 'CHECKLIST_CHECKOUT': return <CheckListPage view="checkout" currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
       case 'CHECKLIST_MANUTENCAO': return <CheckListPage view="manutencao" currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
@@ -327,9 +327,9 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 transition-colors duration-300">
       <Sidebar currentPage={currentPage} setCurrentPage={handleSetCurrentPage} isSidebarOpen={isSidebarOpen} setSidebarOpen={setSidebarOpen} currentUser={currentUser} userPermissions={userPermissions} onLogout={handleLogout} companyLogo={companyLogo} />
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0 font-sans">
         <Header title="Sistema Orner" onMenuClick={() => setSidebarOpen(!isSidebarOpen)} />
-        <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6 md:p-8">
+        <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6 md:p-8 print:p-0 print:overflow-visible">
           {renderPage()}
         </main>
       </div>

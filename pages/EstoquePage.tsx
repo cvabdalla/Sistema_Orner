@@ -4,7 +4,7 @@ import {
     CubeIcon, TrashIcon, PlusIcon, 
     ExclamationTriangleIcon, DollarIcon, EditIcon, PhotographIcon, XCircleIcon,
     ArrowUpIcon, ArrowDownIcon, FilterIcon, CalendarIcon, ClipboardListIcon, ShoppingCartIcon, LinkIcon,
-    EyeIcon, CheckCircleIcon, TableIcon, UploadIcon, DocumentReportIcon, ChartPieIcon, ClockIcon, TruckIcon, UsersIcon, SearchIcon, ChevronDownIcon
+    EyeIcon, CheckCircleIcon, TableIcon, UploadIcon, DocumentReportIcon, ChartPieIcon, ClockIcon, TruckIcon, UsersIcon, SearchIcon, ChevronDownIcon, PrinterIcon
 } from '../assets/icons';
 import type { StockItem, EstoquePageProps, PurchaseRequest, StockMovement, ChecklistEntry, PriceHistoryEntry, PurchaseRequestStatus, SavedOrcamento } from '../types';
 import { dataService } from '../services/dataService';
@@ -20,7 +20,7 @@ const FormLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     <label className="block text-[12px] font-bold text-gray-500 mb-1 tracking-tight">{children}</label>
 );
 
-const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, currentUser, userPermissions }) => {
+const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, currentUser, userPermissions, companyLogo }) => {
     const [items, setItems] = useState<StockItem[]>([]);
     const [requests, setRequests] = useState<PurchaseRequest[]>([]);
     const [movements, setMovements] = useState<StockMovement[]>([]);
@@ -423,11 +423,81 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
             .sort((a, b) => new Date(a.date).getTime() - new Date(a.date).getTime());
     }, [selectedItemForReservation, checkins]);
 
+    const [isPrintPreviewOpen, setPrintPreviewOpen] = useState(false);
+
+    // Efeito para injetar CSS de impressão
+    useEffect(() => {
+        if (!isPrintPreviewOpen) return;
+
+        const style = document.createElement('style');
+        style.id = 'print-overrides';
+        style.textContent = `
+            @media print {
+                /* Esconder tudo que não seja o conteúdo a imprimir */
+                body * {
+                    visibility: hidden !important;
+                }
+                #printable-area, #printable-area * {
+                    visibility: visible !important;
+                }
+                #printable-area {
+                    position: fixed !important;
+                    left: 0 !important;
+                    top: 0 !important;
+                    width: 100% !important;
+                    height: auto !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    background: white !important;
+                    z-index: 999999 !important;
+                    overflow: visible !important;
+                }
+                /* Garantir fundo branco para tabelas na impressão */
+                .bg-indigo-50\\/50 { background-color: #f5f3ff !important; -webkit-print-color-adjust: exact; }
+                .bg-gray-100 { background-color: #f3f4f6 !important; -webkit-print-color-adjust: exact; }
+                .text-indigo-600 { color: #4f46e5 !important; -webkit-print-color-adjust: exact; }
+                
+                /* Esconder scrollbars e backgrounds indesejados */
+                html, body { 
+                    height: auto !important;
+                    overflow: visible !important;
+                    background: white !important;
+                }
+                
+                /* Resetar bordas e espaçamentos do modal original */
+                div[class*="fixed"] {
+                    background: none !important;
+                    backdrop-filter: none !important;
+                    position: static !important;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+        return () => {
+            const el = document.getElementById('print-overrides');
+            if (el) el.remove();
+        };
+    }, [isPrintPreviewOpen]);
+
+    const handlePrintInventory = () => {
+        setPrintPreviewOpen(true);
+    };
+
+    const triggerPrint = () => {
+        // Tentar focar na janela para garantir que o comando de impressão seja aceito
+        window.focus();
+        
+        // Em ambiente de iframe, às vezes window.print() precisa ser chamado diretamente
+        // sem atrasos para manter o contexto de interação do usuário
+        window.print();
+    };
+
     if (view === 'visao_geral') {
         const inventoryValue = items.reduce((acc, i) => acc + (i.quantity * (i.averagePrice || 0)), 0);
         return (
             <div className="space-y-6 animate-fade-in">
-                <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div className="space-y-6 print:hidden">
+                    <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div><h2 className="text-2xl font-bold text-gray-900 dark:text-white">Estoque geral</h2><p className="text-xs text-gray-500 font-bold mt-1">Gestão de inventário e movimentações</p></div>
                     <div className="flex bg-white dark:bg-gray-800 p-1 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                         <button onClick={() => setActiveTab('inventario')} className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${activeTab === 'inventario' ? 'bg-indigo-600 text-white shadow-md' : 'text-gray-400 hover:text-gray-600'}`}>Inventário atual</button>
@@ -443,8 +513,8 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
 
                 {activeTab === 'inventario' ? (
                     <div className="space-y-4">
-                        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-                            <div className="relative">
+                        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex items-center gap-4">
+                            <div className="relative flex-1">
                                 <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                                 <input 
                                     type="text" 
@@ -454,6 +524,14 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                     className="w-full pl-10 pr-4 py-2 rounded-lg bg-gray-50 dark:bg-gray-700/50 border-none text-sm font-semibold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"
                                 />
                             </div>
+                            <button 
+                                onClick={handlePrintInventory}
+                                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all shadow-md print:hidden"
+                                title="Imprimir listagem para conferência"
+                            >
+                                <PrinterIcon className="w-4 h-4" />
+                                <span className="hidden sm:inline">Imprimir Conferência</span>
+                            </button>
                         </div>
 
                         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border dark:border-gray-700 overflow-hidden">
@@ -628,6 +706,121 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                     )}
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+                )}
+                </div>
+
+                {isPrintPreviewOpen && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-900/90 backdrop-blur-sm p-4 md:p-8 print:p-0 print:bg-white print:backdrop-blur-none">
+                        <div className="bg-white w-full max-w-5xl h-full rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in duration-300 print:rounded-none print:shadow-none print:h-auto print:overflow-visible">
+                            {/* Header do Modal */}
+                            <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50 print:hidden">
+                                <div>
+                                    <h3 className="text-sm font-black text-gray-900 uppercase tracking-tight">Pré-visualização do Relatório</h3>
+                                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Confira os dados antes de imprimir</p>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <button 
+                                        onClick={() => setPrintPreviewOpen(false)}
+                                        className="px-4 py-2 text-xs font-bold text-gray-500 hover:text-gray-700 transition-colors"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button 
+                                        onClick={triggerPrint}
+                                        className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-lg text-xs font-black hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 active:scale-95 transition-all"
+                                    >
+                                        <PrinterIcon className="w-4 h-4" />
+                                        IMPRIMIR AGORA
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Área de Visualização do Papel */}
+                            <div className="flex-1 overflow-y-auto p-4 md:p-12 bg-gray-200/50 custom-scrollbar print:overflow-visible print:bg-white print:p-0">
+                                <div className="bg-white w-full shadow-2xl mx-auto min-h-[1100px] p-12 print:shadow-none print:p-0 print:m-0" id="printable-area">
+                                    <div className="flex justify-between items-start border-b-4 border-gray-900 pb-6 mb-8">
+                                        <div>
+                                            <h1 className="text-3xl font-black uppercase tracking-tighter text-gray-900">Inventário de Estoque</h1>
+                                            <p className="text-xs font-bold text-gray-500 mt-1 uppercase tracking-widest">Relatório para Conferência Física</p>
+                                            <p className="text-[10px] font-medium text-gray-400 mt-4 italic">Gerado por: {currentUser.name} em {new Date().toLocaleString('pt-BR')}</p>
+                                        </div>
+                                        <div className="text-right flex flex-col items-end">
+                                            {companyLogo ? (
+                                                <img src={companyLogo} alt="Logo" className="max-h-16 mb-2" />
+                                            ) : (
+                                                <>
+                                                    <p className="text-2xl font-black text-indigo-600 italic">ORNER</p>
+                                                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-400">Sistemas & Gestão</p>
+                                                </>
+                                            )}
+                                            <div className="mt-4 bg-gray-900 text-white px-3 py-1 text-[10px] font-black rounded italic">
+                                                CONFIDENCIAL
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <table className="w-full text-[10px] border-collapse">
+                                        <thead>
+                                            <tr className="bg-gray-100 border-y-2 border-gray-900 font-black uppercase tracking-wider text-gray-700">
+                                                <th className="px-3 py-3 text-left">Item / Componente</th>
+                                                <th className="px-1 py-3 text-center">Un</th>
+                                                <th className="px-1 py-3 text-center whitespace-nowrap">Mínimo</th>
+                                                <th className="px-1 py-3 text-center whitespace-nowrap">Reserva</th>
+                                                <th className="px-1 py-3 text-center whitespace-nowrap">Saldo Sist.</th>
+                                                <th className="px-4 py-3 text-center text-indigo-600 bg-indigo-50/50 border-x border-gray-200 whitespace-nowrap">Saldo Físico</th>
+                                                <th className="px-2 py-3 text-center">Status</th>
+                                                <th className="px-3 py-3 text-left italic text-gray-500">Notas</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-200">
+                                            {filteredInventoryItems.map(item => {
+                                                const isLowStock = item.quantity <= item.minQuantity;
+                                                return (
+                                                    <tr key={item.id} className="break-inside-avoid">
+                                                        <td className="px-3 py-3 font-bold text-gray-900">
+                                                            {item.name}
+                                                            {item.description && <p className="text-[8px] font-normal text-gray-400 mt-0.5 line-clamp-1">{item.description}</p>}
+                                                        </td>
+                                                        <td className="px-1 py-3 text-center font-medium text-gray-500 uppercase">{item.unit || 'UN'}</td>
+                                                        <td className="px-1 py-3 text-center font-bold text-orange-600">{item.minQuantity}</td>
+                                                        <td className="px-1 py-3 text-center font-bold text-amber-600">{item.reservedQuantity || 0}</td>
+                                                        <td className="px-1 py-3 text-center font-black text-gray-900">{item.quantity}</td>
+                                                        <td className="px-4 py-3 text-center border-x border-gray-100">
+                                                            <div className="w-full h-6 border-b-2 border-gray-200 mx-auto"></div>
+                                                        </td>
+                                                        <td className="px-2 py-3 text-center">
+                                                            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase ${isLowStock ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                                                                {isLowStock ? 'Repor' : 'Ok'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-3 py-3">
+                                                            <div className="w-full h-6 border-b border-dashed border-gray-100"></div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+
+                                    <div className="mt-16 grid grid-cols-2 gap-20">
+                                        <div className="text-center">
+                                            <div className="border-b-2 border-gray-400 w-full mb-2"></div>
+                                            <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest">Responsável pela Conferência</p>
+                                        </div>
+                                        <div className="text-center">
+                                            <div className="border-b-2 border-gray-400 w-full mb-2"></div>
+                                            <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest">Data e Assinatura Supervisor</p>
+                                        </div>
+                                    </div>
+
+                                    <footer className="mt-20 pt-8 border-t border-gray-100 flex justify-between items-center opacity-30 italic">
+                                        <p className="text-[8px] font-bold text-gray-400">© {new Date().getFullYear()} ORNER SISTEMAS - Todos os direitos reservados.</p>
+                                        <p className="text-[8px] font-bold text-gray-400">Este documento é para fins de controle interno.</p>
+                                    </footer>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 )}

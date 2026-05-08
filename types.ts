@@ -422,6 +422,7 @@ export interface EstoquePageProps {
     currentUser: User;
     userPermissions: string[];
     hasGlobalView?: boolean;
+    companyLogo?: string | null;
 }
 
 export interface UsuariosPageProps {
