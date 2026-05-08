@@ -717,8 +717,8 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                             {/* Header do Modal */}
                             <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50 print:hidden">
                                 <div>
-                                    <h3 className="text-sm font-black text-gray-900 uppercase tracking-tight">Pré-visualização do Relatório</h3>
-                                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Confira os dados antes de imprimir</p>
+                                    <h3 className="text-sm font-black text-gray-900 tracking-tight">Pré-visualização do Relatório</h3>
+                                    <p className="text-[10px] text-gray-500 font-bold tracking-widest">Confira os dados antes de imprimir</p>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <button 
@@ -732,7 +732,7 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                         className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-lg text-xs font-black hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 active:scale-95 transition-all"
                                     >
                                         <PrinterIcon className="w-4 h-4" />
-                                        IMPRIMIR AGORA
+                                        Imprimir agora
                                     </button>
                                 </div>
                             </div>
@@ -742,8 +742,8 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                 <div className="bg-white w-full shadow-2xl mx-auto min-h-[1100px] p-12 print:shadow-none print:p-0 print:m-0" id="printable-area">
                                     <div className="flex justify-between items-start border-b-4 border-gray-900 pb-6 mb-8">
                                         <div>
-                                            <h1 className="text-3xl font-black uppercase tracking-tighter text-gray-900">Inventário de Estoque</h1>
-                                            <p className="text-xs font-bold text-gray-500 mt-1 uppercase tracking-widest">Relatório para Conferência Física</p>
+                                            <h1 className="text-3xl font-black tracking-tighter text-gray-900">Inventário de Estoque</h1>
+                                            <p className="text-xs font-bold text-gray-500 mt-1 tracking-widest">Relatório para conferência física</p>
                                             <p className="text-[10px] font-medium text-gray-400 mt-4 italic">Gerado por: {currentUser.name} em {new Date().toLocaleString('pt-BR')}</p>
                                         </div>
                                         <div className="text-right flex flex-col items-end">
@@ -751,25 +751,25 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                                 <img src={companyLogo} alt="Logo" className="max-h-16 mb-2" />
                                             ) : (
                                                 <>
-                                                    <p className="text-2xl font-black text-indigo-600 italic">ORNER</p>
-                                                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-400">Sistemas & Gestão</p>
+                                                    <p className="text-2xl font-black text-indigo-600 italic">Orner</p>
+                                                    <p className="text-[9px] font-black tracking-[0.2em] text-gray-400">Sistemas & Gestão</p>
                                                 </>
                                             )}
                                             <div className="mt-4 bg-gray-900 text-white px-3 py-1 text-[10px] font-black rounded italic">
-                                                CONFIDENCIAL
+                                                Confidencial
                                             </div>
                                         </div>
                                     </div>
 
                                     <table className="w-full text-[10px] border-collapse">
                                         <thead>
-                                            <tr className="bg-gray-100 border-y-2 border-gray-900 font-black uppercase tracking-wider text-gray-700">
+                                            <tr className="bg-gray-100 border-y-2 border-gray-900 font-black tracking-wider text-gray-700">
                                                 <th className="px-3 py-3 text-left">Item / Componente</th>
                                                 <th className="px-1 py-3 text-center">Un</th>
                                                 <th className="px-1 py-3 text-center whitespace-nowrap">Mínimo</th>
                                                 <th className="px-1 py-3 text-center whitespace-nowrap">Reserva</th>
                                                 <th className="px-1 py-3 text-center whitespace-nowrap">Saldo Sist.</th>
-                                                <th className="px-4 py-3 text-center text-indigo-600 bg-indigo-50/50 border-x border-gray-200 whitespace-nowrap">Saldo Físico</th>
+                                                <th className="px-4 py-3 text-center text-indigo-600 bg-indigo-50/50 border-x border-gray-200 whitespace-nowrap">Saldo físico</th>
                                                 <th className="px-2 py-3 text-center">Status</th>
                                                 <th className="px-3 py-3 text-left italic text-gray-500">Notas</th>
                                             </tr>
@@ -791,7 +791,7 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                                             <div className="w-full h-6 border-b-2 border-gray-200 mx-auto"></div>
                                                         </td>
                                                         <td className="px-2 py-3 text-center">
-                                                            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase ${isLowStock ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                                                            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full ${isLowStock ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
                                                                 {isLowStock ? 'Repor' : 'Ok'}
                                                             </span>
                                                         </td>
@@ -807,11 +807,11 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                     <div className="mt-16 grid grid-cols-2 gap-20">
                                         <div className="text-center">
                                             <div className="border-b-2 border-gray-400 w-full mb-2"></div>
-                                            <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest">Responsável pela Conferência</p>
+                                            <p className="text-[8px] font-black text-gray-400 tracking-widest">Responsável pela Conferência</p>
                                         </div>
                                         <div className="text-center">
                                             <div className="border-b-2 border-gray-400 w-full mb-2"></div>
-                                            <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest">Data e Assinatura Supervisor</p>
+                                            <p className="text-[8px] font-black text-gray-400 tracking-widest">Data e Assinatura Supervisor</p>
                                         </div>
                                     </div>
 
