@@ -433,33 +433,47 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
         style.id = 'print-overrides';
         style.textContent = `
             @media print {
-                /* Esconder tudo que não seja o conteúdo a imprimir */
-                body * {
-                    visibility: hidden !important;
+                /* Reset absoluto para evitar cortes de página */
+                html, body {
+                    height: auto !important;
+                    min-height: 0 !important;
+                    overflow: visible !important;
                 }
-                #printable-area-shell, #printable-area-shell * {
-                    visibility: visible !important;
+
+                /* Resetar todos os wrappers que podem ter h-screen ou overflow-hidden */
+                #root, .flex.h-screen, .flex-1.overflow-hidden, .overflow-y-auto {
+                    height: auto !important;
+                    overflow: visible !important;
+                    display: block !important;
+                    position: relative !important;
                 }
+
+                /* Esconder elementos desnecessários */
+                .print\\:hidden, header, sidebar, .no-print {
+                    display: none !important;
+                }
+
+                /* Garantir que o conteúdo de impressão ocupe tudo */
                 #printable-area-shell {
-                    position: absolute !important;
-                    left: 0 !important;
-                    top: 0 !important;
-                    width: 100% !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
                     background: white !important;
-                    z-index: 9999 !important;
+                    position: static !important;
+                    width: 100% !important;
+                    padding: 0 !important;
+                    margin: 0 !important;
+                    display: block !important;
                 }
 
-                /* Forçar repetição do cabeçalho da tabela */
-                thead { display: table-header-group !important; }
-                tfoot { display: table-footer-group !important; }
+                /* Forçar repetição de cabeçalho e rodapé de tabela */
+                .table-header-group { display: table-header-group !important; }
+                .table-footer-group { display: table-footer-group !important; }
 
-                /* Garantir cores na impressão */
+                /* Evitar quebras dentro de linhas e garantir cores */
+                tr { page-break-inside: avoid !important; }
                 * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-                
+
                 @page {
                     margin: 1.5cm;
+                    size: auto;
                 }
             }
         `;
@@ -476,6 +490,7 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
 
     const triggerPrint = () => {
         window.focus();
+        // Pequeno delay para garantir que o renderer do browser pegou os estilos injetados via useEffect
         setTimeout(() => {
             window.print();
         }, 500);
