@@ -437,38 +437,29 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                 body * {
                     visibility: hidden !important;
                 }
-                #printable-area, #printable-area * {
+                #printable-area-shell, #printable-area-shell * {
                     visibility: visible !important;
                 }
-                #printable-area {
-                    position: fixed !important;
+                #printable-area-shell {
+                    position: absolute !important;
                     left: 0 !important;
                     top: 0 !important;
                     width: 100% !important;
-                    height: auto !important;
                     margin: 0 !important;
                     padding: 0 !important;
                     background: white !important;
-                    z-index: 999999 !important;
-                    overflow: visible !important;
+                    z-index: 9999 !important;
                 }
-                /* Garantir fundo branco para tabelas na impressão */
-                .bg-indigo-50\\/50 { background-color: #f5f3ff !important; -webkit-print-color-adjust: exact; }
-                .bg-gray-100 { background-color: #f3f4f6 !important; -webkit-print-color-adjust: exact; }
-                .text-indigo-600 { color: #4f46e5 !important; -webkit-print-color-adjust: exact; }
+
+                /* Forçar repetição do cabeçalho da tabela */
+                thead { display: table-header-group !important; }
+                tfoot { display: table-footer-group !important; }
+
+                /* Garantir cores na impressão */
+                * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
                 
-                /* Esconder scrollbars e backgrounds indesejados */
-                html, body { 
-                    height: auto !important;
-                    overflow: visible !important;
-                    background: white !important;
-                }
-                
-                /* Resetar bordas e espaçamentos do modal original */
-                div[class*="fixed"] {
-                    background: none !important;
-                    backdrop-filter: none !important;
-                    position: static !important;
+                @page {
+                    margin: 1.5cm;
                 }
             }
         `;
@@ -484,12 +475,10 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
     };
 
     const triggerPrint = () => {
-        // Tentar focar na janela para garantir que o comando de impressão seja aceito
         window.focus();
-        
-        // Em ambiente de iframe, às vezes window.print() precisa ser chamado diretamente
-        // sem atrasos para manter o contexto de interação do usuário
-        window.print();
+        setTimeout(() => {
+            window.print();
+        }, 500);
     };
 
     if (view === 'visao_geral') {
@@ -739,86 +728,105 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
 
                             {/* Área de Visualização do Papel */}
                             <div className="flex-1 overflow-y-auto p-4 md:p-12 bg-gray-200/50 custom-scrollbar print:overflow-visible print:bg-white print:p-0">
-                                <div className="bg-white w-full shadow-2xl mx-auto min-h-[1100px] p-12 print:shadow-none print:p-0 print:m-0" id="printable-area">
-                                    <div className="flex justify-between items-start border-b-4 border-gray-900 pb-6 mb-8">
-                                        <div>
-                                            <h1 className="text-3xl font-black tracking-tighter text-gray-900">Inventário de Estoque</h1>
-                                            <p className="text-xs font-bold text-gray-500 mt-1 tracking-widest">Relatório para conferência física</p>
-                                            <p className="text-[10px] font-medium text-gray-400 mt-4 italic">Gerado por: {currentUser.name} em {new Date().toLocaleString('pt-BR')}</p>
-                                        </div>
-                                        <div className="text-right flex flex-col items-end">
-                                            {companyLogo ? (
-                                                <img src={companyLogo} alt="Logo" className="max-h-16 mb-2" />
-                                            ) : (
-                                                <>
-                                                    <p className="text-2xl font-black text-indigo-600 italic">Orner</p>
-                                                    <p className="text-[9px] font-black tracking-[0.2em] text-gray-400">Sistemas & Gestão</p>
-                                                </>
-                                            )}
-                                            <div className="mt-4 bg-gray-900 text-white px-3 py-1 text-[10px] font-black rounded italic">
-                                                Confidencial
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <table className="w-full text-[10px] border-collapse">
-                                        <thead>
-                                            <tr className="bg-gray-100 border-y-2 border-gray-900 font-black tracking-wider text-gray-700">
-                                                <th className="px-3 py-3 text-left">Item / Componente</th>
-                                                <th className="px-1 py-3 text-center">Un</th>
-                                                <th className="px-1 py-3 text-center whitespace-nowrap">Mínimo</th>
-                                                <th className="px-1 py-3 text-center whitespace-nowrap">Reserva</th>
-                                                <th className="px-1 py-3 text-center whitespace-nowrap">Saldo Sist.</th>
-                                                <th className="px-4 py-3 text-center text-indigo-600 bg-indigo-50/50 border-x border-gray-200 whitespace-nowrap">Saldo físico</th>
-                                                <th className="px-2 py-3 text-center">Status</th>
-                                                <th className="px-3 py-3 text-left italic text-gray-500">Notas</th>
+                                <div className="bg-white w-full shadow-2xl mx-auto p-12 print:shadow-none print:p-0 print:m-0" id="printable-area-shell">
+                                    <table className="w-full border-collapse">
+                                        <thead className="table-header-group">
+                                            <tr>
+                                                <td>
+                                                    <div className="flex justify-between items-start border-b-4 border-gray-900 pb-6 mb-8">
+                                                        <div>
+                                                            <h1 className="text-3xl font-black tracking-tighter text-gray-900">Inventário de Estoque</h1>
+                                                            <p className="text-xs font-bold text-gray-500 mt-1 tracking-widest">Relatório para conferência física</p>
+                                                            <p className="text-[10px] font-medium text-gray-400 mt-4 italic">Gerado por: {currentUser.name} em {new Date().toLocaleString('pt-BR')}</p>
+                                                        </div>
+                                                        <div className="text-right flex flex-col items-end">
+                                                            {companyLogo ? (
+                                                                <img src={companyLogo} alt="Logo" className="max-h-16 mb-2" />
+                                                            ) : (
+                                                                <>
+                                                                    <p className="text-2xl font-black text-indigo-600 italic">Orner</p>
+                                                                    <p className="text-[9px] font-black tracking-[0.2em] text-gray-400">Sistemas & Gestão</p>
+                                                                </>
+                                                            )}
+                                                            <div className="mt-4 bg-gray-900 text-white px-3 py-1 text-[10px] font-black rounded italic">
+                                                                Confidencial
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </td>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-gray-200">
-                                            {filteredInventoryItems.map(item => {
-                                                const isLowStock = item.quantity <= item.minQuantity;
-                                                return (
-                                                    <tr key={item.id} className="break-inside-avoid">
-                                                        <td className="px-3 py-3 font-bold text-gray-900">
-                                                            {item.name}
-                                                            {item.description && <p className="text-[8px] font-normal text-gray-400 mt-0.5 line-clamp-1">{item.description}</p>}
-                                                        </td>
-                                                        <td className="px-1 py-3 text-center font-medium text-gray-500 uppercase">{item.unit || 'UN'}</td>
-                                                        <td className="px-1 py-3 text-center font-bold text-orange-600">{item.minQuantity}</td>
-                                                        <td className="px-1 py-3 text-center font-bold text-amber-600">{item.reservedQuantity || 0}</td>
-                                                        <td className="px-1 py-3 text-center font-black text-gray-900">{item.quantity}</td>
-                                                        <td className="px-4 py-3 text-center border-x border-gray-100">
-                                                            <div className="w-full h-6 border-b-2 border-gray-200 mx-auto"></div>
-                                                        </td>
-                                                        <td className="px-2 py-3 text-center">
-                                                            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full ${isLowStock ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                                                                {isLowStock ? 'Repor' : 'Ok'}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-3 py-3">
-                                                            <div className="w-full h-6 border-b border-dashed border-gray-100"></div>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
+                                        
+                                        <tbody className="table-row-group">
+                                            <tr>
+                                                <td>
+                                                    <table className="w-full text-[10px] border-collapse mb-10">
+                                                        <thead>
+                                                            <tr className="bg-gray-100 border-y-2 border-gray-900 font-black tracking-wider text-gray-700">
+                                                                <th className="px-3 py-3 text-left">Item / Componente</th>
+                                                                <th className="px-1 py-3 text-center">Un</th>
+                                                                <th className="px-1 py-3 text-center whitespace-nowrap">Mínimo</th>
+                                                                <th className="px-1 py-3 text-center whitespace-nowrap">Reserva</th>
+                                                                <th className="px-1 py-3 text-center whitespace-nowrap">Saldo Sist.</th>
+                                                                <th className="px-4 py-3 text-center text-indigo-600 bg-indigo-50/50 border-x border-gray-200 whitespace-nowrap">Saldo físico</th>
+                                                                <th className="px-2 py-3 text-center">Status</th>
+                                                                <th className="px-3 py-3 text-left italic text-gray-500">Notas</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-gray-200">
+                                                            {filteredInventoryItems.map(item => {
+                                                                const isLowStock = item.quantity <= item.minQuantity;
+                                                                return (
+                                                                    <tr key={item.id} className="break-inside-avoid">
+                                                                        <td className="px-3 py-3 font-bold text-gray-900">
+                                                                            {item.name}
+                                                                            {item.description && <p className="text-[8px] font-normal text-gray-400 mt-0.5 line-clamp-1">{item.description}</p>}
+                                                                        </td>
+                                                                        <td className="px-1 py-3 text-center font-medium text-gray-500 uppercase">{item.unit || 'UN'}</td>
+                                                                        <td className="px-1 py-3 text-center font-bold text-orange-600">{item.minQuantity}</td>
+                                                                        <td className="px-1 py-3 text-center font-bold text-amber-600">{item.reservedQuantity || 0}</td>
+                                                                        <td className="px-1 py-3 text-center font-black text-gray-900">{item.quantity}</td>
+                                                                        <td className="px-4 py-3 text-center border-x border-gray-100">
+                                                                            <div className="w-full h-6 border-b-2 border-gray-200 mx-auto"></div>
+                                                                        </td>
+                                                                        <td className="px-2 py-3 text-center">
+                                                                            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full ${isLowStock ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                                                                                {isLowStock ? 'Repor' : 'Ok'}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="px-3 py-3">
+                                                                            <div className="w-full h-6 border-b border-dashed border-gray-100"></div>
+                                                                        </td>
+                                                                    </tr>
+                                                                );
+                                                            })}
+                                                        </tbody>
+                                                    </table>
+                                                </td>
+                                            </tr>
                                         </tbody>
+
+                                        <tfoot className="table-footer-group">
+                                            <tr>
+                                                <td>
+                                                    <div className="mt-8 grid grid-cols-2 gap-20">
+                                                        <div className="text-center">
+                                                            <div className="border-b-2 border-gray-400 w-full mb-2"></div>
+                                                            <p className="text-[8px] font-black text-gray-400 tracking-widest">Responsável pela Conferência</p>
+                                                        </div>
+                                                        <div className="text-center">
+                                                            <div className="border-b-2 border-gray-400 w-full mb-2"></div>
+                                                            <p className="text-[8px] font-black text-gray-400 tracking-widest">Data e Assinatura Supervisor</p>
+                                                        </div>
+                                                    </div>
+                                                    <footer className="mt-12 pt-4 border-t border-gray-100 flex justify-between items-center opacity-30 italic">
+                                                        <p className="text-[8px] font-bold text-gray-400">© {new Date().getFullYear()} ORNER SISTEMAS - Todos os direitos reservados.</p>
+                                                        <p className="text-[8px] font-bold text-gray-400">Este documento é para fins de controle interno.</p>
+                                                    </footer>
+                                                </td>
+                                            </tr>
+                                        </tfoot>
                                     </table>
-
-                                    <div className="mt-16 grid grid-cols-2 gap-20">
-                                        <div className="text-center">
-                                            <div className="border-b-2 border-gray-400 w-full mb-2"></div>
-                                            <p className="text-[8px] font-black text-gray-400 tracking-widest">Responsável pela Conferência</p>
-                                        </div>
-                                        <div className="text-center">
-                                            <div className="border-b-2 border-gray-400 w-full mb-2"></div>
-                                            <p className="text-[8px] font-black text-gray-400 tracking-widest">Data e Assinatura Supervisor</p>
-                                        </div>
-                                    </div>
-
-                                    <footer className="mt-20 pt-8 border-t border-gray-100 flex justify-between items-center opacity-30 italic">
-                                        <p className="text-[8px] font-bold text-gray-400">© {new Date().getFullYear()} ORNER SISTEMAS - Todos os direitos reservados.</p>
-                                        <p className="text-[8px] font-bold text-gray-400">Este documento é para fins de controle interno.</p>
-                                    </footer>
                                 </div>
                             </div>
                         </div>
