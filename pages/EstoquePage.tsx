@@ -32,6 +32,9 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
     const [activeTab, setActiveTab] = useState<'inventario' | 'historico'>('inventario');
     const [purchaseStatusFilter, setPurchaseStatusFilter] = useState<'Todos' | PurchaseRequestStatus>('Todos');
 
+    // Filtros para o Inventário
+    const [inventorySearchTerm, setInventorySearchTerm] = useState('');
+
     // Filtros para o Histórico de Movimentação
     const [historyItemId, setHistoryItemId] = useState<string>('Todos');
     const [historySearchTerm, setHistorySearchTerm] = useState('');
@@ -337,6 +340,15 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
         return items.filter(i => i.name.toLowerCase().includes(historySearchTerm.toLowerCase()));
     }, [items, historySearchTerm]);
 
+    const filteredInventoryItems = useMemo(() => {
+        if (!inventorySearchTerm) return items;
+        const term = inventorySearchTerm.toLowerCase();
+        return items.filter(i => 
+            (i.name || '').toLowerCase().includes(term) || 
+            (i.description || '').toLowerCase().includes(term)
+        );
+    }, [items, inventorySearchTerm]);
+
     const handleSelectHistoryItem = (item: StockItem | 'Todos') => {
         if (item === 'Todos') {
             setHistoryItemId('Todos');
@@ -430,48 +442,69 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                 </div>
 
                 {activeTab === 'inventario' ? (
-                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border dark:border-gray-700 overflow-hidden">
-                        <table className="min-w-full text-left text-sm">
-                            <thead className="bg-gray-50 dark:bg-gray-700 font-bold text-[11px] text-gray-500 border-b">
-                                <tr>
-                                    <th className="px-4 py-4">Foto</th>
-                                    <th className="px-4 py-4">Descrição</th>
-                                    <th className="px-4 py-4 text-right">Custo unitário</th>
-                                    <th className="px-4 py-4 text-center">Saldo</th>
-                                    <th className="px-4 py-4 text-center">Saldo mínimo</th>
-                                    <th className="px-4 py-4 text-center">Reservado</th>
-                                    <th className="px-4 py-4 text-center">Saldo futuro</th>
-                                    <th className="px-4 py-4 text-center">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                {items.map(item => {
-                                    const isLowStock = item.quantity <= item.minQuantity;
-                                    const hasReservations = (item.reservedQuantity || 0) > 0;
-                                    return (
-                                        <tr key={item.id} className={`hover:bg-indigo-50/30 dark:hover:bg-indigo-900/10 transition-colors cursor-pointer group ${isLowStock ? 'bg-red-50/50 dark:bg-red-900/10' : ''}`} onClick={() => handleShowPriceHistory(item)}>
-                                            <td className="px-4 py-3"><div className="w-10 h-10 rounded-lg border bg-white dark:bg-gray-900 flex items-center justify-center overflow-hidden">{item.image ? <img src={item.image} className="w-full h-full object-cover" alt="" /> : <PhotographIcon className="w-5 h-5 text-gray-300" />}</div></td>
-                                            <td className="px-4 py-3">
-                                                <p className="font-bold text-gray-900 dark:text-white group-hover:text-indigo-600 transition-colors">{item.name}</p>
-                                                <p className="text-[9px] text-gray-400 font-medium">Clique para ver histórico de custos</p>
+                    <div className="space-y-4">
+                        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                            <div className="relative">
+                                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                <input 
+                                    type="text" 
+                                    placeholder="Buscar componente pelo nome..." 
+                                    value={inventorySearchTerm} 
+                                    onChange={(e) => setInventorySearchTerm(e.target.value)} 
+                                    className="w-full pl-10 pr-4 py-2 rounded-lg bg-gray-50 dark:bg-gray-700/50 border-none text-sm font-semibold text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border dark:border-gray-700 overflow-hidden">
+                            <table className="min-w-full text-left text-sm">
+                                <thead className="bg-gray-50 dark:bg-gray-700 font-bold text-[11px] text-gray-500 border-b">
+                                    <tr>
+                                        <th className="px-4 py-4">Foto</th>
+                                        <th className="px-4 py-4">Descrição</th>
+                                        <th className="px-4 py-4 text-right">Custo unitário</th>
+                                        <th className="px-4 py-4 text-center">Saldo</th>
+                                        <th className="px-4 py-4 text-center">Saldo mínimo</th>
+                                        <th className="px-4 py-4 text-center">Reservado</th>
+                                        <th className="px-4 py-4 text-center">Saldo futuro</th>
+                                        <th className="px-4 py-4 text-center">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                    {filteredInventoryItems.length > 0 ? filteredInventoryItems.map(item => {
+                                        const isLowStock = item.quantity <= item.minQuantity;
+                                        const hasReservations = (item.reservedQuantity || 0) > 0;
+                                        return (
+                                            <tr key={item.id} className={`hover:bg-indigo-50/30 dark:hover:bg-indigo-900/10 transition-colors cursor-pointer group ${isLowStock ? 'bg-red-50/50 dark:bg-red-900/10' : ''}`} onClick={() => handleShowPriceHistory(item)}>
+                                                <td className="px-4 py-3"><div className="w-10 h-10 rounded-lg border bg-white dark:bg-gray-900 flex items-center justify-center overflow-hidden">{item.image ? <img src={item.image} className="w-full h-full object-cover" alt="" /> : <PhotographIcon className="w-5 h-5 text-gray-300" />}</div></td>
+                                                <td className="px-4 py-3">
+                                                    <p className="font-bold text-gray-900 dark:text-white group-hover:text-indigo-600 transition-colors">{item.name}</p>
+                                                    <p className="text-[9px] text-gray-400 font-medium">Clique para ver histórico de custos</p>
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-bold text-indigo-600">{formatCurrency(item.averagePrice || 0)}</td>
+                                                <td className="px-4 py-3 text-center font-black text-gray-900 dark:text-white">{item.quantity}</td>
+                                                <td className="px-4 py-3 text-center font-black text-orange-600">{item.minQuantity}</td>
+                                                <td 
+                                                    className={`px-4 py-3 text-center font-bold ${hasReservations ? 'text-amber-600 underline decoration-dotted hover:text-amber-700' : 'text-gray-400'}`}
+                                                    onClick={(e) => handleShowReservations(e, item)}
+                                                    title={hasReservations ? "Clique para ver detalhes das reservas" : ""}
+                                                >
+                                                    {item.reservedQuantity || 0}
+                                                </td>
+                                                <td className="px-4 py-3 text-center font-bold text-indigo-600">{(item.quantity || 0) - (item.reservedQuantity || 0)}</td>
+                                                <td className="px-4 py-3 text-center">{isLowStock ? <span className="text-[9px] font-black text-red-600 bg-red-100 px-2 py-1 rounded-full">Reposição</span> : <span className="text-[9px] font-black text-green-600 bg-green-100 px-2 py-1 rounded-full">Normal</span>}</td>
+                                            </tr>
+                                        );
+                                    }) : (
+                                        <tr>
+                                            <td colSpan={8} className="px-4 py-12 text-center text-gray-400 italic font-bold text-xs">
+                                                Nenhum item encontrado com este nome.
                                             </td>
-                                            <td className="px-4 py-3 text-right font-bold text-indigo-600">{formatCurrency(item.averagePrice || 0)}</td>
-                                            <td className="px-4 py-3 text-center font-black text-gray-900 dark:text-white">{item.quantity}</td>
-                                            <td className="px-4 py-3 text-center font-black text-orange-600">{item.minQuantity}</td>
-                                            <td 
-                                                className={`px-4 py-3 text-center font-bold ${hasReservations ? 'text-amber-600 underline decoration-dotted hover:text-amber-700' : 'text-gray-400'}`}
-                                                onClick={(e) => handleShowReservations(e, item)}
-                                                title={hasReservations ? "Clique para ver detalhes das reservas" : ""}
-                                            >
-                                                {item.reservedQuantity || 0}
-                                            </td>
-                                            <td className="px-4 py-3 text-center font-bold text-indigo-600">{(item.quantity || 0) - (item.reservedQuantity || 0)}</td>
-                                            <td className="px-4 py-3 text-center">{isLowStock ? <span className="text-[9px] font-black text-red-600 bg-red-100 px-2 py-1 rounded-full">Reposição</span> : <span className="text-[9px] font-black text-green-600 bg-green-100 px-2 py-1 rounded-full">Normal</span>}</td>
                                         </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 ) : (
                     <div className="space-y-4">
