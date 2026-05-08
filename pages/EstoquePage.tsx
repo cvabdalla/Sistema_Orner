@@ -433,80 +433,89 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
         style.id = 'print-overrides';
         style.textContent = `
             @media print {
-                /* Reset absoluto do layout para permitir múltiplas páginas */
-                html, body, #root, .flex, .flex-col, .flex-1, main {
+                /* Reset de containers superiores */
+                html, body {
                     height: auto !important;
-                    min-height: 0 !important;
+                    overflow: visible !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    background: white !important;
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                }
+
+                #root, main, .flex, .flex-col, .flex-1 {
+                    height: auto !important;
                     overflow: visible !important;
                     display: block !important;
                     position: static !important;
-                    max-height: none !important;
                 }
 
-                /* Ocultar elementos desnecessários com seletores ultra-específicos */
-                aside, 
-                header:not(#printable-area-shell header), 
-                nav, 
-                .print\\:hidden, 
-                button, 
-                .no-print,
-                [class*="sidebar"],
-                [class*="Sidebar"],
-                [class*="Header"]:not(#printable-area-shell *) {
+                /* Esconder tudo que não é essencial */
+                nav, aside, header:not(#printable-area-shell header), 
+                button, .no-print, .print\\:hidden,
+                [class*="sidebar"], [class*="Sidebar"], [class*="Header"] {
                     display: none !important;
                 }
 
-                /* Garantir que o container do modal não limite o conteúdo */
+                /* Forçar o modal a se tornar o layout principal */
                 .fixed {
                     position: static !important;
                     display: block !important;
+                    width: 100% !important;
                     background: white !important;
                     padding: 0 !important;
-                    width: 100% !important;
-                    height: auto !important;
+                    margin: 0 !important;
                 }
 
                 .max-w-5xl {
                     max-width: none !important;
                     width: 100% !important;
-                    box-shadow: none !important;
-                    border: none !important;
                 }
 
-                /* Área de impressão real */
+                .shadow-2xl, .shadow-lg {
+                    box-shadow: none !important;
+                }
+
+                /* Área de impressão */
                 #printable-area-shell {
-                    background: white !important;
                     display: block !important;
                     width: 100% !important;
                     margin: 0 !important;
                     padding: 0 !important;
+                    background: white !important;
                 }
 
-                /* FORÇAR REPETIÇÃO DE CABEÇALHO */
-                .repeat-header {
+                /* Remover fundos de wrappers específicos */
+                .bg-gray-200\\/50 {
+                    background: white !important;
+                    background-color: white !important;
+                }
+
+                /* REPETIÇÃO DE CABEÇALHO E RODAPÉ */
+                thead {
                     display: table-header-group !important;
                 }
                 
-                .repeat-footer {
+                tfoot {
                     display: table-footer-group !important;
                 }
 
-                /* Evitar cortes feios de linhas */
                 tr {
                     page-break-inside: avoid !important;
                     break-inside: avoid !important;
                 }
 
-                /* Manter cores vivas na impressão */
-                * {
-                    -webkit-print-color-adjust: exact !important;
-                    print-color-adjust: exact !important;
+                @page {
+                    margin: 1.5cm 1cm;
+                    size: Portrait;
                 }
 
-                @page {
-                    margin: 1cm;
-                    size: auto;
-                }
+                /* Garantir que textos e bordas apareçam corretamente */
+                .text-gray-900 { color: #000000 !important; }
+                .text-gray-500 { color: #666666 !important; }
+                .border-gray-900 { border-color: #000000 !important; }
+                .bg-gray-100 { background-color: #f3f4f6 !important; }
             }
         `;
         document.head.appendChild(style);
@@ -774,16 +783,17 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                             </div>
 
                             {/* Área de Visualização do Papel */}
-                            <div className="flex-1 overflow-y-auto p-4 md:p-12 bg-gray-200/50 custom-scrollbar print:overflow-visible print:bg-white print:p-0">
+                            <div className="flex-1 overflow-y-auto p-4 md:p-12 bg-gray-200/50 custom-scrollbar print:overflow-visible print:bg-white print:p-0 print:block">
                                 <div className="bg-white w-full shadow-2xl mx-auto p-12 print:shadow-none print:p-0 print:m-0" id="printable-area-shell">
                                     <table className="w-full border-collapse">
                                         <thead className="repeat-header">
+                                            {/* Cabeçalho do Relatório */}
                                             <tr>
-                                                <th className="font-normal p-0 text-left">
-                                                    <div className="flex justify-between items-start border-b-4 border-gray-900 pb-6 mb-8">
+                                                <th className="font-normal p-0 text-left border-none">
+                                                    <div className="flex justify-between items-start border-b-4 border-gray-900 pb-6 mb-4">
                                                         <div>
                                                             <h1 className="text-3xl font-black tracking-tighter text-gray-900">Inventário de estoque</h1>
-                                                            <p className="text-xs font-bold text-gray-500 mt-1 tracking-widest">Relatório para conferência física</p>
+                                                            <p className="text-xs font-bold text-gray-500 mt-1 tracking-widest uppercase">Relatório para conferência física</p>
                                                             <p className="text-[10px] font-medium text-gray-400 mt-4 italic">Gerado por: {currentUser.name} em {new Date().toLocaleString('pt-BR')}</p>
                                                         </div>
                                                         <div className="text-right flex flex-col items-end">
@@ -802,55 +812,46 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                                     </div>
                                                 </th>
                                             </tr>
+                                            {/* Cabeçalho da Tabela de Itens (Para repetir em todas as páginas) */}
+                                            <tr className="bg-gray-100 border-y-2 border-gray-900 font-black tracking-wider text-gray-700 text-[10px]">
+                                                <th className="px-3 py-3 text-left">Item / Componente</th>
+                                                <th className="px-1 py-3 text-center">Un</th>
+                                                <th className="px-1 py-3 text-center">Mín</th>
+                                                <th className="px-1 py-3 text-center">Res</th>
+                                                <th className="px-1 py-3 text-center whitespace-nowrap">Sist.</th>
+                                                <th className="px-4 py-3 text-center text-indigo-700 bg-indigo-50/50 border-x border-gray-200 whitespace-nowrap">Saldo físico</th>
+                                                <th className="px-2 py-3 text-center">Status</th>
+                                                <th className="px-3 py-3 text-left italic text-gray-400">Notas</th>
+                                            </tr>
                                         </thead>
                                         
                                         <tbody className="table-row-group">
-                                            <tr>
-                                                <td className="p-0">
-                                                    <table className="w-full text-[10px] border-collapse mb-10">
-                                                        <thead className="repeat-header">
-                                                            <tr className="bg-gray-100 border-y-2 border-gray-900 font-black tracking-wider text-gray-700">
-                                                                <th className="px-3 py-3 text-left">Item / Componente</th>
-                                                                <th className="px-1 py-3 text-center">Un</th>
-                                                                <th className="px-1 py-3 text-center whitespace-nowrap">Mínimo</th>
-                                                                <th className="px-1 py-3 text-center whitespace-nowrap">Reserva</th>
-                                                                <th className="px-1 py-3 text-center whitespace-nowrap">Saldo Sist.</th>
-                                                                <th className="px-4 py-3 text-center text-indigo-600 bg-indigo-50/50 border-x border-gray-200 whitespace-nowrap">Saldo físico</th>
-                                                                <th className="px-2 py-3 text-center">Status</th>
-                                                                <th className="px-3 py-3 text-left italic text-gray-500">Notas</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody className="divide-y divide-gray-200">
-                                                            {filteredInventoryItems.map(item => {
-                                                                const isLowStock = item.quantity <= item.minQuantity;
-                                                                return (
-                                                                    <tr key={item.id} className="break-inside-avoid">
-                                                                        <td className="px-3 py-3 font-bold text-gray-900">
-                                                                            {item.name}
-                                                                            {item.description && <p className="text-[8px] font-normal text-gray-400 mt-0.5 line-clamp-1">{item.description}</p>}
-                                                                        </td>
-                                                                        <td className="px-1 py-3 text-center font-medium text-gray-500 uppercase">{item.unit || 'UN'}</td>
-                                                                        <td className="px-1 py-3 text-center font-bold text-orange-600">{item.minQuantity}</td>
-                                                                        <td className="px-1 py-3 text-center font-bold text-amber-600">{item.reservedQuantity || 0}</td>
-                                                                        <td className="px-1 py-3 text-center font-black text-gray-900">{item.quantity}</td>
-                                                                        <td className="px-4 py-3 text-center border-x border-gray-100">
-                                                                            <div className="w-full h-6 border-b-2 border-gray-200 mx-auto"></div>
-                                                                        </td>
-                                                                        <td className="px-2 py-3 text-center">
-                                                                            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full ${isLowStock ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                                                                                {isLowStock ? 'Repor' : 'Ok'}
-                                                                            </span>
-                                                                        </td>
-                                                                        <td className="px-3 py-3">
-                                                                            <div className="w-full h-6 border-b border-dashed border-gray-100"></div>
-                                                                        </td>
-                                                                    </tr>
-                                                                );
-                                                            })}
-                                                        </tbody>
-                                                    </table>
-                                                </td>
-                                            </tr>
+                                            {filteredInventoryItems.map(item => {
+                                                const isLowStock = item.quantity <= item.minQuantity;
+                                                return (
+                                                    <tr key={item.id} className="border-b border-gray-100 break-inside-avoid text-[10px]">
+                                                        <td className="px-3 py-3 font-bold text-gray-900">
+                                                            {item.name}
+                                                            {item.description && <p className="text-[8px] font-normal text-gray-400 mt-0.5 line-clamp-1">{item.description}</p>}
+                                                        </td>
+                                                        <td className="px-1 py-3 text-center font-medium text-gray-500 uppercase">{item.unit || 'UN'}</td>
+                                                        <td className="px-1 py-3 text-center font-bold text-orange-600">{item.minQuantity}</td>
+                                                        <td className="px-1 py-3 text-center font-bold text-amber-600">{item.reservedQuantity || 0}</td>
+                                                        <td className="px-1 py-3 text-center font-black text-gray-900">{item.quantity}</td>
+                                                        <td className="px-4 py-3 text-center border-x border-gray-100">
+                                                            <div className="w-full h-6 border-b-2 border-gray-200 mx-auto"></div>
+                                                        </td>
+                                                        <td className="px-2 py-3 text-center">
+                                                            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full ${isLowStock ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                                                                {isLowStock ? 'Repor' : 'Ok'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-3 py-3">
+                                                            <div className="w-full h-6 border-b border-dashed border-gray-100"></div>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
 
                                         <tfoot className="repeat-footer">
