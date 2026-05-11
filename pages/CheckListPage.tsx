@@ -409,8 +409,10 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
         setIsLoading(true);
         try {
             const fullEntry = await dataService.getById<ChecklistEntry>(getTableName(entry.type), entry.id);
-            setStatusTargetEntry(fullEntry);
-            setStatusModalOpen(true);
+            if (fullEntry) {
+                setStatusTargetEntry({ ...fullEntry, type: entry.type });
+                setStatusModalOpen(true);
+            }
         } catch (error) {
             alert("Erro ao abrir controle de status.");
         } finally {
@@ -568,8 +570,12 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
         
         let targetStatus = editingEntryId ? entries.find(e => e.id === editingEntryId)?.status || 'Aberto' : 'Aberto';
         
-        if (activeFormType === 'manutencao' && targetStatus === 'Aberto') {
-            if (confirm("Deseja salvar e já FINALIZAR este registro de manutenção? (Isso dará baixa imediata no estoque)")) {
+        if ((activeFormType === 'manutencao' || activeFormType === 'checkout') && targetStatus === 'Aberto') {
+            const msg = activeFormType === 'manutencao' 
+                ? "Deseja salvar e já FINALIZAR este registro de manutenção? (Isso dará baixa imediata no estoque)"
+                : "Deseja salvar e já FINALIZAR este check-out de obra? (Isso dará baixa definitiva no estoque e concluirá o projeto)";
+            
+            if (confirm(msg)) {
                 targetStatus = 'Finalizado';
             }
         }
@@ -588,6 +594,24 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
         try {
             if (targetStatus === 'Finalizado') {
                 await processStockDeduction(newEntry);
+                
+                if (activeFormType === 'checkout') {
+                    // Atualiza checkin relacionado
+                    const allCheckinsData = await dataService.getAll<ChecklistEntry>('checklist_checkin');
+                    const originalCheckin = allCheckinsData.find(c => String(c.id) === String(newEntry.id));
+                    if (originalCheckin) {
+                        const { type: chkinType = '', ...chkinDataToSave } = { ...originalCheckin, status: 'Finalizado' as const };
+                        await dataService.save('checklist_checkin', chkinDataToSave as any);
+                    }
+
+                    // Atualiza orçamento relacionado
+                    const allOrcamentos = await dataService.getAll<SavedOrcamento>('orcamentos');
+                    const relatedOrcamento = allOrcamentos.find(o => String(o.id) === String(newEntry.id));
+                    if (relatedOrcamento) {
+                        const orcDataToSave = { ...relatedOrcamento, status: 'Finalizado' as any };
+                        await dataService.save('orcamentos', orcDataToSave as any);
+                    }
+                }
             }
             const { type: _unusedType = '', ...dataToSave } = newEntry;
             await dataService.save(currentTable, dataToSave as any);
@@ -598,8 +622,11 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
             setIsViewOnly(false);
             setActiveStep(1);
             setForm(getInitialForm(view));
-            alert(targetStatus === 'Finalizado' ? "Manutenção finalizada e estoque baixado!" : "Salvo com sucesso!");
-        } catch(e: any) { alert(`Erro ao salvar.`); } finally { setIsSaving(false); }
+            alert(targetStatus === 'Finalizado' ? "Operação finalizada com sucesso! O estoque foi baixado e os registros vinculados foram atualizados." : "Salvo com sucesso!");
+        } catch(e: any) { 
+            console.error(e);
+            alert(`Erro ao salvar: ${e.message || 'Verifique sua conexão.'}`); 
+        } finally { setIsSaving(false); }
     };
 
     const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
