@@ -1390,20 +1390,20 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                 <div className="grid grid-cols-2 gap-1.5 p-1 bg-gray-100 dark:bg-gray-700/50 rounded-xl border-2 dark:border-gray-600">
                                     <button 
                                         type="button" 
-                                        disabled={!!requestToEdit}
+                                        disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')}
                                         onClick={() => {
                                             setRequestForm({...requestForm, purchaseType: 'Reposição'});
                                             setIsManualItem(false);
                                         }} 
-                                        className={`flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold rounded-lg transition-all ${requestForm.purchaseType === 'Reposição' ? 'bg-white dark:bg-gray-800 text-indigo-600 shadow-sm border border-gray-200' : 'text-gray-400'} ${requestToEdit ? 'cursor-not-allowed opacity-80' : ''}`}
+                                        className={`flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold rounded-lg transition-all ${requestForm.purchaseType === 'Reposição' ? 'bg-white dark:bg-gray-800 text-indigo-600 shadow-sm border border-gray-200' : 'text-gray-400'} ${!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado') ? 'cursor-not-allowed opacity-80' : ''}`}
                                     >
                                         <CubeIcon className="w-3.5 h-3.5" /> Reposição
                                     </button>
                                     <button 
                                         type="button" 
-                                        disabled={!!requestToEdit}
+                                        disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')}
                                         onClick={() => setRequestForm({...requestForm, purchaseType: 'Obra'})} 
-                                        className={`flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold rounded-lg transition-all ${requestForm.purchaseType === 'Obra' ? 'bg-white dark:bg-gray-800 text-amber-600 shadow-sm border border-gray-200' : 'text-gray-400'} ${requestToEdit ? 'cursor-not-allowed opacity-80' : ''}`}
+                                        className={`flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold rounded-lg transition-all ${requestForm.purchaseType === 'Obra' ? 'bg-white dark:bg-gray-800 text-amber-600 shadow-sm border border-gray-200' : 'text-gray-400'} ${!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado') ? 'cursor-not-allowed opacity-80' : ''}`}
                                     >
                                         <TruckIcon className="w-3.5 h-3.5" /> Compra obra
                                     </button>
@@ -1413,7 +1413,7 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                 <label className={labelSentenceClass}>Data da solicitação</label>
                                 <div className="relative">
                                     <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                                    <input type="date" disabled={!!requestToEdit} value={requestForm.requestDate} onChange={e => setRequestForm({...requestForm, requestDate: e.target.value})} className={editableFieldClass + " pl-10 py-1.5 disabled:opacity-60 disabled:bg-gray-50"} />
+                                    <input type="date" disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')} value={requestForm.requestDate} onChange={e => setRequestForm({...requestForm, requestDate: e.target.value})} className={editableFieldClass + " pl-10 py-1.5 disabled:opacity-60 disabled:bg-gray-50"} />
                                 </div>
                             </div>
                         </div>
@@ -1434,9 +1434,16 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                         {isManualItem ? 'Item avulso (Fora do estoque)' : 'Catálogo orner'}
                                     </span>
                                     {requestToEdit && (
-                                        <span className={`px-2 py-0.5 rounded text-[10px] font-black ${getStatusInfo(requestToEdit.status).color}`}>
-                                            Status: {getStatusInfo(requestToEdit.status).label}
-                                        </span>
+                                        <div className="flex gap-2">
+                                            {(!requestToEdit || (requestToEdit.status !== 'Concluído' && requestToEdit.status !== 'Cancelado')) && (
+                                                <button type="button" onClick={() => setIsManualItem(!isManualItem)} className="text-[9px] font-bold text-indigo-500 hover:underline">
+                                                    Alterar p/ {isManualItem ? 'Catálogo' : 'Avulso'}
+                                                </button>
+                                            )}
+                                            <span className={`px-2 py-0.5 rounded text-[10px] font-black ${getStatusInfo(requestToEdit.status).color}`}>
+                                                Status: {getStatusInfo(requestToEdit.status).label}
+                                            </span>
+                                        </div>
                                     )}
                                 </div>
                             )}
@@ -1445,9 +1452,9 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                 <div className="animate-fade-in">
                                     <label className={labelSentenceClass}>{isManualItem ? 'Descrição do item' : 'Selecionar do catálogo'}</label>
                                     {isManualItem ? (
-                                        <input required disabled={!!requestToEdit} autoFocus placeholder="Nome do componente ou material..." value={requestForm.itemName} onChange={e => setRequestForm({...requestForm, itemName: e.target.value})} className={editableFieldClass + " py-2 disabled:opacity-60 disabled:bg-gray-50"} />
+                                        <input required disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')} autoFocus placeholder="Nome do componente ou material..." value={requestForm.itemName} onChange={e => setRequestForm({...requestForm, itemName: e.target.value})} className={editableFieldClass + " py-2 disabled:opacity-60 disabled:bg-gray-50"} />
                                     ) : (
-                                        <select required disabled={!!requestToEdit} value={requestForm.itemName} onChange={e => { const p = items.find(i => i.name === e.target.value); setRequestForm({...requestForm, itemName: e.target.value, unit: p?.unit || 'un'}); }} className={editableFieldClass + " py-2 disabled:opacity-60 disabled:bg-gray-50"}>
+                                        <select required disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')} value={requestForm.itemName} onChange={e => { const p = items.find(i => i.name === e.target.value); setRequestForm({...requestForm, itemName: e.target.value, unit: p?.unit || 'un'}); }} className={editableFieldClass + " py-2 disabled:opacity-60 disabled:bg-gray-50"}>
                                             <option value="">Escolher material cadastrado...</option>
                                             {items.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
                                         </select>
@@ -1458,9 +1465,9 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                     <div>
                                         <label className={labelSentenceClass}>Quantidade solicitada</label>
                                         <div className="flex gap-2">
-                                            <input type="number" disabled={!!requestToEdit} required min="1" value={requestForm.quantity} onChange={e => setRequestForm({...requestForm, quantity: parseFloat(e.target.value) || 0})} className={editableFieldClass + " text-center flex-1 py-1.5 disabled:opacity-60 disabled:bg-gray-50"} />
+                                            <input type="number" disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')} required min="1" value={requestForm.quantity} onChange={e => setRequestForm({...requestForm, quantity: parseFloat(e.target.value) || 0})} className={editableFieldClass + " text-center flex-1 py-1.5 disabled:opacity-60 disabled:bg-gray-50"} />
                                             <select 
-                                                disabled={!!requestToEdit || !isManualItem} 
+                                                disabled={(!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')) || !isManualItem} 
                                                 required 
                                                 value={requestForm.unit} 
                                                 onChange={e => setRequestForm({...requestForm, unit: e.target.value})} 
@@ -1474,7 +1481,7 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                         <label className={labelSentenceClass}>Prioridade / urgência</label>
                                         <div className="flex gap-1.5 h-[38px]">
                                             {(['Baixa', 'Média', 'Alta'] as const).map(p => (
-                                                <button key={p} type="button" disabled={!!requestToEdit} onClick={() => setRequestForm({...requestForm, priority: p})} className={`flex-1 py-1 text-[10px] font-black rounded-lg border-2 transition-all ${requestForm.priority === p ? (p === 'Alta' ? 'bg-red-600 border-red-600 text-white shadow-md' : p === 'Média' ? 'bg-amber-500 border-amber-500 text-white shadow-md' : 'bg-green-600 border-green-600 text-white shadow-md') : 'bg-white dark:bg-gray-800 text-gray-400 border-gray-200 dark:border-gray-600 hover:border-indigo-400'} ${requestToEdit ? 'cursor-not-allowed' : ''}`}>
+                                                <button key={p} type="button" disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')} onClick={() => setRequestForm({...requestForm, priority: p})} className={`flex-1 py-1 text-[10px] font-black rounded-lg border-2 transition-all ${requestForm.priority === p ? (p === 'Alta' ? 'bg-red-600 border-red-600 text-white shadow-md' : p === 'Média' ? 'bg-amber-500 border-amber-500 text-white shadow-md' : 'bg-green-600 border-green-600 text-white shadow-md') : 'bg-white dark:bg-gray-800 text-gray-400 border-gray-200 dark:border-gray-600 hover:border-indigo-400'} ${requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado') ? 'cursor-not-allowed' : ''}`}>
                                                     {p}
                                                 </button>
                                             ))}
@@ -1490,7 +1497,7 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                     <label className={labelSentenceClass}>Identificação da obra / cliente</label>
                                     <input 
                                         required 
-                                        disabled={!!requestToEdit}
+                                        disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')}
                                         type="text" 
                                         list="approved-clients-list"
                                         placeholder="Digite o nome ou escolha um cliente aprovado..." 
@@ -1510,13 +1517,13 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                 <label className={labelSentenceClass}>Link de compra / referência (opcional)</label>
                                 <div className="relative">
                                     <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                                    <input type="url" disabled={!!requestToEdit} placeholder="Cole o link do produto aqui..." value={requestForm.purchaseLink} onChange={e => setRequestForm({...requestForm, purchaseLink: e.target.value})} className={editableFieldClass + " pl-10 py-2 text-indigo-600 font-medium disabled:opacity-60 disabled:bg-gray-50"} />
+                                    <input type="url" disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')} placeholder="Cole o link do produto aqui..." value={requestForm.purchaseLink} onChange={e => setRequestForm({...requestForm, purchaseLink: e.target.value})} className={editableFieldClass + " pl-10 py-2 text-indigo-600 font-medium disabled:opacity-60 disabled:bg-gray-50"} />
                                 </div>
                             </div>
 
                             <div>
                                 <label className={labelSentenceClass}>Observações adicionais</label>
-                                <textarea rows={2} disabled={!!requestToEdit} placeholder="Detalhes como marca, cor, urgência ou motivo..." value={requestForm.observation} onChange={e => setRequestForm({...requestForm, observation: e.target.value})} className={editableFieldClass + " min-h-[60px] h-auto resize-none font-medium leading-tight py-2 disabled:opacity-60 disabled:bg-gray-50"} />
+                                <textarea rows={2} disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')} placeholder="Detalhes como marca, cor, urgência ou motivo..." value={requestForm.observation} onChange={e => setRequestForm({...requestForm, observation: e.target.value})} className={editableFieldClass + " min-h-[60px] h-auto resize-none font-medium leading-tight py-2 disabled:opacity-60 disabled:bg-gray-50"} />
                             </div>
                         </div>
 
@@ -1525,31 +1532,41 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                 <>
                                     {requestToEdit.status === 'Aberto' ? (
                                         <>
-                                            {isAdmin && <button type="button" onClick={() => triggerStatusConfirmation(requestToEdit, 'Cancelado')} className="flex-1 py-3 bg-red-50 text-red-600 rounded-xl font-bold text-xs hover:bg-red-100 transition-colors">Cancelar pedido</button>}
+                                            {isAdmin && <button type="button" onClick={() => triggerStatusConfirmation(requestToEdit, 'Cancelado')} className="flex-1 py-3 bg-red-50 text-red-600 rounded-xl font-bold text-xs hover:bg-red-100 transition-colors">Cancelar</button>}
+                                            <button type="submit" disabled={isSaving} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-indigo-700 transition-all">Salvar Alterações</button>
                                             {isAdmin && (
-                                                <button type="button" onClick={() => triggerStatusConfirmation(requestToEdit, 'Aprovado')} className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-blue-700 transition-all flex items-center justify-center gap-2">
-                                                    <CheckCircleIcon className="w-4 h-4" /> Aprovar pedido
+                                                <button type="button" onClick={() => triggerStatusConfirmation(requestToEdit, 'Aprovado')} className="flex-[1.5] py-3 bg-blue-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-blue-700 transition-all flex items-center justify-center gap-2">
+                                                    <CheckCircleIcon className="w-4 h-4" /> Aprovar
                                                 </button>
                                             )}
                                         </>
                                     ) : requestToEdit.status === 'Aprovado' ? (
-                                        isAdmin && (
-                                            <button type="button" onClick={() => triggerStatusConfirmation(requestToEdit, 'Comprado')} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-2">
-                                                <ShoppingCartIcon className="w-4 h-4" /> Registrar compra realizada
-                                            </button>
-                                        )
+                                        <>
+                                            <button type="submit" disabled={isSaving} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-indigo-700 transition-all">Salvar Alterações</button>
+                                            {isAdmin && (
+                                                <button type="button" onClick={() => triggerStatusConfirmation(requestToEdit, 'Comprado')} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-2">
+                                                    <ShoppingCartIcon className="w-4 h-4" /> Registrar compra
+                                                </button>
+                                            )}
+                                        </>
                                     ) : requestToEdit.status === 'Comprado' ? (
-                                        isAdmin && (
-                                            <button type="button" onClick={() => triggerStatusConfirmation(requestToEdit, 'Em trânsito')} className="flex-1 py-3 bg-purple-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-purple-700 transition-all flex items-center justify-center gap-2">
-                                                <TruckIcon className="w-4 h-4" /> Marcar em trânsito / enviado
-                                            </button>
-                                        )
+                                        <>
+                                            <button type="submit" disabled={isSaving} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-indigo-700 transition-all">Salvar Alterações</button>
+                                            {isAdmin && (
+                                                <button type="button" onClick={() => triggerStatusConfirmation(requestToEdit, 'Em trânsito')} className="flex-1 py-3 bg-purple-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-purple-700 transition-all flex items-center justify-center gap-2">
+                                                    <TruckIcon className="w-4 h-4" /> Em trânsito
+                                                </button>
+                                            )}
+                                        </>
                                     ) : requestToEdit.status === 'Em trânsito' ? (
-                                        isAdmin && (
-                                            <button type="button" onClick={() => { setIsRequestModalOpen(false); setIsNFModalOpen(true); setNfForm({ invoiceNumber: '', invoiceKey: '', totalValue: 0, invoiceFile: '', invoiceFileName: '' }); }} className="flex-1 py-3 bg-green-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-green-700 transition-all flex items-center justify-center gap-2">
-                                                <UploadIcon className="w-4 h-4" /> Efetivar entrega (Lançar nota fiscal)
-                                            </button>
-                                        )
+                                        <>
+                                            <button type="submit" disabled={isSaving} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-indigo-700 transition-all">Salvar Alterações</button>
+                                            {isAdmin && (
+                                                <button type="button" onClick={() => { setIsRequestModalOpen(false); setIsNFModalOpen(true); setNfForm({ invoiceNumber: '', invoiceKey: '', totalValue: 0, invoiceFile: '', invoiceFileName: '' }); }} className="flex-1 py-3 bg-green-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-green-700 transition-all flex items-center justify-center gap-2">
+                                                    <UploadIcon className="w-4 h-4" /> Lançar NF
+                                                </button>
+                                            )}
+                                        </>
                                     ) : (
                                         <button type="button" onClick={() => { setIsRequestModalOpen(false); setRequestToEdit(null); }} className="flex-1 py-3 bg-gray-100 text-gray-500 rounded-xl font-bold text-xs">Fechar</button>
                                     )}
