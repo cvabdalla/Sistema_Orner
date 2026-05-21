@@ -100,11 +100,50 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
     setIsLoading(true);
     try {
         const data = await dataService.getAll<ExpenseReport>('expense_reports', currentUser.id, isAdmin);
-        const sorted = (data || []).sort((a, b) => {
+        
+        let sorted = (data || []).sort((a, b) => {
             const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
             const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
             return dateB - dateA;
         });
+
+        // Autocompleting refund status if all corresponding payment items have been paid in DB
+        const pendingReports = (data || []).filter(r => r.status === 'Env. p/ Pagamento' || r.status === 'Transferido');
+        if (pendingReports.length > 0) {
+            try {
+                const allTxs = await dataService.getAll<FinancialTransaction>('financial_transactions');
+                let updatedAny = false;
+                for (const report of pendingReports) {
+                    let isFullyPaid = false;
+                    let relatedCount = 0;
+                    
+                    if (report.isInstallmentWash) {
+                        const itemIds = (report.items || []).map((i: any) => String(i.id));
+                        if (itemIds.length > 0) {
+                            const related = allTxs.filter(t => itemIds.includes(String(t.id)));
+                            relatedCount = related.length;
+                            isFullyPaid = related.length > 0 && related.every(t => t.status === 'pago');
+                        }
+                    } else {
+                        const related = allTxs.filter(t => t.relatedReportId === report.id || t.id === `tx-reemb-${report.id}`);
+                        relatedCount = related.length;
+                        isFullyPaid = related.length > 0 && related.every(t => t.status === 'pago');
+                    }
+                    
+                    if (isFullyPaid && relatedCount > 0) {
+                        report.status = 'Pago';
+                        await dataService.save('expense_reports', { ...report, status: 'Pago' });
+                        updatedAny = true;
+                    }
+                }
+                if (updatedAny) {
+                    sorted = [...sorted];
+                }
+            } catch (syncErr) {
+                console.warn("[RELATORIOS] Erro ao sincronizar status com financeiro:", syncErr);
+            }
+        }
+
         setReports(sorted);
     } catch (e) { console.error("Erro relatórios:", e); } 
     finally { setIsLoading(false); }
