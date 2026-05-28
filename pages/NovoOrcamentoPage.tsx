@@ -87,7 +87,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
 
             if (!orcamentoToEdit) {
                 const initialFixedData: Record<string, any> = {};
-                items.filter(i => i.isFixedInBudget).forEach(i => {
+                items.filter(i => i.isFixedInBudget && i.lineStatus !== 'Fora de Linha').forEach(i => {
                     initialFixedData[String(i.id)] = { qty: 0, cost: i.averagePrice || 0, markup: 0 };
                 });
                 const newState = { 
@@ -134,7 +134,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
 
     const availableStockToAdd = useMemo(() => {
         const currentDataIds = Object.keys(formState.fixedItemsData || {});
-        return allStockItems.filter((i: any) => !currentDataIds.includes(String(i.id)));
+        return allStockItems.filter((i: any) => !currentDataIds.includes(String(i.id)) && i.lineStatus !== 'Fora de Linha');
     }, [allStockItems, formState.fixedItemsData]);
 
     useEffect(() => {

@@ -168,6 +168,7 @@ export interface StockItem {
     averagePrice: number;
     isFixedInBudget: boolean;
     priceHistory?: PriceHistoryEntry[];
+    lineStatus?: 'Em linha' | 'Fora de Linha';
 }
 
 export type PurchaseRequestStatus = 'Aberto' | 'Aprovado' | 'Comprado' | 'Em trânsito' | 'Concluído' | 'Cancelado';

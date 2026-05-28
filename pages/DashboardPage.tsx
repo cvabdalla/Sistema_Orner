@@ -69,7 +69,7 @@ const DashboardPage: React.FC = () => {
       const orcamentosTotal = orcamentos.length;
 
       const openPurchaseRequests = purchaseRequests.filter(r => r.status === 'Aberto').length;
-      const lowStockItems = stockItems.filter(i => i.quantity <= i.minQuantity).length;
+      const lowStockItems = stockItems.filter(i => i.lineStatus !== 'Fora de Linha' && i.quantity <= i.minQuantity).length;
       
       const transferidos = expenseReports.filter(r => r.status === 'Transferido').length;
       const envPagamento = expenseReports.filter(r => r.status === 'Env. p/ Pagamento').length;

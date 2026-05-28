@@ -76,6 +76,13 @@ class SupabaseDataService implements IDataService {
             }
         }
     }
+    private serialize<T>(collection: string, item: any): any {
+        return item;
+    }
+
+    private deserialize<T>(collection: string, item: any): T {
+        return item;
+    }
 
     async getById<T>(collection: string, id: string | number): Promise<T | null> {
         try {
@@ -86,7 +93,7 @@ class SupabaseDataService implements IDataService {
                 .single();
             
             if (error) throw error;
-            return data as T;
+            return this.deserialize<T>(collection, data);
         } catch (e: any) {
             console.error(`[DB ERROR] Erro ao buscar ${collection}:${id}:`, e.message);
             // Tenta no cache se falhar
@@ -125,7 +132,7 @@ class SupabaseDataService implements IDataService {
 
             const { data, error } = await query;
             if (error) throw error;
-            return (data as T[]) || [];
+            return ((data as any[]) || []).map(item => this.deserialize<T>(collection, item));
         } catch (e: any) {
             console.error(`[DB ERROR] Erro parcial carregar ${collection}:`, e.message);
             return this.getLocal<T>(collection);
@@ -176,11 +183,13 @@ class SupabaseDataService implements IDataService {
                 return this.getLocal<T>(collection);
             }
 
+            const deserialized = ((data as any[]) || []).map(item => this.deserialize<T>(collection, item));
+
             if (data) {
-                this.setLocal(collection, data);
+                this.setLocal(collection, deserialized);
             }
             
-            return (data as T[]) || [];
+            return deserialized;
 
         } catch (e: any) {
             console.error(`[RUNTIME ERROR] Erro inesperado ao carregar ${collection}:`, e.message);
@@ -189,18 +198,20 @@ class SupabaseDataService implements IDataService {
     }
 
     async save<T extends { id: string | number }>(collection: string, item: T): Promise<T> {
+        const deserializedItem = this.deserialize<T>(collection, item);
         const localData = this.getLocal<T>(collection);
         const index = localData.findIndex(i => String(i.id) === String(item.id));
         if (index > -1) {
-            localData[index] = { ...localData[index], ...item };
+            localData[index] = { ...localData[index], ...deserializedItem };
         } else {
-            localData.push(item);
+            localData.push(deserializedItem);
         }
         this.setLocal(collection, localData);
 
         try {
+            const dbItem = this.serialize(collection, item);
             const cleanItem = Object.fromEntries(
-                Object.entries(item).filter(([_, v]) => v !== undefined)
+                Object.entries(dbItem).filter(([_, v]) => v !== undefined)
             );
 
             const { data, error } = await supabase
@@ -210,7 +221,7 @@ class SupabaseDataService implements IDataService {
                 .single();
 
             if (error) throw error;
-            return data as T;
+            return this.deserialize<T>(collection, data);
         } catch (e: any) {
             console.error(`[SAVE ERROR] ${collection}:`, e.message);
             throw e;
@@ -218,8 +229,9 @@ class SupabaseDataService implements IDataService {
     }
 
     async saveAll<T extends { id: string | number }>(collection: string, items: T[]): Promise<T[]> {
+        const deserializedItems = items.map(item => this.deserialize<T>(collection, item));
         const localData = this.getLocal<T>(collection);
-        items.forEach(item => {
+        deserializedItems.forEach(item => {
             const index = localData.findIndex(i => String(i.id) === String(item.id));
             if (index > -1) localData[index] = { ...localData[index], ...item };
             else localData.push(item);
@@ -227,7 +239,8 @@ class SupabaseDataService implements IDataService {
         this.setLocal(collection, localData);
 
         try {
-            const cleanItems = items.map(item => 
+            const dbItems = items.map(item => this.serialize(collection, item));
+            const cleanItems = dbItems.map(item => 
                 Object.fromEntries(Object.entries(item).filter(([_, v]) => v !== undefined))
             );
 
@@ -237,7 +250,7 @@ class SupabaseDataService implements IDataService {
                 .select();
 
             if (error) throw error;
-            return data as T[];
+            return ((data as any[]) || []).map(item => this.deserialize<T>(collection, item));
         } catch (e: any) {
             console.error(`[BATCH SAVE ERROR] ${collection}:`, e.message);
             throw e;

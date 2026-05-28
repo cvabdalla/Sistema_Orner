@@ -15,3 +15,7 @@ CREATE INDEX IF NOT EXISTS idx_financial_related_report ON financial_transaction
 -- 3. Comentários para documentação do schema
 COMMENT ON COLUMN financial_transactions."invoiceSent" IS 'Indica se o lançamento técnico teve a documentação validada/enviada via RD';
 COMMENT ON COLUMN financial_transactions."relatedReportId" IS 'ID do relatório de reembolso/técnico vinculado a esta transação';
+
+-- 4. Adiciona o campo de status de linha em itens de estoque
+ALTER TABLE stock_items ADD COLUMN IF NOT EXISTS "lineStatus" text DEFAULT 'Em linha';
+COMMENT ON COLUMN stock_items."lineStatus" IS 'Classificação da disponibilidade do item: "Em linha" ou "Fora de Linha"';

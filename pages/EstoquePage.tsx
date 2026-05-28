@@ -30,7 +30,7 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
     const [isSaving, setIsSaving] = useState(false);
     
     const [activeTab, setActiveTab] = useState<'inventario' | 'historico'>('inventario');
-    const [purchaseStatusFilter, setPurchaseStatusFilter] = useState<'Todos' | PurchaseRequestStatus>('Todos');
+    const [purchaseStatusFilter, setPurchaseStatusFilter] = useState<'Todos' | PurchaseRequestStatus>('Aberto');
 
     // Filtros para o Inventário
     const [inventorySearchTerm, setInventorySearchTerm] = useState('');
@@ -64,8 +64,19 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
     // Estado para cadastro de produtos
     const [isProductModalOpen, setIsProductModalOpen] = useState(false);
     const [productToEdit, setStockItemToEdit] = useState<StockItem | null>(null);
-    const [productForm, setProductForm] = useState({
-        name: '', ncm: '', quantity: 0, minQuantity: 1, unit: 'un', description: '', image: '', averagePrice: 0, isFixedInBudget: true
+    const [productForm, setProductForm] = useState<{
+        name: string;
+        ncm: string;
+        quantity: number;
+        minQuantity: number;
+        unit: string;
+        description: string;
+        image: string;
+        averagePrice: number;
+        isFixedInBudget: boolean;
+        lineStatus: 'Em linha' | 'Fora de Linha';
+    }>({
+        name: '', ncm: '', quantity: 0, minQuantity: 1, unit: 'un', description: '', image: '', averagePrice: 0, isFixedInBudget: true, lineStatus: 'Em linha'
     });
 
     const [isNFModalOpen, setIsNFModalOpen] = useState(false);
@@ -163,6 +174,14 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
     const handleSaveRequest = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!requestForm.itemName.trim()) return;
+
+        // Block purchase order of "Fora de Linha" catalog items
+        const targetProduct = items.find(i => String(i.name).toLowerCase() === String(requestForm.itemName).trim().toLowerCase());
+        if (targetProduct && targetProduct.lineStatus === 'Fora de Linha') {
+            alert("Este item está fora de linha e não permite a abertura de pedidos de compra!");
+            return;
+        }
+
         setIsSaving(true);
         try {
             const requestData: PurchaseRequest = {
@@ -273,6 +292,7 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                 image: productForm.image,
                 averagePrice: productForm.averagePrice,
                 isFixedInBudget: productForm.isFixedInBudget,
+                lineStatus: productForm.lineStatus || 'Em linha',
                 priceHistory: productToEdit ? productToEdit.priceHistory : (Number(productForm.quantity) > 0 ? [{
                     date: new Date().toISOString(),
                     price: productForm.averagePrice,
@@ -552,7 +572,7 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                     <DashboardCard title="Itens no catálogo" value={items.length.toString()} icon={CubeIcon} color="bg-indigo-500" />
-                    <DashboardCard title="Alertas de mínimo" value={items.filter(i => i.quantity <= i.minQuantity).length.toString()} icon={ExclamationTriangleIcon} color="bg-orange-500" />
+                    <DashboardCard title="Alertas de mínimo" value={items.filter(i => i.lineStatus !== 'Fora de Linha' && i.quantity <= i.minQuantity).length.toString()} icon={ExclamationTriangleIcon} color="bg-orange-500" />
                     <DashboardCard title="Valor total do estoque" value={formatCurrency(inventoryValue)} icon={DollarIcon} color="bg-green-600" />
                 </div>
 
@@ -595,7 +615,8 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                                     {filteredInventoryItems.length > 0 ? filteredInventoryItems.map(item => {
-                                        const isLowStock = item.quantity <= item.minQuantity;
+                                        const isDiscontinued = item.lineStatus === 'Fora de Linha';
+                                        const isLowStock = !isDiscontinued && item.quantity <= item.minQuantity;
                                         const hasReservations = (item.reservedQuantity || 0) > 0;
                                         return (
                                             <tr key={item.id} className={`hover:bg-indigo-50/30 dark:hover:bg-indigo-900/10 transition-colors cursor-pointer group ${isLowStock ? 'bg-red-50/50 dark:bg-red-900/10' : ''}`} onClick={() => handleShowPriceHistory(item)}>
@@ -615,7 +636,15 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                                     {item.reservedQuantity || 0}
                                                 </td>
                                                 <td className="px-4 py-3 text-center font-bold text-indigo-600">{(item.quantity || 0) - (item.reservedQuantity || 0)}</td>
-                                                <td className="px-4 py-3 text-center">{isLowStock ? <span className="text-[9px] font-black text-red-600 bg-red-100 px-2 py-1 rounded-full">Reposição</span> : <span className="text-[9px] font-black text-green-600 bg-green-100 px-2 py-1 rounded-full">Normal</span>}</td>
+                                                <td className="px-4 py-3 text-center">
+                                                    {isDiscontinued ? (
+                                                        <span className="text-[9px] font-black text-slate-500 bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 px-2.5 py-1 rounded-full whitespace-nowrap">Fora de linha</span>
+                                                    ) : isLowStock ? (
+                                                        <span className="text-[9px] font-black text-rose-700 bg-rose-50 border border-rose-200 dark:bg-rose-955/30 dark:text-rose-400 dark:border-rose-900/50 px-2.5 py-1 rounded-full whitespace-nowrap animate-pulse">Reposição</span>
+                                                    ) : (
+                                                        <span className="text-[9px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 dark:bg-emerald-955/20 dark:text-emerald-400 dark:border-emerald-900/50 px-2.5 py-1 rounded-full whitespace-nowrap">Normal</span>
+                                                    )}
+                                                </td>
                                             </tr>
                                         );
                                     }) : (
@@ -827,7 +856,8 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                         
                                         <tbody className="table-row-group">
                                             {filteredInventoryItems.map(item => {
-                                                const isLowStock = item.quantity <= item.minQuantity;
+                                                const isDiscontinued = item.lineStatus === 'Fora de Linha';
+                                                const isLowStock = !isDiscontinued && item.quantity <= item.minQuantity;
                                                 return (
                                                     <tr key={item.id} className="border-b border-gray-100 break-inside-avoid text-[10px]">
                                                         <td className="px-3 py-3 font-bold text-gray-900">
@@ -842,8 +872,8 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                                             <div className="w-full h-6 border-b-2 border-gray-200 mx-auto"></div>
                                                         </td>
                                                         <td className="px-2 py-3 text-center">
-                                                            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full ${isLowStock ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                                                                {isLowStock ? 'Repor' : 'Ok'}
+                                                            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full border ${isDiscontinued ? 'bg-slate-100 text-slate-500 border-slate-200' : isLowStock ? 'bg-rose-50 text-rose-700 border-rose-200 animate-pulse' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                                                                {isDiscontinued ? 'Fora de linha' : isLowStock ? 'Repor' : 'Ok'}
                                                             </span>
                                                         </td>
                                                         <td className="px-3 py-3">
@@ -1058,7 +1088,7 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                         <button 
                             onClick={() => {
                                 setStockItemToEdit(null);
-                                setProductForm({ name: '', ncm: '', quantity: 0, minQuantity: 1, unit: 'un', description: '', image: '', averagePrice: 0, isFixedInBudget: true });
+                                setProductForm({ name: '', ncm: '', quantity: 0, minQuantity: 1, unit: 'un', description: '', image: '', averagePrice: 0, isFixedInBudget: true, lineStatus: 'Em linha' });
                                 setIsProductModalOpen(true);
                             }}
                             className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold shadow-lg hover:bg-indigo-700 transition-all active:scale-95"
@@ -1094,7 +1124,14 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                             </div>
                                         </td>
                                         <td className="px-6 py-3">
-                                            <p className="font-bold text-[13px] text-gray-800 dark:text-white leading-tight">{item.name}</p>
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <p className="font-bold text-[13px] text-gray-800 dark:text-white leading-tight">{item.name}</p>
+                                                {item.lineStatus === 'Fora de Linha' ? (
+                                                    <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 tracking-wide uppercase">Fora de Linha</span>
+                                                ) : (
+                                                    <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/50 tracking-wide uppercase">Em linha</span>
+                                                )}
+                                            </div>
                                             <p className="text-[10px] text-gray-400 font-medium mt-0.5 line-clamp-1">{item.description || 'Sem descrição detalhada'}</p>
                                         </td>
                                         <td className="px-6 py-3 text-center text-[11px] font-bold text-gray-500">{item.ncm || '---'}</td>
@@ -1116,7 +1153,8 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                                                     description: item.description || '', 
                                                                     image: item.image || '',
                                                                     averagePrice: item.averagePrice || 0,
-                                                                    isFixedInBudget: !!item.isFixedInBudget
+                                                                    isFixedInBudget: !!item.isFixedInBudget,
+                                                                    lineStatus: item.lineStatus || 'Em linha'
                                                                 });
                                                                 setIsProductModalOpen(true);
                                                             }}
@@ -1247,6 +1285,18 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                                 placeholder="0,00"
                                             />
                                         </div>
+                                    </div>
+
+                                    <div>
+                                        <label className={labelSentenceClass}>Status de Linha (Disponibilidade)</label>
+                                        <select 
+                                            value={productForm.lineStatus} 
+                                            onChange={e => setProductForm({...productForm, lineStatus: e.target.value as 'Em linha' | 'Fora de Linha'})} 
+                                            className={editableFieldClass + " py-2 hover:border-indigo-400 transition-colors"}
+                                        >
+                                            <option value="Em linha">Em linha</option>
+                                            <option value="Fora de Linha">Fora de Linha (Descontinuado)</option>
+                                        </select>
                                     </div>
 
                                     <label className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-700/40 rounded-2xl border-2 border-indigo-100 dark:border-indigo-900 cursor-pointer hover:bg-white transition-all">
@@ -1456,7 +1506,7 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                     ) : (
                                         <select required disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')} value={requestForm.itemName} onChange={e => { const p = items.find(i => i.name === e.target.value); setRequestForm({...requestForm, itemName: e.target.value, unit: p?.unit || 'un'}); }} className={editableFieldClass + " py-2 disabled:opacity-60 disabled:bg-gray-50"}>
                                             <option value="">Escolher material cadastrado...</option>
-                                            {items.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
+                                            {items.filter(item => item.lineStatus !== 'Fora de Linha').map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
                                         </select>
                                     )}
                                 </div>

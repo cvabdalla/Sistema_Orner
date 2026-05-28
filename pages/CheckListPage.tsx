@@ -462,7 +462,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
                 
                 await dataService.save('stock_items', updatedStockItem);
 
-                if (newQty < stockItem.minQuantity && !hasPendingRequest(stockItem.name)) {
+                if (stockItem.lineStatus !== 'Fora de Linha' && newQty < stockItem.minQuantity && !hasPendingRequest(stockItem.name)) {
                     const buyQty = (stockItem.minQuantity * 2) - newQty;
                     if (buyQty > 0) {
                         const autoRequest: PurchaseRequest = {
@@ -722,7 +722,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
                             className="flex-1 rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-2 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-1 focus:ring-indigo-500 min-w-0"
                         >
                             <option value="">Selecionar item...</option>
-                            {stockItems.map(i => <option key={i.id} value={String(i.id)}>{i.name}</option>)}
+                            {stockItems.filter(i => i.lineStatus !== 'Fora de Linha').map(i => <option key={i.id} value={String(i.id)}>{i.name}</option>)}
                         </select>
                         <input 
                             type="number" 
