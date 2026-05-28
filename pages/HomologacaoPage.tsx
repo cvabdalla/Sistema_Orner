@@ -24,22 +24,22 @@ const toSentenceCase = (str: string) => {
 };
 
 const FormLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5 tracking-tight">{children}</label>
+    <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1 ml-0.5 tracking-tight">{children}</label>
 );
 
 const SectionHeader: React.FC<{ icon: React.ReactElement<any>; title: string; color?: string }> = ({ icon, title, color = "bg-indigo-600" }) => (
-    <div className="flex items-center gap-2 mb-3 pb-1 border-b border-gray-100 dark:border-gray-700/50">
-        <div className={`p-1.5 rounded-lg text-white ${color}`}>
+    <div className="flex items-center gap-2 mb-4 pb-1.5 border-b border-gray-100 dark:border-gray-800/80">
+        <div className={`p-1.5 rounded-lg text-white ${color} shrink-0`}>
             {React.cloneElement(icon, { className: "w-3.5 h-3.5" })}
         </div>
-        <h4 className="text-[10px] font-black text-gray-500 dark:text-gray-400 tracking-wider">{title}</h4>
+        <h4 className="text-[10px] font-black text-gray-400 dark:text-gray-500 tracking-wider">{title}</h4>
     </div>
 );
 
 const DataRow: React.FC<{ label: string; value: any; color?: string }> = ({ label, value, color = "text-gray-900 dark:text-white" }) => (
-    <div className="flex justify-between items-start py-2 border-b border-gray-50 dark:border-gray-800 last:border-0">
-        <span className="text-[10px] font-bold text-gray-400 tracking-tight">{label}</span>
-        <span className={`text-xs font-black text-right max-w-[60%] ${color}`}>{value || '---'}</span>
+    <div className="flex justify-between items-center py-2.5 border-b border-gray-55 dark:border-gray-800/40 last:border-0 hover:bg-gray-50/20 px-1 rounded-sm transition-all">
+        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 tracking-tight leading-none">{label}</span>
+        <span className={`text-xs font-semibold text-right max-w-[65%] truncate ${color}`}>{value || '---'}</span>
     </div>
 );
 
@@ -56,10 +56,13 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
     const [isModalOpen, setModalOpen] = useState(false);
     const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
     const [isViewCheckinModalOpen, setViewCheckinModalOpen] = useState(false);
+    const [isViewCheckoutModalOpen, setViewCheckoutModalOpen] = useState(false);
     const [isConfirmFinalizeModalOpen, setIsConfirmFinalizeModalOpen] = useState(false);
     const [entryToFinalize, setEntryToFinalize] = useState<HomologacaoEntry | null>(null);
     const [activeCheckinStep, setActiveCheckinStep] = useState(1);
+    const [activeCheckoutStep, setActiveCheckoutStep] = useState(1);
     const [selectedCheckin, setSelectedCheckin] = useState<ChecklistEntry | null>(null);
+    const [selectedCheckout, setSelectedCheckout] = useState<ChecklistEntry | null>(null);
     const [hdPhoto, setHdPhoto] = useState<string | null>(null);
 
     const [isViewOnly, setIsViewOnly] = useState(false);
@@ -93,7 +96,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
         setIsLoading(true);
         try {
             // Buscamos apenas os campos necessários para a listagem principal
-            const homoFields = 'id, owner_id, responsible_user_id, clientName, date, status, checkinId, observations';
+            const homoFields = 'id, owner_id, responsible_user_id, clientName, date, status, checkinId, files, observations';
             
             const [homoData, checkinData, userData, profileData] = await Promise.all([
                 dataService.getPartial<HomologacaoEntry>('homologacao_entries', homoFields, currentUser.id, isMasterAdmin),
@@ -309,6 +312,39 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
         }
     };
 
+    const handleViewCheckout = async (checkinId: string, clientName: string) => {
+        setIsLoading(true);
+        try {
+            // Buscamos todos os checklists de checkout para fazer o cruzamento robusto em memória
+            const checkouts = await dataService.getAll<ChecklistEntry>('checklist_checkout');
+            const foundCheckout = checkouts.find(c => {
+                if (!c) return false;
+                const matchesCheckinId = String(c.id) === String(checkinId) || (c.details && String(c.details.originalCheckinId) === String(checkinId));
+                const matchesClientName = c.project?.toLowerCase().trim() === clientName?.toLowerCase().trim() || 
+                                          (c.details && c.details.nomeCliente?.toLowerCase().trim() === clientName?.toLowerCase().trim());
+                return matchesCheckinId || matchesClientName;
+            });
+
+            if (foundCheckout) {
+                const checkout = await dataService.getById<ChecklistEntry>('checklist_checkout', foundCheckout.id);
+                if (checkout) {
+                    setSelectedCheckout(checkout);
+                    setActiveCheckoutStep(1);
+                    setViewCheckoutModalOpen(true);
+                } else {
+                    alert("Dados do Check-out não puderam ser abertos.");
+                }
+            } else {
+                alert("Check-out de Obra não encontrado ou não finalizado para este cliente.");
+            }
+        } catch (error) {
+            console.error("Erro ao carregar dados do Check-out:", error);
+            alert("Erro ao carregar dados do Check-out.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const handleDownload = (file: ExpenseAttachment) => {
         const parts = file.data.split(';base64,');
         const contentType = parts[0].split(':')[1];
@@ -328,36 +364,44 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
 
     const renderFileList = (files: ExpenseAttachment[] = [], field: keyof HomologacaoEntry['files']) => {
         return (
-            <div className="space-y-2 mt-2">
+            <div className="space-y-1.5 mt-1.5 select-none font-sans">
                 {files.map((file, idx) => {
                     const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.data.startsWith('data:application/pdf');
                     return (
-                        <div key={idx} className="flex items-center justify-between gap-3 bg-white dark:bg-gray-800 p-2.5 rounded-xl border border-indigo-100 dark:border-indigo-900 shadow-sm group">
-                            <div className="flex items-center gap-3 overflow-hidden">
+                        <div key={idx} className="flex items-center justify-between gap-3 bg-white dark:bg-gray-800 p-2 rounded-xl border border-gray-100 dark:border-gray-700/60 shadow-xs hover:border-indigo-100 transition-all">
+                            <div className="flex items-center gap-2 overflow-hidden flex-1">
                                 {isPdf ? (
-                                    <DocumentReportIcon className="w-5 h-5 text-red-500 shrink-0" />
+                                    <DocumentReportIcon className="w-4 h-4 text-red-500 shrink-0" />
                                 ) : (
-                                    <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 border border-gray-100">
+                                    <div className="w-7 h-7 rounded-lg overflow-hidden shrink-0 border border-gray-100 dark:border-gray-700">
                                         <img src={file.data} className="w-full h-full object-cover" alt="" />
                                     </div>
                                 )}
-                                <span className="text-[10px] font-bold text-gray-700 dark:text-gray-200 truncate">{file.name}</span>
+                                <span className="text-[10px] font-bold text-gray-650 dark:text-gray-300 truncate tracking-tight">{file.name}</span>
                             </div>
                             <div className="flex gap-1 shrink-0">
-                                <button type="button" onClick={() => handleViewFile(file)} className="p-1 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-all"><EyeIcon className="w-3.5 h-3.5" /></button>
-                                <button type="button" onClick={() => handleDownload(file)} className="p-1 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-all"><ArrowDownIcon className="w-3.5 h-3.5" /></button>
-                                {!isSaving && (
-                                    <button type="button" onClick={() => handleRemoveFile(field, idx)} className="p-1 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-all"><TrashIcon className="w-3.5 h-3.5" /></button>
+                                <button type="button" onClick={() => handleViewFile(file)} className="p-1 px-1.5 text-[9px] font-bold bg-gray-50 hover:bg-indigo-50 hover:text-indigo-600 dark:bg-gray-750 dark:hover:bg-indigo-950/40 text-gray-500 dark:text-gray-400 rounded-lg transition-all" title="Visualizar">
+                                    <EyeIcon className="w-3 h-3" />
+                                </button>
+                                <button type="button" onClick={() => handleDownload(file)} className="p-1 px-1.5 text-[9px] font-bold bg-gray-50 hover:bg-emerald-50 hover:text-emerald-600 dark:bg-gray-750 dark:hover:bg-emerald-950/40 text-gray-500 dark:text-gray-400 rounded-lg transition-all" title="Baixar">
+                                    <ArrowDownIcon className="w-3 h-3" />
+                                </button>
+                                {!isSaving && !isViewOnly && (
+                                    <button type="button" onClick={() => handleRemoveFile(field, idx)} className="p-1 px-1.5 text-[9px] font-bold bg-gray-50 hover:bg-red-50 hover:text-red-600 dark:bg-gray-750 dark:hover:bg-red-950/40 text-gray-500 dark:text-gray-450 rounded-lg transition-all" title="Remover">
+                                        <TrashIcon className="w-3 h-3" />
+                                    </button>
                                 )}
                             </div>
                         </div>
                     );
                 })}
-                <label className="flex flex-col items-center justify-center py-4 px-4 bg-white dark:bg-gray-800 border-2 border-dashed border-indigo-100 dark:border-indigo-900 rounded-2xl cursor-pointer hover:border-indigo-300 hover:bg-indigo-50/20 transition-all group">
-                    <UploadIcon className="w-5 h-5 text-indigo-400 group-hover:scale-110 transition-transform" />
-                    <span className="text-[9px] font-black text-indigo-600 mt-1.5">Adicionar anexo</span>
-                    {!isViewOnly && <input type="file" className="hidden" accept="image/*,application/pdf" onChange={(e) => handleFileUpload(e, field)} />}
-                </label>
+                {!isViewOnly && (
+                    <label className="flex flex-col items-center justify-center py-3 px-3 bg-gray-50/45 hover:bg-gray-50 dark:bg-gray-900 border border-dashed border-gray-200 dark:border-gray-700/80 rounded-xl cursor-pointer hover:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100 transition-all group">
+                        <UploadIcon className="w-4 h-4 text-gray-400 group-hover:text-indigo-600 transition-all duration-200 group-hover:scale-105" />
+                        <span className="text-[10px] font-bold text-gray-400 group-hover:text-indigo-600 mt-1 tracking-wider animate-pulse">Anexar</span>
+                        <input type="file" className="hidden" accept="image/*,application/pdf" onChange={(e) => handleFileUpload(e, field)} />
+                    </label>
+                )}
             </div>
         );
     };
@@ -379,37 +423,44 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
     };
 
     const renderEntryFilesSummary = (files: ExpenseAttachment[] = [], label: string, colorClass: string, Icon: any) => {
-        if (!files || files.length === 0) return null;
-        return (
-            <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-100 dark:border-gray-700">
+        if (!files || files.length === 0) {
+            return (
+                <div className="flex items-center justify-between p-3 bg-gray-50/20 dark:bg-gray-900/10 rounded-2xl border border-dashed border-gray-150 dark:border-gray-800/80 opacity-50 select-none">
                     <div className="flex items-center gap-2">
-                        <div className={`p-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-sm ${colorClass}`}>
-                            <Icon className="w-4 h-4" />
-                        </div>
-                        <span className="text-[11px] font-bold text-gray-700 dark:text-gray-300">{label} ({files.length})</span>
+                        <Icon className="w-3.5 h-3.5 text-gray-400" />
+                        <span className="text-[10px] font-semibold text-gray-400 tracking-tight">{label} (Não anexado)</span>
                     </div>
-                    <div className="flex gap-1 items-center">
-                        <div className="flex -space-x-1.5 mr-2">
-                            {files.map((f, i) => (
-                                <button 
-                                    key={i} 
-                                    onClick={() => handleViewFile(f)}
-                                    title={`Visualizar ${f.name}`}
-                                    className="w-6 h-6 rounded-full border border-white dark:border-gray-800 bg-indigo-100 hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center text-[9px] font-black text-indigo-600 shadow-sm z-10 hover:z-20 scale-100 hover:scale-110 active:scale-95"
-                                >
-                                    {i + 1}
-                                </button>
-                            ))}
-                        </div>
-                        <button 
-                            onClick={() => handleViewFile(files[0])} 
-                            className="p-1.5 text-indigo-500 hover:bg-white rounded-lg transition-all shadow-sm"
-                            title="Visualizar primeiro arquivo"
-                        >
-                            <EyeIcon className="w-4 h-4" />
-                        </button>
+                </div>
+            );
+        }
+        return (
+            <div className="flex items-center justify-between p-3 bg-gray-50/45 dark:bg-gray-900/10 rounded-2xl border border-gray-100/60 dark:border-gray-800/60 shadow-xs hover:border-indigo-100 transition-colors">
+                <div className="flex items-center gap-2 overflow-hidden flex-1 select-none">
+                    <div className={`p-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-xs ${colorClass}`}>
+                        <Icon className="w-3.5 h-3.5" />
                     </div>
+                    <span className="text-[11px] font-bold text-gray-700 dark:text-gray-300 truncate tracking-tight">{label} <span className="text-[10px] text-gray-400 font-semibold">({files.length})</span></span>
+                </div>
+                <div className="flex gap-2 items-center shrink-0">
+                    <div className="flex -space-x-1.5 -mr-0.5">
+                        {files.map((f, i) => (
+                            <button 
+                                key={i} 
+                                onClick={(e) => { e.stopPropagation(); handleViewFile(f); }}
+                                title={`Visualizar ${f.name}`}
+                                className="w-6 h-6 rounded-full border border-white dark:border-gray-800 bg-indigo-50/90 hover:bg-indigo-600 hover:text-white dark:bg-indigo-950/80 dark:text-indigo-400 dark:hover:bg-indigo-500 dark:hover:text-white transition-all flex items-center justify-center text-[9px] font-black text-indigo-600 shadow-sm z-10 hover:z-20 scale-100 hover:scale-110 active:scale-95"
+                            >
+                                {i + 1}
+                            </button>
+                        ))}
+                    </div>
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); handleViewFile(files[0]); }} 
+                        className="p-1 px-1.5 bg-white dark:bg-gray-800 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg transition-all border border-gray-100 dark:border-gray-700 shadow-xs hover:shadow-sm"
+                        title="Visualizar primeiro arquivo"
+                    >
+                        <EyeIcon className="w-3.5 h-3.5" />
+                    </button>
                 </div>
             </div>
         );
@@ -418,20 +469,20 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
     const renderCheckinGalleryItem = (label: string, photos: string[] = []) => {
         if (!photos || photos.length === 0) return null;
         return (
-            <div className="p-4 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 space-y-3">
-                <label className="text-[10px] font-black text-gray-400 block tracking-tight">{label}</label>
+            <div className="p-4 bg-gray-50/30 dark:bg-gray-850 rounded-2xl border border-gray-100 dark:border-gray-800/80 space-y-2.5">
+                <label className="text-[9px] font-black text-gray-400 dark:text-gray-500 block tracking-wider">{label}</label>
                 <div className="grid grid-cols-4 gap-2">
                     {photos.map((url, idx) => (
-                        <div key={idx} className="relative aspect-square rounded-xl overflow-hidden shadow-sm group border border-gray-50 dark:border-gray-700 bg-gray-50">
-                            <img src={url} className="w-full h-full object-cover" alt="" />
-                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
-                                <button onClick={() => setHdPhoto(url)} className="p-1.5 bg-white text-gray-900 rounded-lg shadow-lg hover:bg-indigo-50"><EyeIcon className="w-4 h-4" /></button>
+                        <div key={idx} className="relative aspect-square rounded-xl overflow-hidden shadow-xs group border border-gray-100 dark:border-gray-700 bg-black/5 animate-fade-in">
+                            <img src={url} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" alt="" />
+                            <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center gap-1.5 backdrop-blur-xs">
+                                <button onClick={() => setHdPhoto(url)} className="p-1.5 bg-white text-gray-900 rounded-lg shadow-md hover:bg-indigo-50 hover:scale-110 active:scale-95 transition-all"><EyeIcon className="w-3.5 h-3.5" /></button>
                                 <button onClick={() => {
                                     const a = document.createElement('a');
                                     a.href = url;
                                     a.download = `foto-${label.toLowerCase().replace(/\s/g, '-')}-${idx}.jpg`;
                                     a.click();
-                                }} className="p-1.5 bg-green-600 text-white rounded-lg shadow-lg hover:bg-green-700"><ArrowDownIcon className="w-4 h-4" /></button>
+                                }} className="p-1.5 bg-white text-emerald-600 rounded-lg shadow-md hover:bg-emerald-50 hover:scale-110 active:scale-95 transition-all"><ArrowDownIcon className="w-3.5 h-3.5" /></button>
                             </div>
                         </div>
                     ))}
@@ -441,46 +492,56 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
     };
 
     return (
-        <div className="space-y-6 animate-fade-in pb-20">
-            <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 gap-4">
+        <div className="space-y-6 animate-fade-in pb-20 font-sans">
+            <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700/60 gap-4 shadow-sm">
                 <div className="flex items-center gap-4">
-                    <div className="p-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-600/20">
-                        <DocumentReportIcon className="w-8 h-8" />
+                    <div className="p-3 bg-indigo-600 text-white rounded-xl shadow-lg shadow-indigo-600/10">
+                        <DocumentReportIcon className="w-6 h-6" />
                     </div>
                     <div>
-                        <h2 className="text-2xl font-black text-gray-800 dark:text-white tracking-tight leading-none">Homologação</h2>
-                        <p className="text-[11px] text-gray-400 font-bold mt-2 tracking-tight">Processos de Concessionária</p>
+                        <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight leading-none">Homologação</h2>
+                        <p className="text-[11px] text-gray-400 font-bold mt-1.5 tracking-wider">Processos de Concessionária</p>
                     </div>
                 </div>
                 <button 
                     onClick={() => { setEditingEntryId(null); setForm({ checkinId: '', clientName: '', responsible_user_id: '', status: 'Em Análise', files: { procuracao: [], contaEnergia: [], documentoFoto: [] } }); setModalOpen(true); }} 
-                    className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black text-xs shadow-xl hover:bg-indigo-700 transition-all active:scale-95 flex items-center gap-2"
+                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs transition-all active:scale-95 flex items-center gap-2 shadow-sm"
                 >
-                    <PlusIcon className="w-5 h-5" /> Nova Homologação
+                    <PlusIcon className="w-4 h-4" /> Nova Homologação
                 </button>
             </header>
 
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-                <div className="flex bg-white dark:bg-gray-800 p-1.5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 w-fit">
-                    <button onClick={() => setActiveMainTab('pendentes')} className={`px-6 py-2 rounded-xl font-black text-xs transition-all ${activeMainTab === 'pendentes' ? 'bg-indigo-600 text-white shadow-lg' : 'text-gray-400 hover:text-gray-600'}`}>Pendentes</button>
-                    <button onClick={() => setActiveMainTab('concluidas')} className={`px-6 py-2 rounded-xl font-black text-xs transition-all ${activeMainTab === 'concluidas' ? 'bg-green-600 text-white shadow-lg' : 'text-gray-400 hover:text-gray-600'}`}>Concluídas</button>
+                <div className="flex bg-gray-100/80 dark:bg-gray-800/80 p-1 rounded-full border border-gray-200/50 dark:border-gray-750 w-fit">
+                    <button 
+                        onClick={() => setActiveMainTab('pendentes')} 
+                        className={`px-5 py-2 rounded-full font-bold text-xs transition-all ${activeMainTab === 'pendentes' ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                    >
+                        Pendentes
+                    </button>
+                    <button 
+                        onClick={() => setActiveMainTab('concluidas')} 
+                        className={`px-5 py-2 rounded-full font-bold text-xs transition-all ${activeMainTab === 'concluidas' ? 'bg-emerald-600 text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                    >
+                        Concluídas
+                    </button>
                 </div>
 
-                <div className="relative flex-1 w-full max-w-md">
-                    <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <div className="relative flex-1 w-full max-w-sm">
+                    <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-450" />
                     <input 
                         type="text" 
                         placeholder="Buscar por cliente..." 
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
-                        className="w-full pl-11 pr-4 py-3 rounded-2xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 text-sm font-bold shadow-sm outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                        className="w-full pl-11 pr-4 py-2 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 focus:border-indigo-500 dark:border-gray-700 focus:ring-4 focus:ring-indigo-100 dark:focus:ring-indigo-950/25 text-xs font-semibold shadow-xs outline-none transition-all"
                     />
                 </div>
             </div>
 
             {isLoading ? (
                 <div className="flex justify-center p-20">
-                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -496,76 +557,95 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                             <div 
                                 key={entry.id} 
                                 onClick={() => handleEditEntry(entry, entry.status === 'Aprovada')}
-                                className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 p-6 shadow-sm hover:shadow-xl transition-all group flex flex-col relative overflow-hidden cursor-pointer active:scale-[0.99]"
+                                className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100/80 dark:border-gray-750/90 p-5 shadow-xs hover:shadow-md transition-all duration-300 group flex flex-col relative overflow-hidden cursor-pointer hover:-translate-y-0.5"
                             >
-                                <div className="flex justify-between items-start mb-6">
-                                    <div className="space-y-1">
-                                        <h4 className="font-black text-gray-800 dark:text-white text-lg leading-tight tracking-tight">{entry.clientName}</h4>
+                                <div className="flex justify-between items-start mb-4 gap-2">
+                                    <div className="space-y-1 flex-1">
+                                        <h4 className="font-extrabold text-gray-850 dark:text-white text-base leading-snug tracking-tight group-hover:text-indigo-650 dark:group-hover:text-indigo-400 transition-colors truncate">{entry.clientName}</h4>
                                         <div className="flex flex-col gap-1">
                                             <p className="text-[10px] text-gray-400 font-bold flex items-center gap-1.5">
-                                                <CalendarIcon className="w-3 h-3" /> {new Date(entry.date).toLocaleDateString('pt-BR')}
+                                                <CalendarIcon className="w-3.5 h-3.5 text-gray-300 dark:text-gray-550" /> {new Date(entry.date).toLocaleDateString('pt-BR')}
                                             </p>
                                             {responsibleUser && (
-                                                <div className="flex items-center gap-1.5 mt-1.5">
-                                                    <div className="w-6 h-6 rounded-full overflow-hidden bg-indigo-50 border-2 border-indigo-200 shadow-sm flex-shrink-0">
+                                                <div className="flex items-center gap-1.5 mt-1">
+                                                    <div className="w-5.5 h-5.5 rounded-full overflow-hidden bg-gray-50 border border-gray-200 dark:border-gray-700 shadow-xs flex-shrink-0">
                                                         {responsibleUser.avatar ? (
                                                             <img src={responsibleUser.avatar} className="w-full h-full object-cover" alt="" />
                                                         ) : (
-                                                            <div className="w-full h-full flex items-center justify-center bg-indigo-100 text-indigo-600 text-[10px] font-black">
+                                                            <div className="w-full h-full flex items-center justify-center bg-indigo-50/70 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-455 text-[9px] font-black uppercase">
                                                                 {responsibleUser.name.substring(0, 1)}
                                                             </div>
                                                         )}
                                                     </div>
-                                                    <span className="text-[10px] font-black text-indigo-600 tracking-tight">
-                                                        Resp: {toSentenceCase((responsibleUser.name || '---').split(' ')[0])}
+                                                    <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 tracking-tight">
+                                                        Responsável: <strong className="text-indigo-600 dark:text-indigo-400">{toSentenceCase((responsibleUser.name || '---').split(' ')[0])}</strong>
                                                     </span>
                                                 </div>
                                             )}
                                         </div>
                                     </div>
-                                    <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black tracking-widest ${
-                                        entry.status === 'Aprovada' ? 'bg-green-100 text-green-700' : 
-                                        'bg-indigo-50 text-indigo-600'
+                                    <span className={`px-2.5 py-1 rounded-full text-[9px] font-black tracking-widest shrink-0 ${
+                                        entry.status === 'Aprovada' ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400' : 
+                                        'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400'
                                     }`}>
                                         {entry.status}
                                     </span>
                                 </div>
 
                                 <div className="space-y-4 flex-1">
-                                    <button 
-                                        onClick={(e) => { e.stopPropagation(); handleViewCheckin(entry.checkinId); }}
-                                        className="w-full flex items-center justify-between p-3.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 rounded-2xl border border-indigo-100 dark:border-indigo-800 hover:bg-indigo-100 transition-all group/btn"
-                                    >
-                                        <div className="flex items-center gap-2">
-                                            <ClipboardCheckIcon className="w-5 h-5" />
-                                            <span className="text-[11px] font-black tracking-tight">Ver Check-in de Obra</span>
-                                        </div>
-                                        <EyeIcon className="w-4 h-4 opacity-40 group-hover/btn:opacity-100" />
-                                    </button>
+                                    <div className="grid grid-cols-2 gap-2 mt-2">
+                                        <button 
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); handleViewCheckin(entry.checkinId); }}
+                                            className="flex items-center justify-center gap-2 py-2 px-3 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100/50 dark:border-indigo-900/35 hover:bg-indigo-100/50 dark:hover:bg-indigo-950/40 text-indigo-650 dark:text-indigo-400 rounded-xl text-xs font-black tracking-tight transition-all"
+                                        >
+                                            <ClipboardCheckIcon className="w-4 h-4 text-indigo-500" />
+                                            <span>Check-in</span>
+                                        </button>
+                                        <button 
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); handleViewCheckout(entry.checkinId, entry.clientName); }}
+                                            className="flex items-center justify-center gap-2 py-2 px-3 bg-emerald-50/40 dark:bg-emerald-950/15 border border-emerald-100/40 dark:border-emerald-900/25 hover:bg-emerald-100/50 dark:hover:bg-emerald-950/30 text-emerald-650 dark:text-emerald-400 rounded-xl text-xs font-black tracking-tight transition-all"
+                                        >
+                                            <ClipboardListIcon className="w-4 h-4 text-emerald-500" />
+                                            <span>Check-out</span>
+                                        </button>
+                                    </div>
 
-                                    <div className="grid grid-cols-1 gap-2.5">
-                                        <p className="text-[9px] font-black text-gray-400 px-1 tracking-tight uppercase">Documentação Digital</p>
+                                    <div className="space-y-2 pt-2 border-t border-gray-50 dark:border-gray-750/45">
+                                        <p className="text-[9px] font-black text-gray-400 dark:text-gray-500 tracking-wider ml-0.5">Documentação Digital</p>
                                         {renderEntryFilesSummary(procuracaoFiles, "Procuração", "text-indigo-500", DocumentReportIcon)}
                                         {renderEntryFilesSummary(contaEnergiaFiles, "Conta de Energia", "text-amber-500", BoltIcon)}
                                         {renderEntryFilesSummary(documentoFotoFiles, "Documento com Foto", "text-blue-500", UsersIcon)}
                                     </div>
                                 </div>
 
-                                <div className="mt-6 pt-4 border-t border-gray-50 dark:border-gray-700 flex justify-between items-center" onClick={(e) => e.stopPropagation()}>
-                                    <div className="flex gap-2">
-                                        <button onClick={() => handleDelete(entry.id)} className="p-2 text-gray-300 hover:text-red-500 transition-colors">
-                                            <TrashIcon className="w-5 h-5" />
+                                <div className="mt-4 pt-3 border-t border-gray-50 dark:border-gray-750/50 flex justify-between items-center" onClick={(e) => e.stopPropagation()}>
+                                    <div className="flex gap-1">
+                                        <button 
+                                            type="button" 
+                                            onClick={() => handleDelete(entry.id)} 
+                                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors"
+                                            title="Excluir Registro"
+                                        >
+                                            <TrashIcon className="w-4 h-4" />
                                         </button>
-                                        <button onClick={() => handleEditEntry(entry, entry.status === 'Aprovada')} className="p-2 text-gray-300 hover:text-indigo-600 transition-colors">
-                                            {entry.status === 'Aprovada' ? <EyeIcon className="w-5 h-5" /> : <EditIcon className="w-4 h-4" />}
+                                        <button 
+                                            type="button" 
+                                            onClick={() => handleEditEntry(entry, entry.status === 'Aprovada')} 
+                                            className="p-1.5 text-gray-400 hover:text-indigo-650 dark:hover:text-indigo-400 hover:bg-gray-50 dark:hover:bg-gray-750 rounded-lg transition-colors"
+                                            title="Editar/Visualizar"
+                                        >
+                                            {entry.status === 'Aprovada' ? <EyeIcon className="w-4 h-4" /> : <EditIcon className="w-4 h-4" />}
                                         </button>
                                     </div>
                                     {entry.status !== 'Aprovada' && (
                                         <button 
+                                            type="button"
                                             onClick={() => { setEntryToFinalize(entry); setIsConfirmFinalizeModalOpen(true); }} 
-                                            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-xl font-black text-[10px] tracking-tighter shadow-md hover:bg-green-700 transition-all active:scale-95"
+                                            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-[10px] tracking-tight shadow-xs hover:shadow-sm transition-all active:scale-95"
                                         >
-                                            <CheckCircleIcon className="w-4 h-4" /> Finalizar Homologação
+                                            <CheckCircleIcon className="w-3.5 h-3.5" /> Efetivar
                                         </button>
                                     )}
                                 </div>
@@ -574,8 +654,8 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                     })}
                     {filteredEntries.length === 0 && (
                         <div className="col-span-full py-24 text-center space-y-4">
-                            <DocumentReportIcon className="w-16 h-16 text-gray-200 mx-auto" />
-                            <p className="text-gray-400 font-black italic">Nenhuma homologação encontrada para o seu usuário.</p>
+                            <DocumentReportIcon className="w-12 h-12 text-gray-350 dark:text-gray-600 mx-auto" />
+                            <p className="text-gray-400 dark:text-gray-500 font-bold italic text-sm">Nenhuma homologação encontrada para esta visualização.</p>
                         </div>
                     )}
                 </div>
@@ -732,13 +812,12 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
             {isViewCheckinModalOpen && selectedCheckin && (
                 <Modal title={`Dados técnicos: ${selectedCheckin.project}`} onClose={() => setViewCheckinModalOpen(false)} maxWidth="max-w-4xl">
                     <div className="px-1">
-                        <div className="flex items-center justify-center gap-2 mb-8 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-inner overflow-x-auto custom-scrollbar">
+                        <div className="flex items-center justify-center gap-1.5 mb-8 bg-gray-50/50 dark:bg-gray-900/40 p-1.5 rounded-xl border border-gray-100 dark:border-gray-800/80 max-w-xs sm:max-w-md mx-auto overflow-x-auto select-none">
                             {[1, 2, 3, 4, 5].map(step => (
-                                <button key={step} onClick={() => setActiveCheckinStep(step)} className="flex items-center group shrink-0">
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-black transition-all ${activeCheckinStep === step ? 'bg-indigo-600 text-white shadow-lg scale-110' : 'bg-gray-200 dark:bg-gray-700 text-gray-500'}`}>
-                                        {step}
+                                <button key={step} type="button" onClick={() => setActiveCheckinStep(step)} className="shrink-0">
+                                    <div className={`px-3.5 py-1.5 rounded-lg text-[10px] font-bold tracking-tight transition-all ${activeCheckinStep === step ? 'bg-indigo-600 text-white shadow-xs' : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'}`}>
+                                        Etapa {step}
                                     </div>
-                                    {step < 5 && <div className={`w-4 sm:w-12 h-0.5 mx-1 rounded-full ${activeCheckinStep > step ? 'bg-indigo-400' : 'bg-gray-200 dark:border-gray-700'}`} />}
                                 </button>
                             ))}
                         </div>
@@ -887,6 +966,144 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                             ) : (
                                 <button 
                                     onClick={() => setViewCheckinModalOpen(false)} 
+                                    className="px-8 py-2.5 bg-gray-900 text-white rounded-xl font-bold text-xs shadow-lg"
+                                >
+                                    Concluir visualização
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
+            {isViewCheckoutModalOpen && selectedCheckout && (
+                <Modal title={`Dados de Check-out: ${selectedCheckout.project}`} onClose={() => setViewCheckoutModalOpen(false)} maxWidth="max-w-4xl">
+                    <div className="px-1">
+                        <div className="flex items-center justify-center gap-1.5 mb-8 bg-gray-50/50 dark:bg-gray-900/40 p-1.5 rounded-xl border border-gray-100 dark:border-gray-800/80 max-w-xs sm:max-w-md mx-auto overflow-x-auto select-none">
+                            {[1, 2, 3, 4, 5].map(step => (
+                                <button key={step} type="button" onClick={() => setActiveCheckoutStep(step)} className="shrink-0">
+                                    <div className={`px-3.5 py-1.5 rounded-lg text-[10px] font-bold tracking-tight transition-all ${activeCheckoutStep === step ? 'bg-emerald-600 text-white shadow-xs' : 'text-gray-400 dark:text-gray-500 hover:text-gray-650'}`}>
+                                        Etapa {step}
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar pb-6">
+                            {activeCheckoutStep === 1 && (
+                                <div className="space-y-6 animate-fade-in">
+                                    <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
+                                        <SectionHeader icon={<UsersIcon />} title="Identificação do encerramento" color="bg-emerald-600" />
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <DataRow label="Nome do cliente" value={selectedCheckout.project || selectedCheckout.details?.nomeCliente} />
+                                            <DataRow label="Técnico/Responsável" value={selectedCheckout.responsible} />
+                                            <DataRow label="Status do checkout" value={selectedCheckout.status} color="text-emerald-600 dark:text-emerald-400" />
+                                            <DataRow label="Data término instalação" value={(() => {
+                                                const dStr = selectedCheckout.details?.dataTermino;
+                                                if (!dStr) return '---';
+                                                try {
+                                                    if (dStr.includes('T')) {
+                                                        return new Date(dStr).toLocaleDateString('pt-BR', {timeZone:'UTC'});
+                                                    }
+                                                    return new Date(dStr + 'T00:00:00Z').toLocaleDateString('pt-BR', {timeZone:'UTC'});
+                                                } catch {
+                                                    return dStr;
+                                                }
+                                            })()} />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeCheckoutStep === 2 && (
+                                <div className="space-y-6 animate-fade-in">
+                                    <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
+                                        <SectionHeader icon={<PhotographIcon />} title="Galeria de Placas e Inversores" color="bg-blue-600" />
+                                        <div className="grid grid-cols-1 gap-6">
+                                            {renderCheckinGalleryItem('Fotos das Placas Solares Instaladas', selectedCheckout.details?.fotosPlacas)}
+                                            {renderCheckinGalleryItem('Fotos dos Inversores / Micro Inversores', selectedCheckout.details?.fotosInversores)}
+                                            {renderCheckinGalleryItem('Fotos de instalação do aterramento das placas', selectedCheckout.details?.fotosAterramento)}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeCheckoutStep === 3 && (
+                                <div className="space-y-6 animate-fade-in">
+                                    <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
+                                        <SectionHeader icon={<BoltIcon />} title="Medidores e Quadros de Energia" color="bg-yellow-500" />
+                                        <div className="grid grid-cols-1 gap-6">
+                                            {renderCheckinGalleryItem('Foto Quadro de Energia Interno', selectedCheckout.details?.fotosQuadroInterno)}
+                                            {renderCheckinGalleryItem('Medidor Concessionária', selectedCheckout.details?.fotosMedidor)}
+                                            {renderCheckinGalleryItem('Fotos de disjuntor e DPS do medidor', selectedCheckout.details?.fotosDisjuntorDPS)}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeCheckoutStep === 4 && (
+                                <div className="space-y-6 animate-fade-in">
+                                    <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
+                                        <SectionHeader icon={<CogIcon />} title="Vídeos de Conectividade e Validações" color="bg-indigo-650" />
+                                        <div className="grid grid-cols-1 gap-1">
+                                            <DataRow label="Vídeo de antilhamento (Enel)?" value={selectedCheckout.details?.videoAntilhamento} />
+                                            <DataRow label="Vídeo adicionado ao Youtube?" value={selectedCheckout.details?.videoYoutube} />
+                                            {selectedCheckout.details?.videoYoutube === 'Sim' && selectedCheckout.details?.linkYoutube && (
+                                                <div className="flex justify-between items-start py-2 border-b border-gray-55 dark:border-gray-800 last:border-0">
+                                                    <span className="text-[10px] font-bold text-gray-400 tracking-tight">Link do vídeo</span>
+                                                    <a href={selectedCheckout.details.linkYoutube} target="_blank" rel="noopener noreferrer" className="text-xs font-black text-indigo-600 hover:underline">
+                                                        Abrir no YouTube
+                                                    </a>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
+                                        <SectionHeader icon={<CameraIcon />} title="Estrutura de Poste e Padrão" color="bg-pink-600" />
+                                        <div className="grid grid-cols-1 gap-6">
+                                            {renderCheckinGalleryItem('Foto Padrão (Poste) com Placas de Identificação', selectedCheckout.details?.fotoPadraoPoste)}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeCheckoutStep === 5 && (
+                                <div className="space-y-6 animate-fade-in">
+                                    <div className="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm">
+                                        <SectionHeader icon={<CubeIcon />} title="Componentes e materiais utilizados" color="bg-emerald-600" />
+                                        <div className="space-y-2">
+                                            {(selectedCheckout.details?.componentesEstoque || []).map((comp: any, idx: number) => (
+                                                <div key={idx} className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-700">
+                                                    <span className="text-xs font-bold text-gray-700 dark:text-gray-200">{comp.name}</span>
+                                                    <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">{comp.qty} un</span>
+                                                </div>
+                                            ))}
+                                            {(selectedCheckout.details?.componentesEstoque || []).length === 0 && (
+                                                <p className="text-center py-4 text-xs italic text-gray-400">Nenhum componente ou material consumido do estoque para este projeto.</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex justify-between items-center pt-6 border-t dark:border-gray-700">
+                            <button 
+                                onClick={() => activeCheckoutStep > 1 ? setActiveCheckoutStep(prev => prev - 1) : setViewCheckoutModalOpen(false)} 
+                                className="px-6 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 rounded-xl font-bold text-xs flex items-center gap-2"
+                            >
+                                <ArrowLeftIcon className="w-4 h-4" /> {activeCheckoutStep === 1 ? 'Fechar' : 'Voltar'}
+                            </button>
+                            {activeCheckoutStep < 5 ? (
+                                <button 
+                                    onClick={() => setActiveCheckoutStep(prev => prev + 1)} 
+                                    className="px-8 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-xs shadow-lg hover:bg-emerald-700 transition-all flex items-center gap-2"
+                                >
+                                    Próxima aba <span className="opacity-50">→</span>
+                                </button>
+                            ) : (
+                                <button 
+                                    onClick={() => setViewCheckoutModalOpen(false)} 
                                     className="px-8 py-2.5 bg-gray-900 text-white rounded-xl font-bold text-xs shadow-lg"
                                 >
                                     Concluir visualização
