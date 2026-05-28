@@ -76,12 +76,12 @@ const CreditCardDetailModal: React.FC<CreditCardDetailModalProps> = ({
                             <CreditCardIcon className="w-8 h-8" />
                         </div>
                         <div>
-                            <p className="text-[10px] font-black text-indigo-100 tracking-widest leading-none mb-1 uppercase">Fatura Consolidada (Geral)</p>
+                            <p className="text-[10px] font-black text-indigo-100 tracking-widest leading-none mb-1">Fatura consolidada (Geral)</p>
                             <p className="text-3xl font-black">{formatCurrency(totalGeral)}</p>
                         </div>
                     </div>
                     <div className="text-right">
-                        <p className="text-[10px] font-black text-indigo-200 uppercase">Vencimento em</p>
+                        <p className="text-[10px] font-black text-indigo-200">Vencimento em</p>
                         <p className="text-lg font-black">
                             {items.length > 0 ? new Date(items[0].dueDate).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : '---'}
                         </p>
@@ -97,7 +97,7 @@ const CreditCardDetailModal: React.FC<CreditCardDetailModalProps> = ({
                                 <div className="p-2 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 rounded-lg shadow-sm">
                                     <UsersIcon className="w-5 h-5" />
                                 </div>
-                                <h3 className="text-xl font-black text-gray-800 dark:text-white tracking-tight uppercase">
+                                <h3 className="text-xl font-black text-gray-800 dark:text-white tracking-tight">
                                     {clientName}
                                 </h3>
                                 <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700 ml-2"></div>
@@ -121,12 +121,12 @@ const CreditCardDetailModal: React.FC<CreditCardDetailModalProps> = ({
                                                         <CreditCardIcon className="w-5 h-5" />
                                                     </div>
                                                     <div>
-                                                        <h4 className="text-xs font-black text-gray-400 dark:text-gray-500 tracking-widest uppercase">Cartão: <span className="text-gray-800 dark:text-white font-mono">{cardLabel}</span></h4>
-                                                        <p className="text-[9px] text-gray-400 font-bold uppercase mt-0.5">{cardItems.length} lançamentos vinculados</p>
+                                                        <h4 className="text-xs font-black text-gray-400 dark:text-gray-500 tracking-widest">Cartão: <span className="text-gray-800 dark:text-white font-mono">{cardLabel}</span></h4>
+                                                        <p className="text-[9px] text-gray-400 font-bold mt-0.5">{cardItems.length} lançamentos vinculados</p>
                                                     </div>
                                                 </div>
                                                 <div className="text-right">
-                                                    <p className="text-[9px] font-black text-gray-400 uppercase mb-0.5 tracking-tighter">Subtotal do Cartão</p>
+                                                    <p className="text-[9px] font-black text-gray-400 mb-0.5 tracking-tighter">Subtotal do cartão</p>
                                                     <p className={`text-lg font-black ${subtotalCard < 0 ? 'text-green-600' : 'text-indigo-600 dark:text-indigo-400'}`}>
                                                         {formatCurrency(subtotalCard)}
                                                     </p>
@@ -150,10 +150,10 @@ const CreditCardDetailModal: React.FC<CreditCardDetailModalProps> = ({
                                                             <tr key={item.id} className="hover:bg-indigo-50/20 dark:hover:bg-gray-900/40 transition-colors">
                                                                 <td className="px-5 py-3">
                                                                     <p className="font-bold text-gray-800 dark:text-gray-200 text-[11px]">{toSentenceCase(item.description)}</p>
-                                                                    <p className="text-[8px] text-gray-400 font-bold tracking-tighter uppercase">Venc: {item.dueDate ? new Date(item.dueDate).toLocaleDateString('pt-BR', {timeZone:'UTC'}) : '---'}</p>
+                                                                    <p className="text-[8px] text-gray-400 font-bold tracking-tighter">Venc: {item.dueDate ? new Date(item.dueDate).toLocaleDateString('pt-BR', {timeZone:'UTC'}) : '---'}</p>
                                                                 </td>
                                                                 <td className="px-5 py-3">
-                                                                    <span className="text-[9px] font-black text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded uppercase">{getCategoryName(item.categoryId)}</span>
+                                                                    <span className="text-[9px] font-black text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded">{getCategoryName(item.categoryId)}</span>
                                                                 </td>
                                                                 <td className={`px-5 py-3 text-right font-black text-xs ${item.amount < 0 ? 'text-green-600' : 'text-gray-900 dark:text-white'}`}>
                                                                     {formatCurrency(item.amount)}
@@ -217,9 +217,9 @@ const CreditCardDetailModal: React.FC<CreditCardDetailModalProps> = ({
                     <button 
                         type="button"
                         onClick={onClose}
-                        className="px-8 py-3 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 rounded-2xl font-black text-xs hover:bg-gray-200 transition-all uppercase tracking-widest shadow-sm"
+                        className="px-8 py-3 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 rounded-2xl font-black text-xs hover:bg-gray-200 transition-all tracking-widest shadow-sm"
                     >
-                        Fechar Detalhamento
+                        Fechar detalhamento
                     </button>
                 </div>
             </div>

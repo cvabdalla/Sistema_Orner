@@ -78,11 +78,11 @@ const FluxoCaixaChart: React.FC<FluxoCaixaChartProps> = ({ transactions }) => {
                 <div className="flex items-center gap-6 bg-gray-50 dark:bg-gray-700/50 px-4 py-2 rounded-xl border border-gray-100 dark:border-gray-700 shadow-inner">
                     <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-sm bg-green-500 shadow-sm shadow-green-500/30" />
-                        <span className="text-[10px] font-black text-gray-500 dark:text-gray-300 uppercase tracking-wider">Entradas</span>
+                        <span className="text-[10px] font-black text-gray-500 dark:text-gray-300 tracking-wider">Entradas</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-sm bg-red-500 shadow-sm shadow-red-500/30" />
-                        <span className="text-[10px] font-black text-gray-500 dark:text-gray-300 uppercase tracking-wider">Saídas</span>
+                        <span className="text-[10px] font-black text-gray-500 dark:text-gray-300 tracking-wider">Saídas</span>
                     </div>
                 </div>
             </div>
@@ -119,7 +119,7 @@ const FluxoCaixaChart: React.FC<FluxoCaixaChartProps> = ({ transactions }) => {
                                 padding: '12px'
                             }}
                             itemStyle={{ fontSize: '12px', fontWeight: 'bold', padding: '2px 0' }}
-                            labelStyle={{ color: '#94a3b8', marginBottom: '8px', fontWeight: 'bold', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}
+                            labelStyle={{ color: '#94a3b8', marginBottom: '8px', fontWeight: 'bold', fontSize: '10px', letterSpacing: '0.05em' }}
                             formatter={(value: number, name: string) => [
                                 <span className={name === 'Entradas' ? 'text-green-400' : 'text-red-400'}>{formatCurrency(value)}</span>, 
                                 name

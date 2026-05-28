@@ -64,11 +64,51 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, allTransactions, 
             despesasPagas, 
             totalPagar,
             saldoAtual, 
+            totalSaldoInicial,
             receitasDoPeriodo: receitasPagas, 
             despesasDoPeriodo: despesasPagas, 
             resultadoDoPeriodo: receitasPagas - despesasPagas 
         };
     }, [transactions, bankAccounts]);
+    
+    const currentMonthMetrics = useMemo(() => {
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth();
+
+        const firstDayStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`;
+        const lastDayStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(new Date(currentYear, currentMonth + 1, 0).getDate()).padStart(2, '0')}`;
+
+        const monthTxs = allTransactions.filter(t => {
+            if (t.status === 'cancelado') return false;
+            const txDate = t.dueDate ? t.dueDate.split('T')[0] : '';
+            return txDate >= firstDayStr && txDate <= lastDayStr;
+        });
+
+        const receitasPagas = monthTxs.filter(t => t.type === 'receita' && t.status === 'pago').reduce((sum, t) => sum + t.amount, 0);
+        const receitasPendentes = monthTxs.filter(t => t.type === 'receita' && t.status === 'pendente').reduce((sum, t) => sum + t.amount, 0);
+        const totalReceitas = receitasPagas + receitasPendentes;
+
+        const despesasPagas = monthTxs.filter(t => t.type === 'despesa' && t.status === 'pago').reduce((sum, t) => sum + t.amount, 0);
+        const despesasPendentes = monthTxs.filter(t => t.type === 'despesa' && t.status === 'pendente').reduce((sum, t) => sum + t.amount, 0);
+        const totalDespesas = despesasPagas + despesasPendentes;
+
+        const monthNames = [
+            'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+            'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+        ];
+        const monthLabel = monthNames[currentMonth];
+
+        return {
+            receitasPagas,
+            receitasPendentes,
+            totalReceitas,
+            despesasPagas,
+            despesasPendentes,
+            totalDespesas,
+            monthLabel
+        };
+    }, [allTransactions]);
     
     const processList = (type: 'receita' | 'despesa') => {
         const list = transactions.filter(t => t.type === type && t.status !== 'cancelado');
@@ -163,82 +203,187 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, allTransactions, 
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-end gap-3">
+            <div className="flex justify-end gap-3.5 mb-2">
                 <button
                     onClick={onOpenCreditCard}
-                    className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-700 rounded-lg hover:bg-indigo-100 transition-all shadow-sm"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-indigo-50 hover:bg-indigo-100 active:scale-[0.98] text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-800 rounded-2xl transition-all duration-200 shadow-sm font-semibold text-sm"
                 >
-                    <CreditCardIcon className="w-5 h-5" />
-                    <span className="text-sm font-bold">Lançar cartão</span>
+                    <CreditCardIcon className="w-4 h-4" />
+                    <span>Lançar cartão</span>
                 </button>
                 <button
                     onClick={onOpenImport}
-                    className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-all shadow-sm"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-white hover:bg-gray-50 active:scale-[0.98] dark:bg-gray-800 dark:hover:bg-gray-700/60 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-2xl transition-all duration-200 shadow-sm font-semibold text-sm"
                 >
-                    <UploadIcon className="w-5 h-5" />
-                    <span className="text-sm font-bold">Importar extrato</span>
+                    <UploadIcon className="w-4 h-4" />
+                    <span>Importar extrato</span>
                 </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                {/* A Receber Card */}
-                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-5 border border-gray-100 dark:border-gray-700 hover:shadow-md transition-all duration-300">
-                    <div className="flex items-center space-x-4 mb-4">
-                        <div className="p-3 rounded-xl bg-green-500 shadow-lg shadow-green-500/10">
-                            <ArrowUpIcon className="w-6 h-6 text-white" />
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {/* 1. A Receber (YTD) Card */}
+                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-4 border border-gray-100/80 dark:border-gray-700/80 hover:shadow-md transition-all duration-300 group hover:-translate-y-0.5">
+                    <div className="flex items-center space-x-3 mb-3">
+                        <div className="p-2.5 rounded-xl bg-gradient-to-tr from-emerald-500 to-green-400 text-white shadow-lg shadow-emerald-500/10">
+                            <ArrowUpIcon className="w-4 h-4" />
                         </div>
                         <div>
-                            <p className="text-[10px] font-black text-gray-400 tracking-widest uppercase">A Receber (No Mês)</p>
-                            <p className="text-xl font-black text-gray-900 dark:text-white leading-none">{formatCurrency(metrics.totalReceber)}</p>
+                            <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 tracking-wide">A receber (YTD)</p>
+                            <p className="text-xl font-extrabold text-gray-900 dark:text-white tracking-tight mt-0.5">{formatCurrency(metrics.totalReceber)}</p>
                         </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 pt-3 border-t border-gray-50 dark:border-gray-700/50">
+                    <div className="grid grid-cols-3 gap-1.5 pt-2.5 mt-2.5 border-t border-gray-100 dark:border-gray-700/60">
                         <div>
-                            <p className="text-[8px] font-bold text-gray-400 uppercase tracking-tight">Já Recebido</p>
-                            <p className="text-[11px] font-black text-green-600 truncate">{formatCurrency(metrics.receitasPagas)}</p>
+                            <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500">Já recebido</p>
+                            <p className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 truncate mt-0.5">{formatCurrency(metrics.receitasPagas)}</p>
                         </div>
                         <div className="text-center border-x border-gray-100 dark:border-gray-700/50 px-1">
-                            <p className="text-[8px] font-bold text-gray-400 uppercase tracking-tight">Em Aberto</p>
-                            <p className="text-[11px] font-black text-orange-500 truncate">{formatCurrency(metrics.aReceberPendente)}</p>
+                            <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500">Em aberto</p>
+                            <p className="text-[11px] font-bold text-amber-500 truncate mt-0.5">{formatCurrency(metrics.aReceberPendente)}</p>
                         </div>
                         <div className="text-right">
-                            <p className="text-[8px] font-bold text-gray-400 uppercase tracking-tight">Total</p>
-                            <p className="text-[11px] font-black text-gray-700 dark:text-gray-200 truncate">{formatCurrency(metrics.totalReceber)}</p>
+                            <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500">Total</p>
+                            <p className="text-[11px] font-bold text-gray-700 dark:text-gray-200 truncate mt-0.5">{formatCurrency(metrics.totalReceber)}</p>
                         </div>
                     </div>
                 </div>
 
-                {/* A Pagar Card */}
-                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-5 border border-gray-100 dark:border-gray-700 hover:shadow-md transition-all duration-300">
-                    <div className="flex items-center space-x-4 mb-4">
-                        <div className="p-3 rounded-xl bg-red-500 shadow-lg shadow-red-500/10">
-                            <ArrowDownIcon className="w-6 h-6 text-white" />
+                {/* 2. A Pagar (YTD) Card */}
+                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-4 border border-gray-100/80 dark:border-gray-700/80 hover:shadow-md transition-all duration-300 group hover:-translate-y-0.5">
+                    <div className="flex items-center space-x-3 mb-3">
+                        <div className="p-2.5 rounded-xl bg-gradient-to-tr from-rose-500 to-red-400 text-white shadow-lg shadow-rose-500/10">
+                            <ArrowDownIcon className="w-4 h-4" />
                         </div>
                         <div>
-                            <p className="text-[10px] font-black text-gray-400 tracking-widest uppercase">A Pagar (No Mês)</p>
-                            <p className="text-xl font-black text-gray-900 dark:text-white leading-none">{formatCurrency(metrics.totalPagar)}</p>
+                            <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 tracking-wide">A pagar (YTD)</p>
+                            <p className="text-xl font-extrabold text-gray-900 dark:text-white tracking-tight mt-0.5">{formatCurrency(metrics.totalPagar)}</p>
                         </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 pt-3 border-t border-gray-50 dark:border-gray-700/50">
+                    <div className="grid grid-cols-3 gap-1.5 pt-2.5 mt-2.5 border-t border-gray-100 dark:border-gray-700/60">
                         <div>
-                            <p className="text-[8px] font-bold text-gray-400 uppercase tracking-tight">Já Pago</p>
-                            <p className="text-[11px] font-black text-red-600 truncate">{formatCurrency(metrics.despesasPagas)}</p>
+                            <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500">Já pago</p>
+                            <p className="text-[11px] font-bold text-rose-600 dark:text-rose-450 truncate mt-0.5">{formatCurrency(metrics.despesasPagas)}</p>
                         </div>
                         <div className="text-center border-x border-gray-100 dark:border-gray-700/50 px-1">
-                            <p className="text-[8px] font-bold text-gray-400 uppercase tracking-tight">Em Aberto</p>
-                            <p className="text-[11px] font-black text-orange-500 truncate">{formatCurrency(metrics.aPagarPendente)}</p>
+                            <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500">Em aberto</p>
+                            <p className="text-[11px] font-bold text-amber-500 truncate mt-0.5">{formatCurrency(metrics.aPagarPendente)}</p>
                         </div>
                         <div className="text-right">
-                            <p className="text-[8px] font-bold text-gray-400 uppercase tracking-tight">Total</p>
-                            <p className="text-[11px] font-black text-gray-700 dark:text-gray-200 truncate">{formatCurrency(metrics.totalPagar)}</p>
+                            <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500">Total</p>
+                            <p className="text-[11px] font-bold text-gray-700 dark:text-gray-200 truncate mt-0.5">{formatCurrency(metrics.totalPagar)}</p>
                         </div>
                     </div>
                 </div>
 
-                <DashboardCard title="Saldo em Caixa" value={formatCurrency(metrics.saldoAtual)} icon={DollarIcon} color="bg-blue-600" />
-                <DashboardCard title="Resultado do Período" value={formatCurrency(metrics.resultadoDoPeriodo)} icon={CalendarIcon} color="bg-purple-500" />
-                <DashboardCard title="Receitas Realizadas" value={formatCurrency(metrics.receitasDoPeriodo)} icon={ArrowUpIcon} color="bg-teal-500" />
-                <DashboardCard title="Despesas Realizadas" value={formatCurrency(metrics.despesasDoPeriodo)} icon={ArrowDownIcon} color="bg-orange-500" />
+                {/* 3. Saldo em Caixa Card */}
+                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-4 border border-gray-100/80 dark:border-gray-700/80 hover:shadow-md transition-all duration-300 group hover:-translate-y-0.5">
+                    <div className="flex items-center space-x-3 mb-3">
+                        <div className="p-2.5 rounded-xl bg-gradient-to-tr from-blue-600 to-sky-500 text-white shadow-lg shadow-blue-500/10">
+                            <DollarIcon className="w-4 h-4" />
+                        </div>
+                        <div>
+                            <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 tracking-wide">Saldo em caixa</p>
+                            <p className="text-xl font-extrabold text-gray-900 dark:text-white tracking-tight mt-0.5">{formatCurrency(metrics.saldoAtual)}</p>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5 pt-2.5 mt-2.5 border-t border-gray-100 dark:border-gray-700/60">
+                        <div>
+                            <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500">Saldo inicial</p>
+                            <p className="text-[11px] font-bold text-gray-600 dark:text-gray-300 truncate mt-0.5">{formatCurrency(metrics.totalSaldoInicial)}</p>
+                        </div>
+                        <div className="text-center border-x border-gray-100 dark:border-gray-700/50 px-1">
+                            <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500">Variação</p>
+                            <p className={`text-[11px] font-bold truncate mt-0.5 ${metrics.resultadoDoPeriodo >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                {metrics.resultadoDoPeriodo > 0 ? '+' : ''}{formatCurrency(metrics.resultadoDoPeriodo)}
+                            </p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500">Saldo atual</p>
+                            <p className="text-[11px] font-bold text-blue-600 dark:text-blue-400 truncate mt-0.5">{formatCurrency(metrics.saldoAtual)}</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 4. Resultado do Período Card */}
+                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-4 border border-gray-100/80 dark:border-gray-700/80 hover:shadow-md transition-all duration-300 group hover:-translate-y-0.5">
+                    <div className="flex items-center space-x-3 mb-3">
+                        <div className="p-2.5 rounded-xl bg-gradient-to-tr from-violet-600 to-fuchsia-500 text-white shadow-lg shadow-violet-500/10">
+                            <CalendarIcon className="w-4 h-4" />
+                        </div>
+                        <div>
+                            <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 tracking-wide">Resultado do período</p>
+                            <p className="text-xl font-extrabold text-gray-900 dark:text-white tracking-tight mt-0.5">{formatCurrency(metrics.resultadoDoPeriodo)}</p>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5 pt-2.5 mt-2.5 border-t border-gray-100 dark:border-gray-700/60">
+                        <div>
+                            <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500">Receitas</p>
+                            <p className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 truncate mt-0.5">{formatCurrency(metrics.receitasDoPeriodo)}</p>
+                        </div>
+                        <div className="text-center border-x border-gray-100 dark:border-gray-700/50 px-1">
+                            <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500">Despesas</p>
+                            <p className="text-[11px] font-bold text-rose-600 dark:text-rose-450 truncate mt-0.5">{formatCurrency(metrics.despesasDoPeriodo)}</p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500">Resultado</p>
+                            <p className={`text-[11px] font-bold truncate mt-0.5 ${metrics.resultadoDoPeriodo >= 0 ? 'text-violet-600 dark:text-violet-400' : 'text-rose-600'}`}>{formatCurrency(metrics.resultadoDoPeriodo)}</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 5. Receitas (Mês) Card */}
+                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-4 border border-gray-100/80 dark:border-gray-700/80 hover:shadow-md transition-all duration-300 group hover:-translate-y-0.5">
+                    <div className="flex items-center space-x-3 mb-3">
+                        <div className="p-2.5 rounded-xl bg-gradient-to-tr from-teal-500 to-cyan-400 text-white shadow-lg shadow-teal-500/10">
+                            <ArrowUpIcon className="w-4 h-4" />
+                        </div>
+                        <div>
+                            <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 tracking-wide">Receitas ({currentMonthMetrics.monthLabel})</p>
+                            <p className="text-xl font-extrabold text-gray-900 dark:text-white tracking-tight mt-0.5">{formatCurrency(currentMonthMetrics.totalReceitas)}</p>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5 pt-2.5 mt-2.5 border-t border-gray-100 dark:border-gray-700/60">
+                        <div>
+                            <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500">Já recebido</p>
+                            <p className="text-[11px] font-bold text-teal-600 dark:text-teal-400 truncate mt-0.5">{formatCurrency(currentMonthMetrics.receitasPagas)}</p>
+                        </div>
+                        <div className="text-center border-x border-gray-100 dark:border-gray-700/50 px-1">
+                            <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500">Em aberto</p>
+                            <p className="text-[11px] font-bold text-amber-500 truncate mt-0.5">{formatCurrency(currentMonthMetrics.receitasPendentes)}</p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500">Total</p>
+                            <p className="text-[11px] font-bold text-gray-700 dark:text-gray-200 truncate mt-0.5">{formatCurrency(currentMonthMetrics.totalReceitas)}</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 6. Despesas (Mês) Card */}
+                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-4 border border-gray-100/80 dark:border-gray-700/80 hover:shadow-md transition-all duration-300 group hover:-translate-y-0.5">
+                    <div className="flex items-center space-x-3 mb-3">
+                        <div className="p-2.5 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-400 text-white shadow-lg shadow-amber-500/10">
+                            <ArrowDownIcon className="w-4 h-4" />
+                        </div>
+                        <div>
+                            <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 tracking-wide">Despesas ({currentMonthMetrics.monthLabel})</p>
+                            <p className="text-xl font-extrabold text-gray-900 dark:text-white tracking-tight mt-0.5">{formatCurrency(currentMonthMetrics.totalDespesas)}</p>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5 pt-2.5 mt-2.5 border-t border-gray-100 dark:border-gray-700/60">
+                        <div>
+                            <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500">Já pago</p>
+                            <p className="text-[11px] font-bold text-amber-600 dark:text-amber-500 truncate mt-0.5">{formatCurrency(currentMonthMetrics.despesasPagas)}</p>
+                        </div>
+                        <div className="text-center border-x border-gray-100 dark:border-gray-700/50 px-1">
+                            <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500">Em aberto</p>
+                            <p className="text-[11px] font-bold text-orange-500 truncate mt-0.5">{formatCurrency(currentMonthMetrics.despesasPendentes)}</p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-[9px] font-medium text-gray-400 dark:text-gray-500">Total</p>
+                            <p className="text-[11px] font-bold text-gray-700 dark:text-gray-200 truncate mt-0.5">{formatCurrency(currentMonthMetrics.totalDespesas)}</p>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700">
@@ -255,17 +400,17 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, allTransactions, 
                         </h3>
                         <div className="flex gap-4 items-center bg-gray-50 dark:bg-gray-700/30 px-3 py-1.5 rounded-lg border border-gray-100 dark:border-gray-700">
                             <div className="text-center px-1">
-                                <p className="text-[7px] font-bold text-gray-400 uppercase tracking-tighter">Já Recebido</p>
+                                <p className="text-[7px] font-bold text-gray-400 tracking-tighter">Já recebido</p>
                                 <p className="text-[10px] font-black text-green-600">{formatCurrency(metrics.receitasPagas)}</p>
                             </div>
                             <div className="w-px h-6 bg-gray-200 dark:bg-gray-600" />
                             <div className="text-center px-1">
-                                <p className="text-[7px] font-bold text-gray-400 uppercase tracking-tighter">Em Aberto</p>
+                                <p className="text-[7px] font-bold text-gray-400 tracking-tighter">Em aberto</p>
                                 <p className="text-[10px] font-black text-orange-500">{formatCurrency(metrics.aReceberPendente)}</p>
                             </div>
                             <div className="w-px h-6 bg-gray-200 dark:bg-gray-600" />
                             <div className="text-center px-1">
-                                <p className="text-[7px] font-bold text-gray-400 uppercase tracking-tighter">Total</p>
+                                <p className="text-[7px] font-bold text-gray-400 tracking-tighter">Total</p>
                                 <p className="text-[10px] font-black text-gray-700 dark:text-gray-200">{formatCurrency(metrics.totalReceber)}</p>
                             </div>
                         </div>
@@ -285,17 +430,17 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, allTransactions, 
                         </h3>
                         <div className="flex gap-4 items-center bg-gray-50 dark:bg-gray-700/30 px-3 py-1.5 rounded-lg border border-gray-100 dark:border-gray-700">
                             <div className="text-center px-1">
-                                <p className="text-[7px] font-bold text-gray-400 uppercase tracking-tighter">Já Pago</p>
+                                <p className="text-[7px] font-bold text-gray-400 tracking-tighter">Já pago</p>
                                 <p className="text-[10px] font-black text-red-600">{formatCurrency(metrics.despesasPagas)}</p>
                             </div>
                             <div className="w-px h-6 bg-gray-200 dark:bg-gray-600" />
                             <div className="text-center px-1">
-                                <p className="text-[7px] font-bold text-gray-400 uppercase tracking-tighter">Em Aberto</p>
+                                <p className="text-[7px] font-bold text-gray-400 tracking-tighter">Em aberto</p>
                                 <p className="text-[10px] font-black text-orange-500">{formatCurrency(metrics.aPagarPendente)}</p>
                             </div>
                             <div className="w-px h-6 bg-gray-200 dark:bg-gray-600" />
                             <div className="text-center px-1">
-                                <p className="text-[7px] font-bold text-gray-400 uppercase tracking-tighter">Total</p>
+                                <p className="text-[7px] font-bold text-gray-400 tracking-tighter">Total</p>
                                 <p className="text-[10px] font-black text-gray-700 dark:text-gray-200">{formatCurrency(metrics.totalPagar)}</p>
                             </div>
                         </div>

@@ -300,7 +300,7 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
                                 </div>
                             </div>
                             <div className="lg:col-span-4 p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-800">
-                                <p className="text-[9px] font-bold text-indigo-400 tracking-widest uppercase mb-1">Banco para débito</p>
+                                <p className="text-[9px] font-bold text-indigo-400 tracking-widest mb-1">Banco para débito</p>
                                 <div className="relative">
                                     <select 
                                         value={selectedBankId}
@@ -317,7 +317,7 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
 
                         <div className="space-y-2">
                             <div className="flex justify-between items-center px-1">
-                                <h4 className="text-[10px] font-black text-gray-400 tracking-widest uppercase">Detalhamento dos gastos</h4>
+                                <h4 className="text-[10px] font-black text-gray-400 tracking-widest">Detalhamento dos gastos</h4>
                                 <button 
                                     type="button"
                                     onClick={handleAddItem} 

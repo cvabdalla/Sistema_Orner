@@ -136,7 +136,7 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                     <div className="hidden md:flex items-center gap-3">
                         <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1.5 rounded-xl border border-emerald-100 dark:border-emerald-800 shadow-sm">
                             <div className="flex flex-col">
-                                <span className="text-[8px] font-black text-emerald-600 dark:text-emerald-400 uppercase leading-none mb-0.5">{isReceita ? 'Já Recebido' : 'Já Pago'}</span>
+                                <span className="text-[8px] font-black text-emerald-600 dark:text-emerald-400 leading-none mb-0.5">{isReceita ? 'Já recebido' : 'Já pago'}</span>
                                 <span className="text-[13px] font-black text-emerald-700 dark:text-emerald-300 tracking-tight leading-none">
                                     {formatCurrency(stats.pago)}
                                 </span>
@@ -145,7 +145,7 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
 
                         <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/20 px-3 py-1.5 rounded-xl border border-amber-100 dark:border-amber-800 shadow-sm">
                             <div className="flex flex-col">
-                                <span className="text-[8px] font-black text-amber-600 dark:text-amber-400 uppercase leading-none mb-0.5">Em Aberto</span>
+                                <span className="text-[8px] font-black text-amber-600 dark:text-amber-400 leading-none mb-0.5">Em aberto</span>
                                 <span className="text-[13px] font-black text-amber-700 dark:text-amber-300 tracking-tight leading-none">
                                     {formatCurrency(stats.pendente)}
                                 </span>
@@ -154,7 +154,7 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
 
                         <div className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1.5 rounded-xl border border-indigo-100 dark:border-indigo-800 shadow-sm mr-4">
                             <div className="flex flex-col">
-                                <span className="text-[8px] font-black text-indigo-600 dark:text-indigo-400 uppercase leading-none mb-0.5">Total</span>
+                                <span className="text-[8px] font-black text-indigo-600 dark:text-indigo-400 leading-none mb-0.5">Total</span>
                                 <span className="text-[13px] font-black text-indigo-700 dark:text-indigo-300 tracking-tight leading-none">
                                     {formatCurrency(stats.total)}
                                 </span>
@@ -165,15 +165,15 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                     {/* Mobile Stats */}
                     <div className="md:hidden grid grid-cols-3 gap-2 w-full">
                         <div className="bg-emerald-50 dark:bg-emerald-900/20 p-2 rounded-lg border border-emerald-100 dark:border-emerald-800">
-                             <span className="text-[7px] font-black text-emerald-600 dark:text-emerald-400 block uppercase mb-1">{isReceita ? 'Recebido' : 'Pago'}</span>
+                             <span className="text-[7px] font-black text-emerald-600 dark:text-emerald-400 block mb-1">{isReceita ? 'Recebido' : 'Pago'}</span>
                              <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 block">{formatCurrency(stats.pago)}</span>
                         </div>
                         <div className="bg-amber-50 dark:bg-amber-900/20 p-2 rounded-lg border border-amber-100 dark:border-amber-800">
-                             <span className="text-[7px] font-black text-amber-600 dark:text-amber-400 block uppercase mb-1">Aberto</span>
+                             <span className="text-[7px] font-black text-amber-600 dark:text-amber-400 block mb-1">Aberto</span>
                              <span className="text-[10px] font-black text-amber-700 dark:text-amber-300 block">{formatCurrency(stats.pendente)}</span>
                         </div>
                         <div className="bg-indigo-50 dark:bg-indigo-900/30 p-2 rounded-lg border border-indigo-100 dark:border-indigo-800">
-                             <span className="text-[7px] font-black text-indigo-600 dark:text-indigo-400 block uppercase mb-1">Total</span>
+                             <span className="text-[7px] font-black text-indigo-600 dark:text-indigo-400 block mb-1">Total</span>
                              <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 block">{formatCurrency(stats.total)}</span>
                         </div>
                     </div>
@@ -197,7 +197,7 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
             
             <div className="overflow-x-auto">
                 <table className="min-w-full text-left text-sm border-collapse">
-                    <thead className="bg-gray-50 dark:bg-gray-700/50 text-[10px] text-gray-500 font-black uppercase tracking-tight">
+                    <thead className="bg-gray-50 dark:bg-gray-700/50 text-[10px] text-gray-500 font-black tracking-tight">
                         <tr>
                             <th className="px-6 py-4">Descrição</th>
                             <th className="px-6 py-4">Categoria</th>
