@@ -1183,23 +1183,26 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                     <Modal 
                         title={productToEdit ? "Editar produto" : "Cadastrar novo produto"} 
                         onClose={() => setIsProductModalOpen(false)}
-                        maxWidth="max-w-3xl"
+                        maxWidth="max-w-2xl"
                     >
-                        <form onSubmit={handleSaveProduct} className="space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
-                                <div className="md:col-span-4 flex flex-col items-center">
-                                    <FormLabel>Foto do produto</FormLabel>
-                                    <div className="relative group w-full aspect-square mt-2">
-                                        <div className="w-full h-full rounded-3xl border-4 border-dashed border-gray-100 bg-gray-50 flex items-center justify-center overflow-hidden">
+                        <form onSubmit={handleSaveProduct} className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
+                                <div className="md:col-span-4 flex flex-col items-center justify-start border-b md:border-b-0 md:border-r border-gray-100 dark:border-gray-700/50 pb-5 md:pb-0 md:pr-5">
+                                    <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1">Foto do produto</label>
+                                    <div className="relative group w-36 h-36 mt-1">
+                                        <div className="w-full h-full rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-750 bg-gray-50/50 dark:bg-gray-800/40 flex flex-col items-center justify-center overflow-hidden transition-all group-hover:bg-gray-50 dark:group-hover:bg-gray-800/60 group-hover:border-indigo-300">
                                             {productForm.image ? (
                                                 <img src={productForm.image} className="w-full h-full object-cover" alt="" />
                                             ) : (
-                                                <PhotographIcon className="w-20 h-20 text-gray-200" />
+                                                <div className="text-center p-3">
+                                                    <PhotographIcon className="w-8 h-8 text-gray-300 mx-auto" />
+                                                    <span className="text-[10px] font-bold text-gray-400 mt-1 block">Logomarca / Foto</span>
+                                                </div>
                                             )}
                                         </div>
-                                        <label className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/20 transition-all cursor-pointer rounded-3xl opacity-0 group-hover:opacity-100">
-                                            <div className="p-3 bg-white rounded-full shadow-lg text-indigo-600">
-                                                <UploadIcon className="w-6 h-6" />
+                                        <label className="absolute inset-0 flex items-center justify-center bg-black/40 transition-all cursor-pointer rounded-2xl opacity-0 group-hover:opacity-100">
+                                            <div className="p-2 bg-white rounded-full shadow-lg text-indigo-600 transform scale-90 group-hover:scale-100 transition-transform">
+                                                <UploadIcon className="w-4 h-4" />
                                             </div>
                                             <input type="file" className="hidden" accept="image/*" onChange={handleProductPhotoUpload} />
                                         </label>
@@ -1208,135 +1211,139 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                         <button 
                                             type="button" 
                                             onClick={() => setProductForm(p => ({ ...p, image: '' }))}
-                                            className="mt-3 text-[10px] font-black text-red-500 tracking-tight"
+                                            className="mt-2 text-[10px] font-bold text-rose-500 hover:text-rose-600 hover:underline transition-colors block"
                                         >
                                             Remover foto
                                         </button>
                                     )}
                                 </div>
 
-                                <div className="md:col-span-8 space-y-4">
+                                <div className="md:col-span-8 space-y-3.5">
                                     <div>
-                                        <label className={labelSentenceClass}>Descrição do produto (Nome comercial)</label>
+                                        <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">Descrição do produto (Nome comercial)</label>
                                         <input 
                                             required 
                                             type="text" 
                                             value={productForm.name} 
                                             onChange={e => setProductForm({...productForm, name: e.target.value})} 
-                                            className={editableFieldClass} 
+                                            className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400" 
                                             placeholder="Ex: Disjuntor bipolar 20a curva c - schneider" 
                                         />
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-2 gap-3.5">
                                         <div>
-                                            <label className={labelSentenceClass}>Ncm (Classificação fiscal)</label>
+                                            <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">NCM (Classificação fiscal)</label>
                                             <input 
                                                 type="text" 
                                                 value={productForm.ncm} 
                                                 onChange={e => setProductForm({...productForm, ncm: e.target.value})} 
-                                                className={editableFieldClass} 
+                                                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400" 
                                                 placeholder="Ex: 8536.20.00" 
                                             />
                                         </div>
                                         <div>
-                                            <label className={labelSentenceClass}>Unidade de medida</label>
+                                            <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">Unidade de medida</label>
                                             <select 
                                                 value={productForm.unit} 
                                                 onChange={e => setProductForm({...productForm, unit: e.target.value})} 
-                                                className={editableFieldClass}
+                                                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 cursor-pointer"
                                             >
                                                 {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                                             </select>
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-3 gap-4">
+                                    <div className="grid grid-cols-3 gap-3.5">
                                         <div>
-                                            <label className={labelSentenceClass}>Saldo inicial</label>
+                                            <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">Saldo inicial</label>
                                             <input 
                                                 required 
                                                 type="number" 
                                                 min="0"
                                                 value={productForm.quantity} 
                                                 onChange={e => setProductForm({...productForm, quantity: parseInt(e.target.value) || 0})} 
-                                                className={editableFieldClass + " text-indigo-600"} 
+                                                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-indigo-600 dark:text-indigo-400 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5" 
                                             />
                                         </div>
                                         <div>
-                                            <label className={labelSentenceClass}>Saldo mínimo (Alerta)</label>
+                                            <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">Saldo mínimo</label>
                                             <input 
                                                 required 
                                                 type="number" 
                                                 min="0"
                                                 value={productForm.minQuantity} 
                                                 onChange={e => setProductForm({...productForm, minQuantity: parseInt(e.target.value) || 0})} 
-                                                className={editableFieldClass + " text-orange-600"} 
+                                                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-orange-600 dark:text-orange-400 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5" 
                                             />
                                         </div>
                                         <div>
-                                            <label className={labelSentenceClass}>Custo Inicial</label>
+                                            <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">Custo inicial (R$)</label>
                                             <input 
                                                 type="number" 
                                                 step="0.01"
                                                 value={productForm.averagePrice || ''} 
                                                 onChange={e => setProductForm({...productForm, averagePrice: parseFloat(e.target.value) || 0})} 
-                                                className={editableFieldClass + " text-green-600"} 
+                                                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-emerald-600 dark:text-emerald-400 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5" 
                                                 placeholder="0,00"
                                             />
                                         </div>
                                     </div>
 
-                                    <div>
-                                        <label className={labelSentenceClass}>Status de Linha (Disponibilidade)</label>
-                                        <select 
-                                            value={productForm.lineStatus} 
-                                            onChange={e => setProductForm({...productForm, lineStatus: e.target.value as 'Em linha' | 'Fora de Linha'})} 
-                                            className={editableFieldClass + " py-2 hover:border-indigo-400 transition-colors"}
-                                        >
-                                            <option value="Em linha">Em linha</option>
-                                            <option value="Fora de Linha">Fora de Linha (Descontinuado)</option>
-                                        </select>
-                                    </div>
-
-                                    <label className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-700/40 rounded-2xl border-2 border-indigo-100 dark:border-indigo-900 cursor-pointer hover:bg-white transition-all">
-                                        <input 
-                                            type="checkbox" 
-                                            checked={productForm.isFixedInBudget} 
-                                            onChange={e => setProductForm({...productForm, isFixedInBudget: e.target.checked})} 
-                                            className="w-5 h-5 rounded text-indigo-600 border-gray-300 focus:ring-indigo-500" 
-                                        />
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                                         <div>
-                                            <p className="text-[11px] font-black text-gray-700 dark:text-white tracking-tight">Exibir fixo no orçamento</p>
-                                            <p className="text-[10px] text-gray-400 font-medium leading-none">Este item aparecerá automaticamente na tabela de orçamentos.</p>
+                                            <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">Status de linha (Disponibilidade)</label>
+                                            <select 
+                                                value={productForm.lineStatus} 
+                                                onChange={e => setProductForm({...productForm, lineStatus: e.target.value as 'Em linha' | 'Fora de Linha'})} 
+                                                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 cursor-pointer"
+                                            >
+                                                <option value="Em linha">🟢 Em linha</option>
+                                                <option value="Fora de Linha">🔴 Fora de Linha (Descontinuado)</option>
+                                            </select>
                                         </div>
-                                    </label>
+
+                                        <div className="flex items-end">
+                                            <label className="w-full flex items-center gap-2.5 p-2 bg-slate-50/50 dark:bg-gray-850/30 rounded-xl border border-gray-150 dark:border-gray-750 cursor-pointer hover:bg-white dark:hover:bg-gray-800/50 hover:shadow-sm transition-all h-[36px]">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={productForm.isFixedInBudget} 
+                                                    onChange={e => setProductForm({...productForm, isFixedInBudget: e.target.checked})} 
+                                                    className="w-4 h-4 rounded text-indigo-600 border-gray-200 dark:border-gray-700 focus:ring-indigo-500/40" 
+                                                />
+                                                <div>
+                                                    <p className="text-[10px] font-bold text-gray-700 dark:text-gray-200 tracking-tight leading-tight">Exibir fixo no orçamento</p>
+                                                    <p className="text-[9px] text-gray-400 font-medium leading-none mt-0.5">Inserir automático na listagem</p>
+                                                </div>
+                                            </label>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
                             <div>
-                                <label className={labelSentenceClass}>Observações / especificações técnicas</label>
+                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">Observações / especificações técnicas</label>
                                 <textarea 
-                                    rows={3} 
+                                    rows={2} 
                                     value={productForm.description} 
                                     onChange={e => setProductForm({...productForm, description: e.target.value})} 
-                                    className={editableFieldClass + " resize-none font-medium text-xs"} 
+                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-medium shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 resize-none" 
                                     placeholder="Detalhes sobre fabricante, série, aplicações recomendadas, etc." 
                                 />
                             </div>
 
-                            <div className="flex gap-4 pt-4 border-t dark:border-gray-700">
+                            <div className="flex gap-3 pt-4 border-t border-gray-100 dark:border-gray-750">
                                 <button 
                                     type="button" 
                                     onClick={() => setIsProductModalOpen(false)} 
-                                    className="flex-1 py-4 bg-gray-100 dark:bg-gray-700 text-gray-500 rounded-2xl font-bold text-sm hover:bg-gray-200 transition-all"
+                                    className="px-5 py-2.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 text-gray-500 dark:text-gray-400 rounded-xl font-bold text-xs transition-all border border-gray-200 dark:border-gray-700"
                                 >
                                     Cancelar
                                 </button>
                                 <button 
                                     type="submit" 
                                     disabled={isSaving}
-                                    className="flex-[2] py-4 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-lg hover:bg-indigo-700 transition-all active:scale-[0.98]"
+                                    className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/15 hover:shadow-indigo-600/25 transition-all active:scale-[0.98] disabled:opacity-50"
                                 >
                                     {isSaving ? 'Salvando...' : (productToEdit ? 'Atualizar produto' : 'Salvar novo produto')}
                                 </button>
@@ -1432,12 +1439,12 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
             </div>
 
             {isRequestModalOpen && (
-                <Modal title={requestToEdit ? "Gerenciar pedido de compra" : "Novo pedido de compra"} onClose={() => { setIsRequestModalOpen(false); setRequestToEdit(null); }} maxWidth="max-w-2xl">
+                <Modal title={requestToEdit ? "Gerenciar pedido de compra" : "Novo pedido de compra"} onClose={() => { setIsRequestModalOpen(false); setRequestToEdit(null); }} maxWidth="max-w-xl">
                     <form onSubmit={handleSaveRequest} className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-1">
-                                <label className={labelSentenceClass}>Tipo de solicitação</label>
-                                <div className="grid grid-cols-2 gap-1.5 p-1 bg-gray-100 dark:bg-gray-700/50 rounded-xl border-2 dark:border-gray-600">
+                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">Tipo de solicitação</label>
+                                <div className="grid grid-cols-2 gap-1 p-1 bg-gray-55/60 dark:bg-gray-800/40 rounded-xl border border-gray-150 dark:border-gray-750">
                                     <button 
                                         type="button" 
                                         disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')}
@@ -1445,7 +1452,7 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                             setRequestForm({...requestForm, purchaseType: 'Reposição'});
                                             setIsManualItem(false);
                                         }} 
-                                        className={`flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold rounded-lg transition-all ${requestForm.purchaseType === 'Reposição' ? 'bg-white dark:bg-gray-800 text-indigo-600 shadow-sm border border-gray-200' : 'text-gray-400'} ${!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado') ? 'cursor-not-allowed opacity-80' : ''}`}
+                                        className={`flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold rounded-lg transition-all ${requestForm.purchaseType === 'Reposição' ? 'bg-white dark:bg-gray-800 text-indigo-600 shadow-sm border border-gray-150 dark:border-gray-700' : 'text-gray-400 hover:text-gray-500'} ${!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado') ? 'cursor-not-allowed opacity-80' : ''}`}
                                     >
                                         <CubeIcon className="w-3.5 h-3.5" /> Reposição
                                     </button>
@@ -1453,35 +1460,35 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                         type="button" 
                                         disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')}
                                         onClick={() => setRequestForm({...requestForm, purchaseType: 'Obra'})} 
-                                        className={`flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold rounded-lg transition-all ${requestForm.purchaseType === 'Obra' ? 'bg-white dark:bg-gray-800 text-amber-600 shadow-sm border border-gray-200' : 'text-gray-400'} ${!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado') ? 'cursor-not-allowed opacity-80' : ''}`}
+                                        className={`flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold rounded-lg transition-all ${requestForm.purchaseType === 'Obra' ? 'bg-white dark:bg-gray-800 text-amber-600 shadow-sm border border-gray-150 dark:border-gray-700' : 'text-gray-400 hover:text-gray-500'} ${!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado') ? 'cursor-not-allowed opacity-80' : ''}`}
                                     >
                                         <TruckIcon className="w-3.5 h-3.5" /> Compra obra
                                     </button>
                                 </div>
                             </div>
                             <div className="space-y-1">
-                                <label className={labelSentenceClass}>Data da solicitação</label>
+                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">Data da solicitação</label>
                                 <div className="relative">
                                     <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                                    <input type="date" disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')} value={requestForm.requestDate} onChange={e => setRequestForm({...requestForm, requestDate: e.target.value})} className={editableFieldClass + " pl-10 py-1.5 disabled:opacity-60 disabled:bg-gray-50"} />
+                                    <input type="date" disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')} value={requestForm.requestDate} onChange={e => setRequestForm({...requestForm, requestDate: e.target.value})} className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 pl-10 pr-4 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 disabled:opacity-60 disabled:bg-gray-50" />
                                 </div>
                             </div>
                         </div>
 
-                        <div className="space-y-3 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-2xl border-2 border-indigo-100 dark:border-gray-600">
+                        <div className="space-y-3 p-4 bg-slate-50/50 dark:bg-gray-800/20 rounded-2xl border border-gray-150 dark:border-gray-750">
                             {(!requestToEdit && requestForm.purchaseType === 'Obra') ? (
-                                <div className="flex bg-gray-100 dark:bg-gray-600/30 p-1 rounded-xl border border-gray-200 dark:border-gray-500 mb-2">
-                                    <button type="button" onClick={() => setIsManualItem(false)} className={`flex-1 py-1.5 text-[11px] font-bold rounded-lg transition-all ${!isManualItem ? 'bg-white dark:bg-gray-800 text-indigo-600 shadow-md' : 'text-gray-400 hover:text-gray-600'}`}>
-                                        Catálogo orner
+                                <div className="flex bg-gray-100/60 dark:bg-gray-800/40 p-1 rounded-xl border border-gray-200/55 dark:border-gray-700/50 mb-2">
+                                    <button type="button" onClick={() => setIsManualItem(false)} className={`flex-1 py-1 text-xs font-bold rounded-lg transition-all ${!isManualItem ? 'bg-white dark:bg-gray-750 text-indigo-600 shadow-sm border border-gray-200/50' : 'text-gray-400 hover:text-gray-500'}`}>
+                                        Catálogo Orner
                                     </button>
-                                    <button type="button" onClick={() => setIsManualItem(true)} className={`flex-1 py-1.5 text-[11px] font-bold rounded-lg transition-all ${isManualItem ? 'bg-white dark:bg-gray-800 text-indigo-600 shadow-md' : 'text-gray-400 hover:text-gray-600'}`}>
+                                    <button type="button" onClick={() => setIsManualItem(true)} className={`flex-1 py-1 text-xs font-bold rounded-lg transition-all ${isManualItem ? 'bg-white dark:bg-gray-750 text-indigo-600 shadow-sm border border-gray-200/50' : 'text-gray-400 hover:text-gray-500'}`}>
                                         Avulso
                                     </button>
                                 </div>
                             ) : (
                                 <div className="mb-2 flex justify-between items-center">
                                     <span className="text-[10px] font-bold text-indigo-600 tracking-tight px-1">
-                                        {isManualItem ? 'Item avulso (Fora do estoque)' : 'Catálogo orner'}
+                                        {isManualItem ? 'Item avulso (Fora do estoque)' : 'Catálogo Orner'}
                                     </span>
                                     {requestToEdit && (
                                         <div className="flex gap-2">
@@ -1500,41 +1507,58 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                             
                             <div className="space-y-3">
                                 <div className="animate-fade-in">
-                                    <label className={labelSentenceClass}>{isManualItem ? 'Descrição do item' : 'Selecionar do catálogo'}</label>
+                                    <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">{isManualItem ? 'Descrição do item' : 'Selecionar do catálogo'}</label>
                                     {isManualItem ? (
-                                        <input required disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')} autoFocus placeholder="Nome do componente ou material..." value={requestForm.itemName} onChange={e => setRequestForm({...requestForm, itemName: e.target.value})} className={editableFieldClass + " py-2 disabled:opacity-60 disabled:bg-gray-50"} />
+                                        <input required disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')} autoFocus placeholder="Nome do componente ou material..." value={requestForm.itemName} onChange={e => setRequestForm({...requestForm, itemName: e.target.value})} className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400 disabled:opacity-60 disabled:bg-gray-50" />
                                     ) : (
-                                        <select required disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')} value={requestForm.itemName} onChange={e => { const p = items.find(i => i.name === e.target.value); setRequestForm({...requestForm, itemName: e.target.value, unit: p?.unit || 'un'}); }} className={editableFieldClass + " py-2 disabled:opacity-60 disabled:bg-gray-50"}>
+                                        <select required disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')} value={requestForm.itemName} onChange={e => { const p = items.find(i => i.name === e.target.value); setRequestForm({...requestForm, itemName: e.target.value, unit: p?.unit || 'un'}); }} className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 cursor-pointer disabled:opacity-60 disabled:bg-gray-50">
                                             <option value="">Escolher material cadastrado...</option>
                                             {items.filter(item => item.lineStatus !== 'Fora de Linha').map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
                                         </select>
                                     )}
                                 </div>
 
-                                <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className={labelSentenceClass}>Quantidade solicitada</label>
+                                        <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">Quantidade solicitada</label>
                                         <div className="flex gap-2">
-                                            <input type="number" disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')} required min="1" value={requestForm.quantity} onChange={e => setRequestForm({...requestForm, quantity: parseFloat(e.target.value) || 0})} className={editableFieldClass + " text-center flex-1 py-1.5 disabled:opacity-60 disabled:bg-gray-50"} />
+                                            <input type="number" disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')} required min="1" value={requestForm.quantity} onChange={e => setRequestForm({...requestForm, quantity: parseFloat(e.target.value) || 0})} className="flex-1 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold text-center shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 disabled:opacity-60 disabled:bg-gray-50" />
                                             <select 
                                                 disabled={(!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')) || !isManualItem} 
                                                 required 
                                                 value={requestForm.unit} 
                                                 onChange={e => setRequestForm({...requestForm, unit: e.target.value})} 
-                                                className="w-20 rounded-lg border-2 border-indigo-400 bg-white p-1.5 text-xs font-bold text-center outline-none shadow-sm disabled:opacity-60 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                                                className="w-20 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 p-2 text-xs font-bold text-center outline-none shadow-sm cursor-pointer hover:border-gray-300 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 disabled:opacity-60 disabled:bg-gray-50 disabled:cursor-not-allowed"
                                             >
                                                 {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                                             </select>
                                         </div>
                                     </div>
                                     <div>
-                                        <label className={labelSentenceClass}>Prioridade / urgência</label>
-                                        <div className="flex gap-1.5 h-[38px]">
-                                            {(['Baixa', 'Média', 'Alta'] as const).map(p => (
-                                                <button key={p} type="button" disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')} onClick={() => setRequestForm({...requestForm, priority: p})} className={`flex-1 py-1 text-[10px] font-black rounded-lg border-2 transition-all ${requestForm.priority === p ? (p === 'Alta' ? 'bg-red-600 border-red-600 text-white shadow-md' : p === 'Média' ? 'bg-amber-500 border-amber-500 text-white shadow-md' : 'bg-green-600 border-green-600 text-white shadow-md') : 'bg-white dark:bg-gray-800 text-gray-400 border-gray-200 dark:border-gray-600 hover:border-indigo-400'} ${requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado') ? 'cursor-not-allowed' : ''}`}>
-                                                    {p}
-                                                </button>
-                                            ))}
+                                        <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">Prioridade / urgência</label>
+                                        <div className="flex gap-1.5 h-[34px]">
+                                            {(['Baixa', 'Média', 'Alta'] as const).map(p => {
+                                                const isSelected = requestForm.priority === p;
+                                                let activeBgStyle = "";
+                                                if (isSelected) {
+                                                    if (p === 'Alta') activeBgStyle = 'bg-rose-500 border-rose-500 text-white shadow-sm';
+                                                    else if (p === 'Média') activeBgStyle = 'bg-amber-500 border-amber-500 text-white shadow-sm';
+                                                    else activeBgStyle = 'bg-emerald-600 border-emerald-600 text-white shadow-sm';
+                                                } else {
+                                                    activeBgStyle = 'bg-white dark:bg-gray-800 text-gray-40 hover:text-gray-600 dark:hover:text-gray-200 text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300';
+                                                }
+                                                return (
+                                                    <button 
+                                                        key={p} 
+                                                        type="button" 
+                                                        disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')} 
+                                                        onClick={() => setRequestForm({...requestForm, priority: p})} 
+                                                        className={`flex-1 py-1 text-[11px] font-bold rounded-lg border transition-all ${activeBgStyle} ${requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado') ? 'cursor-not-allowed opacity-60' : ''}`}
+                                                    >
+                                                        {p}
+                                                    </button>
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 </div>
@@ -1544,7 +1568,7 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                         <div className="space-y-3">
                             {requestForm.purchaseType === 'Obra' && (
                                 <div className="animate-fade-in">
-                                    <label className={labelSentenceClass}>Identificação da obra / cliente</label>
+                                    <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">Identificação da obra / cliente</label>
                                     <input 
                                         required 
                                         disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')}
@@ -1553,7 +1577,7 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                         placeholder="Digite o nome ou escolha um cliente aprovado..." 
                                         value={requestForm.clientName} 
                                         onChange={e => setRequestForm({...requestForm, clientName: e.target.value})} 
-                                        className={editableFieldClass + " py-2 disabled:opacity-60 disabled:bg-gray-50"} 
+                                        className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400 disabled:opacity-60 disabled:bg-gray-50" 
                                     />
                                     <datalist id="approved-clients-list">
                                         {approvedClients.map(client => (
@@ -1564,67 +1588,67 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                             )}
 
                             <div>
-                                <label className={labelSentenceClass}>Link de compra / referência (opcional)</label>
+                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">Link de compra / referência (opcional)</label>
                                 <div className="relative">
                                     <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                                    <input type="url" disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')} placeholder="Cole o link do produto aqui..." value={requestForm.purchaseLink} onChange={e => setRequestForm({...requestForm, purchaseLink: e.target.value})} className={editableFieldClass + " pl-10 py-2 text-indigo-600 font-medium disabled:opacity-60 disabled:bg-gray-50"} />
+                                    <input type="url" disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')} placeholder="Cole o link do produto aqui..." value={requestForm.purchaseLink} onChange={e => setRequestForm({...requestForm, purchaseLink: e.target.value})} className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-indigo-600 dark:text-indigo-400 bg-white dark:bg-gray-800/80 pl-10 pr-4 py-2 text-xs font-medium shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400 disabled:opacity-60 disabled:bg-gray-50" />
                                 </div>
                             </div>
 
                             <div>
-                                <label className={labelSentenceClass}>Observações adicionais</label>
-                                <textarea rows={2} disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')} placeholder="Detalhes como marca, cor, urgência ou motivo..." value={requestForm.observation} onChange={e => setRequestForm({...requestForm, observation: e.target.value})} className={editableFieldClass + " min-h-[60px] h-auto resize-none font-medium leading-tight py-2 disabled:opacity-60 disabled:bg-gray-50"} />
+                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">Observações adicionais</label>
+                                <textarea rows={2} disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')} placeholder="Detalhes como marca, cor, urgência ou motivo..." value={requestForm.observation} onChange={e => setRequestForm({...requestForm, observation: e.target.value})} className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-medium shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 resize-none min-h-[50px] leading-relaxed disabled:opacity-60 disabled:bg-gray-50" />
                             </div>
                         </div>
 
-                        <div className="flex gap-3 pt-4 border-t dark:border-gray-700">
+                        <div className="flex gap-3 pt-4 border-t border-gray-100 dark:border-gray-750">
                             {requestToEdit ? (
                                 <>
                                     {requestToEdit.status === 'Aberto' ? (
                                         <>
-                                            {isAdmin && <button type="button" onClick={() => triggerStatusConfirmation(requestToEdit, 'Cancelado')} className="flex-1 py-3 bg-red-50 text-red-600 rounded-xl font-bold text-xs hover:bg-red-100 transition-colors">Cancelar</button>}
-                                            <button type="submit" disabled={isSaving} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-indigo-700 transition-all">Salvar Alterações</button>
+                                            {isAdmin && <button type="button" onClick={() => triggerStatusConfirmation(requestToEdit, 'Cancelado')} className="flex-1 py-2 bg-rose-50 text-rose-600 rounded-xl font-bold text-xs hover:bg-rose-100 transition-colors border border-rose-100">Cancelar solicitação</button>}
+                                            <button type="submit" disabled={isSaving} className="flex-1 py-2 bg-indigo-650 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-md shadow-indigo-600/10 transition-all">Salvar alterações</button>
                                             {isAdmin && (
-                                                <button type="button" onClick={() => triggerStatusConfirmation(requestToEdit, 'Aprovado')} className="flex-[1.5] py-3 bg-blue-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-blue-700 transition-all flex items-center justify-center gap-2">
+                                                <button type="button" onClick={() => triggerStatusConfirmation(requestToEdit, 'Aprovado')} className="flex-[1.2] py-2 bg-emerald-600 text-white rounded-xl font-bold text-xs shadow-md shadow-emerald-600/10 hover:bg-emerald-700 transition-all flex items-center justify-center gap-1.5">
                                                     <CheckCircleIcon className="w-4 h-4" /> Aprovar
                                                 </button>
                                             )}
                                         </>
                                     ) : requestToEdit.status === 'Aprovado' ? (
                                         <>
-                                            <button type="submit" disabled={isSaving} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-indigo-700 transition-all">Salvar Alterações</button>
+                                            <button type="submit" disabled={isSaving} className="flex-1 py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs shadow-md hover:bg-indigo-750 transition-all">Salvar alterações</button>
                                             {isAdmin && (
-                                                <button type="button" onClick={() => triggerStatusConfirmation(requestToEdit, 'Comprado')} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-2">
+                                                <button type="button" onClick={() => triggerStatusConfirmation(requestToEdit, 'Comprado')} className="flex-1 py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs shadow-md hover:bg-indigo-700 transition-all flex items-center justify-center gap-1.5">
                                                     <ShoppingCartIcon className="w-4 h-4" /> Registrar compra
                                                 </button>
                                             )}
                                         </>
                                     ) : requestToEdit.status === 'Comprado' ? (
                                         <>
-                                            <button type="submit" disabled={isSaving} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-indigo-700 transition-all">Salvar Alterações</button>
+                                            <button type="submit" disabled={isSaving} className="flex-1 py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs shadow-md hover:bg-indigo-700 transition-all">Salvar alterações</button>
                                             {isAdmin && (
-                                                <button type="button" onClick={() => triggerStatusConfirmation(requestToEdit, 'Em trânsito')} className="flex-1 py-3 bg-purple-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-purple-700 transition-all flex items-center justify-center gap-2">
+                                                <button type="button" onClick={() => triggerStatusConfirmation(requestToEdit, 'Em trânsito')} className="flex-1 py-2 bg-purple-600 text-white rounded-xl font-bold text-xs shadow-md hover:bg-purple-700 transition-all flex items-center justify-center gap-1.5">
                                                     <TruckIcon className="w-4 h-4" /> Em trânsito
                                                 </button>
                                             )}
                                         </>
                                     ) : requestToEdit.status === 'Em trânsito' ? (
                                         <>
-                                            <button type="submit" disabled={isSaving} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-indigo-700 transition-all">Salvar Alterações</button>
+                                            <button type="submit" disabled={isSaving} className="flex-1 py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs shadow-md hover:bg-indigo-705 transition-all">Salvar alterações</button>
                                             {isAdmin && (
-                                                <button type="button" onClick={() => { setIsRequestModalOpen(false); setIsNFModalOpen(true); setNfForm({ invoiceNumber: '', invoiceKey: '', totalValue: 0, invoiceFile: '', invoiceFileName: '' }); }} className="flex-1 py-3 bg-green-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-green-700 transition-all flex items-center justify-center gap-2">
+                                                <button type="button" onClick={() => { setIsRequestModalOpen(false); setIsNFModalOpen(true); setNfForm({ invoiceNumber: '', invoiceKey: '', totalValue: 0, invoiceFile: '', invoiceFileName: '' }); }} className="flex-1 py-2 bg-green-600 text-white rounded-xl font-bold text-xs shadow-md hover:bg-green-700 transition-all flex items-center justify-center gap-1.5">
                                                     <UploadIcon className="w-4 h-4" /> Lançar NF
                                                 </button>
                                             )}
                                         </>
                                     ) : (
-                                        <button type="button" onClick={() => { setIsRequestModalOpen(false); setRequestToEdit(null); }} className="flex-1 py-3 bg-gray-100 text-gray-500 rounded-xl font-bold text-xs">Fechar</button>
+                                        <button type="button" onClick={() => { setIsRequestModalOpen(false); setRequestToEdit(null); }} className="flex-1 py-2 bg-gray-50 text-gray-500 hover:bg-gray-100 rounded-xl font-bold text-xs transition-colors border border-gray-200">Fechar</button>
                                     )}
                                 </>
                             ) : (
                                 <>
-                                    <button type="button" onClick={() => setIsRequestModalOpen(false)} className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 text-gray-500 rounded-xl font-bold text-xs hover:bg-gray-200 transition-all">Cancelar</button>
-                                    <button type="submit" disabled={isSaving} className="flex-[2] py-3 bg-indigo-600 text-white rounded-xl font-black text-xs shadow-lg hover:bg-indigo-700 transition-all active:scale-[0.98]">
+                                    <button type="button" onClick={() => setIsRequestModalOpen(false)} className="px-5 py-2.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 text-gray-500 dark:text-gray-400 rounded-xl font-bold text-xs transition-all border border-gray-250 dark:border-gray-700">Cancelar</button>
+                                    <button type="submit" disabled={isSaving} className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/15 hover:shadow-indigo-600/25 transition-all active:scale-[0.98] disabled:opacity-50">
                                         {isSaving ? 'Gravando...' : 'Finalizar solicitação'}
                                     </button>
                                 </>
