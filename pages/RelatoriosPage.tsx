@@ -54,6 +54,7 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
   const [statusFilterValue, setStatusFilterValue] = useState<ExpenseReportStatus | 'Todos'>('Todos');
   const [configKmValue, setConfigKmValue] = useState(1.20);
   const [configInstValue, setConfigInstValue] = useState(120.00);
+  const [configTaxValue, setConfigTaxValue] = useState(6.00);
   const [companyLogoValue, setCompanyLogoValue] = useState<string | null>(null);
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -63,6 +64,7 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
 
   const [isEditingKm, setIsEditingKm] = useState(false);
   const [isEditingInst, setIsEditingInst] = useState(false);
+  const [isEditingTax, setIsEditingTax] = useState(false);
   const [isEditingLogo, setIsEditingLogo] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -154,6 +156,7 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
           const remoteConfigs = await dataService.getAll<any>('system_configs', undefined, true);
           const remoteKm = remoteConfigs.find(c => c.id === 'km_value');
           const remoteInst = remoteConfigs.find(c => c.id === 'installation_value');
+          const remoteTax = remoteConfigs.find(c => c.id === 'tax_value');
           const remoteLogo = remoteConfigs.find(c => c.id === 'company_logo');
           
           if (remoteKm) {
@@ -161,6 +164,7 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
               setConfigKmValue(val); setValorPorKm(val);
           }
           if (remoteInst) setConfigInstValue(parseFloat(remoteInst.value));
+          if (remoteTax) setConfigTaxValue(parseFloat(remoteTax.value));
           if (remoteLogo) setCompanyLogoValue(remoteLogo.value);
 
       } catch (e) { console.error("Erro configs:", e); }
@@ -493,6 +497,14 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
       } catch (e) { alert('Erro.'); } finally { setIsLoading(false); }
   };
 
+  const handleSaveTaxConfig = async () => {
+      setIsLoading(true);
+      try {
+          await dataService.save('system_configs', { id: 'tax_value', value: configTaxValue.toString() });
+          setIsEditingTax(false); alert('Salvo!');
+      } catch (e) { alert('Erro.'); } finally { setIsLoading(false); }
+  };
+
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -566,6 +578,20 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
                                             <button onClick={handleSaveInstConfig} className="p-2 bg-green-600 text-white rounded-lg shadow-sm hover:bg-green-700"><SaveIcon className="w-4 h-4" /></button>
                                         ) : (
                                             <button onClick={() => setIsEditingInst(true)} className="p-2 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-300"><EditIcon className="w-4 h-4" /></button>
+                                        )}
+                                    </div>
+                                </div>
+                                <div>
+                                    <FormLabel>Valor Referência Nota Fiscal (%)</FormLabel>
+                                    <div className="flex gap-2">
+                                        <div className="relative flex-1">
+                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">%</span>
+                                            <input type="number" step="0.01" value={configTaxValue} onChange={e => setConfigTaxValue(parseFloat(e.target.value) || 0)} disabled={!isEditingTax} className="w-full pr-8 rounded-lg border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 text-xs font-bold text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-70" />
+                                        </div>
+                                        {isEditingTax ? (
+                                            <button onClick={handleSaveTaxConfig} className="p-2 bg-green-600 text-white rounded-lg shadow-sm hover:bg-green-700"><SaveIcon className="w-4 h-4" /></button>
+                                        ) : (
+                                            <button onClick={() => setIsEditingTax(true)} className="p-2 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-300"><EditIcon className="w-4 h-4" /></button>
                                         )}
                                     </div>
                                 </div>

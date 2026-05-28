@@ -19,3 +19,8 @@ COMMENT ON COLUMN financial_transactions."relatedReportId" IS 'ID do relatório 
 -- 4. Adiciona o campo de status de linha em itens de estoque
 ALTER TABLE stock_items ADD COLUMN IF NOT EXISTS "lineStatus" text DEFAULT 'Em linha';
 COMMENT ON COLUMN stock_items."lineStatus" IS 'Classificação da disponibilidade do item: "Em linha" ou "Fora de Linha"';
+
+-- 5. Cadastra o campo de valor de referência da Nota Fiscal (%) caso não exista
+INSERT INTO system_configs (id, value)
+VALUES ('tax_value', '6.00')
+ON CONFLICT (id) DO NOTHING;

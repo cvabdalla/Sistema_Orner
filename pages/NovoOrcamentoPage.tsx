@@ -84,6 +84,8 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
             // Tenta obter o custo de instalação global do banco de dados
             const remoteInst = remoteConfigs.find(c => c.id === 'installation_value');
             const finalInstCost = remoteInst ? parseFloat(remoteInst.value) : 120;
+            const remoteTax = remoteConfigs.find(c => c.id === 'tax_value');
+            const finalNfPerc = remoteTax ? parseFloat(remoteTax.value) : 6;
 
             if (!orcamentoToEdit) {
                 const initialFixedData: Record<string, any> = {};
@@ -93,6 +95,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                 const newState = { 
                     ...initialFormState, 
                     terceiroInstalacaoCusto: finalInstCost,
+                    nfServicoPerc: finalNfPerc,
                     fixedItemsData: initialFixedData 
                 };
                 setFormState(newState);
