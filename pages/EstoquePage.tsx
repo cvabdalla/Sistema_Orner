@@ -166,7 +166,22 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
     };
 
     const triggerStatusConfirmation = (request: PurchaseRequest, status: PurchaseRequestStatus) => {
-        setConfirmRequest(request);
+        let requestToConfirm = request;
+        if (requestToEdit && String(requestToEdit.id) === String(request.id)) {
+            requestToConfirm = {
+                ...request,
+                itemName: requestForm.itemName,
+                quantity: Number(requestForm.quantity),
+                unit: requestForm.unit,
+                priority: requestForm.priority,
+                clientName: requestForm.purchaseType === 'Obra' ? requestForm.clientName : 'Estoque central',
+                purchaseLink: requestForm.purchaseLink,
+                purchaseType: requestForm.purchaseType, 
+                observation: requestForm.observation,
+                date: requestForm.requestDate
+            };
+        }
+        setConfirmRequest(requestToConfirm);
         setNextStatus(status);
         setIsConfirmStatusModalOpen(true);
     };
@@ -201,6 +216,7 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
             };
             await dataService.save('purchase_requests', requestData);
             setIsRequestModalOpen(false);
+            setRequestToEdit(null);
             await loadData();
         } finally { setIsSaving(false); }
     };
@@ -1636,7 +1652,24 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                         <>
                                             <button type="submit" disabled={isSaving} className="flex-1 py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs shadow-md hover:bg-indigo-705 transition-all">Salvar alterações</button>
                                             {isAdmin && (
-                                                <button type="button" onClick={() => { setIsRequestModalOpen(false); setIsNFModalOpen(true); setNfForm({ invoiceNumber: '', invoiceKey: '', totalValue: 0, invoiceFile: '', invoiceFileName: '' }); }} className="flex-1 py-2 bg-green-600 text-white rounded-xl font-bold text-xs shadow-md hover:bg-green-700 transition-all flex items-center justify-center gap-1.5">
+                                                <button type="button" onClick={() => {
+                                                    const updatedReq = {
+                                                        ...requestToEdit,
+                                                        itemName: requestForm.itemName,
+                                                        quantity: Number(requestForm.quantity),
+                                                        unit: requestForm.unit,
+                                                        priority: requestForm.priority,
+                                                        clientName: requestForm.purchaseType === 'Obra' ? requestForm.clientName : 'Estoque central',
+                                                        purchaseLink: requestForm.purchaseLink,
+                                                        purchaseType: requestForm.purchaseType, 
+                                                        observation: requestForm.observation,
+                                                        date: requestForm.requestDate
+                                                    };
+                                                    setRequestToEdit(updatedReq);
+                                                    setIsRequestModalOpen(false);
+                                                    setIsNFModalOpen(true);
+                                                    setNfForm({ invoiceNumber: '', invoiceKey: '', totalValue: 0, invoiceFile: '', invoiceFileName: '' });
+                                                }} className="flex-1 py-2 bg-green-600 text-white rounded-xl font-bold text-xs shadow-md hover:bg-green-700 transition-all flex items-center justify-center gap-1.5">
                                                     <UploadIcon className="w-4 h-4" /> Lançar NF
                                                 </button>
                                             )}
