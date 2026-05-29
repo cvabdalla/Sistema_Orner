@@ -13,6 +13,7 @@ interface ContasTableProps {
     onEdit: (transaction: FinancialTransaction) => void;
     onCancel: (id: string) => void;
     onStatusChange: (id: string, status: FinancialTransactionStatus) => void;
+    onOpenCreditCard?: () => void;
 }
 
 const formatCurrency = (value: number) => {
@@ -22,7 +23,7 @@ const formatCurrency = (value: number) => {
 
 const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 
-const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categories, onEdit, onCancel, onStatusChange }) => {
+const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categories, onEdit, onCancel, onStatusChange, onOpenCreditCard }) => {
     const [statusFilter, setStatusFilter] = useState<FinancialTransactionStatus | 'all'>('all');
     const [selectedGroup, setSelectedGroup] = useState<FinancialTransaction[] | null>(null);
     const [cards, setCards] = useState<CreditCard[]>([]);
@@ -179,8 +180,17 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                     </div>
 
                     {!isCancelledView && (
-                        <div className="flex items-center gap-2 ml-auto sm:ml-0">
-                            <FilterIcon className="text-gray-500 dark:text-gray-400 w-4 h-4" />
+                        <div className="flex items-center gap-2.5 ml-auto sm:ml-0">
+                            {onOpenCreditCard && (
+                                <button
+                                    onClick={onOpenCreditCard}
+                                    className="flex items-center gap-2 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 active:scale-[0.98] text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-800 rounded-xl transition-all duration-200 shadow-sm font-semibold text-xs whitespace-nowrap"
+                                >
+                                    <CreditCardIcon className="w-3.5 h-3.5" />
+                                    <span>Lançar cartão</span>
+                                </button>
+                            )}
+                            <FilterIcon className="text-gray-500 dark:text-gray-400 w-4 h-4 text-gray-400" />
                             <select
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value as any)}

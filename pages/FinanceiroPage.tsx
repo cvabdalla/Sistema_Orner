@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { AddIcon, FilterIcon, CalendarIcon, TrashIcon, ClipboardListIcon, DocumentReportIcon, ExclamationTriangleIcon, CreditCardIcon, XCircleIcon, TableIcon } from '../assets/icons';
+import { AddIcon, FilterIcon, CalendarIcon, TrashIcon, ClipboardListIcon, DocumentReportIcon, ExclamationTriangleIcon, CreditCardIcon, XCircleIcon, TableIcon, UploadIcon } from '../assets/icons';
 import type { FinancialTransaction, FinancialTransactionStatus, FinancialCategory, FinancialTransactionType, FinanceiroPageProps, User, ExpenseReport, BankAccount } from '../types';
 import { dataService } from '../services/dataService';
 
@@ -343,7 +343,7 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
     const TabButton: React.FC<{tabId: FinanceiroTab, label: string}> = ({ tabId, label }) => (
         <button
             onClick={() => setActiveTab(tabId)}
-            className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${
+            className={`px-4 py-2 text-xs font-bold rounded-lg transition-all shrink-0 whitespace-nowrap ${
                 activeTab === tabId ? 'bg-indigo-600 text-white shadow-md' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
             }`}
         >
@@ -388,22 +388,22 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
 
     return (
         <div className="space-y-6 animate-fade-in">
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 w-full">
                 {view === 'dashboard' ? (
-                    <div className="bg-white dark:bg-gray-800 p-1 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-wrap items-center gap-1 sm:gap-2">
+                    <div className="bg-white dark:bg-gray-800 p-1 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-nowrap items-center gap-1 sm:gap-2 shrink-0 overflow-x-auto">
                         <TabButton tabId="visaoGeral" label="Visão Geral" />
                         <TabButton tabId="aReceber" label="A Receber" />
                         <TabButton tabId="aPagar" label="A Pagar" />
                         <TabButton tabId="cancelados" label="Cancelados" />
                     </div>
                 ) : (
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 shrink-0">
                         <div className="p-2.5 bg-indigo-100 dark:bg-indigo-900/40 rounded-xl text-indigo-600 dark:text-indigo-400 shadow-sm"><DocumentReportIcon className="w-7 h-7" /></div>
                         <div><h2 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">DRE gerencial</h2><p className="text-[12px] text-gray-500 dark:text-gray-400 font-semibold tracking-tight">Demonstrativo de resultado</p></div>
                     </div>
                 )}
                 
-                <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+                <div className="flex flex-nowrap items-center gap-3 w-full lg:w-auto overflow-x-auto scrollbar-none py-1">
                     {view === 'dre' && (
                         <div className="flex flex-wrap items-center gap-3 ml-auto">
                              <div className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl px-4 h-11 shadow-sm">
@@ -460,26 +460,40 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
                     )}
 
                     {view !== 'dre' && (
-                        <div className="flex items-center gap-2">
-                             <div className="flex items-center gap-2 bg-white dark:bg-gray-800 p-1 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-                                <TableIcon className="w-4 h-4 ml-2 text-gray-400" />
+                        <div className="flex flex-nowrap items-center gap-2 shrink-0">
+                             <div className="flex items-center gap-2 bg-white dark:bg-gray-800 p-1 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 shrink-0 h-[34px]">
+                                <TableIcon className="w-4 h-4 ml-2 text-gray-400 shrink-0" />
                                 <select 
                                     value={selectedBankFilter} 
                                     onChange={(e) => setSelectedBankFilter(e.target.value)} 
-                                    className="bg-transparent border-none text-[11px] font-bold text-gray-600 dark:text-gray-200 focus:ring-0 p-1.5 cursor-pointer"
+                                    className="bg-transparent border-none text-[11px] font-bold text-gray-650 dark:text-gray-200 focus:ring-0 p-0 pr-8 cursor-pointer h-full"
                                 >
                                     <option value="all">Todos os bancos</option>
                                     {bankAccounts.map(b => <option key={b.id} value={b.id}>{b.accountName}</option>)}
                                 </select>
                              </div>
 
-                            <div className="flex items-center gap-2 bg-white dark:bg-gray-800 p-1 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-                                <CalendarIcon className="w-4 h-4 ml-2 text-gray-400" />
-                                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-transparent border-none text-sm text-gray-700 dark:text-gray-200 focus:ring-0 p-1 cursor-pointer w-full sm:w-auto" />
-                                <span className="text-gray-400">-</span>
-                                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-transparent border-none text-sm text-gray-700 dark:text-gray-200 focus:ring-0 p-1 cursor-pointer w-full sm:w-auto" />
+                             <button 
+                                onClick={() => setImportModalOpen(true)}
+                                className="flex items-center gap-2 px-3 bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700/60 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm text-gray-650 dark:text-gray-300 font-bold text-[11px] transition-all active:scale-95 h-[34px] cursor-pointer shrink-0"
+                             >
+                                <UploadIcon className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+                                <span className="hidden sm:inline">Importar extrato</span>
+                             </button>
+
+                             <div className="flex items-center gap-1.5 bg-white dark:bg-gray-800 p-1 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 shrink-0 h-[34px]">
+                                <CalendarIcon className="w-4 h-4 ml-2 text-gray-400 shrink-0" />
+                                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-transparent border-none text-[11px] font-bold text-gray-700 dark:text-gray-200 focus:ring-0 p-0 cursor-pointer w-24 text-center" />
+                                <span className="text-gray-400 text-xs">-</span>
+                                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-transparent border-none text-[11px] font-bold text-gray-700 dark:text-gray-200 focus:ring-0 p-0 cursor-pointer w-24 text-center" />
                             </div>
-                            <button onClick={() => handleOpenModal(undefined, activeTab === 'aReceber' ? 'receita' : activeTab === 'aPagar' ? 'despesa' : undefined)} className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 font-bold text-xs transition-all active:scale-95"><AddIcon className="w-5 h-5" /><span className="hidden sm:inline">Nova transação</span></button>
+                            <button 
+                                onClick={() => handleOpenModal(undefined, activeTab === 'aReceber' ? 'receita' : activeTab === 'aPagar' ? 'despesa' : undefined)} 
+                                className="flex items-center gap-1.5 px-4 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-md shadow-indigo-600/20 font-bold text-[11px] transition-all active:scale-95 h-[34px] cursor-pointer shrink-0"
+                            >
+                                <AddIcon className="w-4 h-4 shrink-0" />
+                                <span className="hidden sm:inline">Nova transação</span>
+                            </button>
                         </div>
                     )}
                 </div>
@@ -524,6 +538,7 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
                                 onEdit={(tx) => handleOpenModal(tx)}
                                 onCancel={handleCancelRequest}
                                 onStatusChange={handleStatusChange}
+                                onOpenCreditCard={activeTab === 'aPagar' ? () => setCreditCardModalOpen(true) : undefined}
                             />
                         )
                     )}

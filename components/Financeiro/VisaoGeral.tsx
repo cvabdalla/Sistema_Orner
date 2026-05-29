@@ -10,8 +10,8 @@ interface VisaoGeralProps {
     transactions: FinancialTransaction[];
     allTransactions: FinancialTransaction[]; // Adicionado para o gráfico ver o ano todo
     bankAccounts: BankAccount[];
-    onOpenImport: () => void;
-    onOpenCreditCard: () => void;
+    onOpenImport?: () => void;
+    onOpenCreditCard?: () => void;
     onEditTransaction?: (transaction: FinancialTransaction) => void;
     onCancelTransaction?: (id: string) => void;
 }
@@ -203,23 +203,6 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, allTransactions, 
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-end gap-3.5 mb-2">
-                <button
-                    onClick={onOpenCreditCard}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-indigo-50 hover:bg-indigo-100 active:scale-[0.98] text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-900/40 border border-indigo-200 dark:border-indigo-800 rounded-2xl transition-all duration-200 shadow-sm font-semibold text-sm"
-                >
-                    <CreditCardIcon className="w-4 h-4" />
-                    <span>Lançar cartão</span>
-                </button>
-                <button
-                    onClick={onOpenImport}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-white hover:bg-gray-50 active:scale-[0.98] dark:bg-gray-800 dark:hover:bg-gray-700/60 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-2xl transition-all duration-200 shadow-sm font-semibold text-sm"
-                >
-                    <UploadIcon className="w-4 h-4" />
-                    <span>Importar extrato</span>
-                </button>
-            </div>
-
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 {/* 1. A Receber (YTD) Card */}
                 <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-4 border border-gray-100/80 dark:border-gray-700/80 hover:shadow-md transition-all duration-300 group hover:-translate-y-0.5">
