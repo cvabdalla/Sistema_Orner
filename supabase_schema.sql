@@ -24,3 +24,12 @@ COMMENT ON COLUMN stock_items."lineStatus" IS 'Classificação da disponibilidad
 INSERT INTO system_configs (id, value)
 VALUES ('tax_value', '6.00')
 ON CONFLICT (id) DO NOTHING;
+
+-- 6. Adiciona suporte a planos com valor fixo negociado
+ALTER TABLE lavagem_packages ADD COLUMN IF NOT EXISTS "is_negotiated" boolean DEFAULT false;
+ALTER TABLE lavagem_clients ADD COLUMN IF NOT EXISTS "is_negotiated" boolean DEFAULT false;
+ALTER TABLE lavagem_clients ADD COLUMN IF NOT EXISTS "negotiated_total_value" numeric DEFAULT 0;
+COMMENT ON COLUMN lavagem_packages."is_negotiated" IS 'Indica se o plano tem valor total negociado em vez de valor unitário por placa';
+COMMENT ON COLUMN lavagem_clients."is_negotiated" IS 'Indica se o vínculo do cliente com o plano foi feito por um valor fixo negociado';
+COMMENT ON COLUMN lavagem_clients."negotiated_total_value" IS 'Instância o valor total fechado e acordado com o cliente para o plano';
+

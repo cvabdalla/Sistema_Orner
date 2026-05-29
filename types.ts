@@ -125,6 +125,8 @@ export interface LavagemClient {
     contract_price_per_plate?: number;
     package_launch_date?: string;
     travel_cost?: number;
+    is_negotiated?: boolean;
+    negotiated_total_value?: number;
 }
 
 export interface ChecklistEntry {
@@ -327,6 +329,7 @@ export interface LavagemPackage {
     color: string;
     wash_qty: number;
     price_per_plate: number;
+    is_negotiated?: boolean;
 }
 
 export interface LavagemContract {

@@ -104,7 +104,7 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
         name: '', phone: '', cep: '', address: '', address_number: '', complement: '', city: '', plates_count: 0, installation_end_date: '', observations: ''
     });
     const [packageForm, setPackageForm] = useState({
-        name: '', color: PRESET_COLORS[0].hex, wash_qty: 4, price_per_plate: 0
+        name: '', color: PRESET_COLORS[0].hex, wash_qty: 4, price_per_plate: 0, is_negotiated: false
     });
     const [scheduleDates, setScheduleDates] = useState<string[]>([]);
     const [frequency, setFrequency] = useState<Frequency>('semestral');
@@ -112,7 +112,8 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
         clientId: '', 
         packageId: '',
         installationEndDate: new Date().toISOString().split('T')[0],
-        travelCost: 0
+        travelCost: 0,
+        negotiatedTotalValue: 0
     });
     const [editWashValue, setEditWashValue] = useState<{ date: string, status: 'scheduled' | 'executed' | 'cancelled' }>({ date: '', status: 'scheduled' });
 
@@ -166,13 +167,18 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
         const currentCycleRecords = clientRecords.filter(r => (r.created_at || r.date) >= launchDate);
         const executedCount = currentCycleRecords.filter(r => r.status === 'executed').length;
         const washQtyLimit = client.contract_wash_qty || pkg?.wash_qty || 0;
-        const pricePerPlate = client.contract_price_per_plate || pkg?.price_per_plate || 0;
+        const isClientNegotiated = !!(client.is_negotiated || pkg?.is_negotiated);
+        const pricePerPlate = isClientNegotiated ? 0 : (client.contract_price_per_plate !== undefined ? client.contract_price_per_plate : (pkg?.price_per_plate || 0));
         const allScheduled = currentCycleRecords.filter(r => r.status === 'scheduled').sort((a, b) => a.date.localeCompare(b.date));
         const nextScheduled = allScheduled[0];
         const pendingToScheduleCount = Math.max(0, washQtyLimit - executedCount - allScheduled.length);
         
-        const subtotalPlacas = pricePerPlate * (client.plates_count || 0);
-        const contractTotalValue = (subtotalPlacas * washQtyLimit) + (client.travel_cost || 0);
+        const subtotalPlacas = isClientNegotiated 
+            ? (washQtyLimit > 0 ? (Number(client.negotiated_total_value || 0) / washQtyLimit) : 0)
+            : (pricePerPlate * (client.plates_count || 0));
+        const contractTotalValue = isClientNegotiated
+            ? (Number(client.negotiated_total_value || 0) + (client.travel_cost || 0))
+            : ((pricePerPlate * (client.plates_count || 0) * washQtyLimit) + (client.travel_cost || 0));
 
         const clientContracts = contracts
             .filter(c => c.client_id === client.id)
@@ -365,11 +371,12 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                 name: packageForm.name,
                 color: packageForm.color,
                 wash_qty: packageForm.wash_qty,
-                price_per_plate: packageForm.price_per_plate
+                price_per_plate: packageForm.is_negotiated ? 0 : packageForm.price_per_plate,
+                is_negotiated: !!packageForm.is_negotiated
             };
             await dataService.save('lavagem_packages', data);
             setEditingPackage(null);
-            setPackageForm({ name: '', color: PRESET_COLORS[0].hex, wash_qty: 4, price_per_plate: 0 });
+            setPackageForm({ name: '', color: PRESET_COLORS[0].hex, wash_qty: 4, price_per_plate: 0, is_negotiated: false });
             await loadData();
         } finally { setIsSaving(false); }
     };
@@ -385,7 +392,13 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
 
     const handleEditPackage = (pkg: LavagemPackage) => {
         setEditingPackage(pkg);
-        setPackageForm({ name: pkg.name, color: pkg.color, wash_qty: pkg.wash_qty, price_per_plate: pkg.price_per_plate });
+        setPackageForm({ 
+            name: pkg.name, 
+            color: pkg.color, 
+            wash_qty: pkg.wash_qty, 
+            price_per_plate: pkg.price_per_plate,
+            is_negotiated: !!pkg.is_negotiated
+        });
     };
 
     const handleLaunchService = async (e: React.FormEvent) => {
@@ -397,16 +410,21 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
         setIsSaving(true);
         try {
             const launchDate = new Date();
-            const platesTotal = selectedPkg.price_per_plate * (client.plates_count || 0);
-            const contractTotal = (platesTotal * selectedPkg.wash_qty) + Number(launchServiceForm.travelCost || 0);
+            const isPkgNegotiated = !!selectedPkg.is_negotiated;
+            const platesTotal = isPkgNegotiated ? 0 : (selectedPkg.price_per_plate * (client.plates_count || 0));
+            const baseContractValue = isPkgNegotiated ? Number(launchServiceForm.negotiatedTotalValue || 0) : (platesTotal * selectedPkg.wash_qty);
+            const contractTotal = baseContractValue + Number(launchServiceForm.travelCost || 0);
+
             await dataService.save('lavagem_clients', {
                 ...client,
                 package_id: selectedPkg.id,
-                contract_price_per_plate: selectedPkg.price_per_plate,
+                contract_price_per_plate: isPkgNegotiated ? 0 : selectedPkg.price_per_plate,
                 contract_wash_qty: selectedPkg.wash_qty,
                 travel_cost: Number(launchServiceForm.travelCost || 0),
                 installation_end_date: launchServiceForm.installationEndDate,
-                package_launch_date: launchDate.toISOString()
+                package_launch_date: launchDate.toISOString(),
+                is_negotiated: isPkgNegotiated,
+                negotiated_total_value: isPkgNegotiated ? Number(launchServiceForm.negotiatedTotalValue || 0) : 0
             });
             await dataService.save('lavagem_contracts', {
                 id: `cont-${Date.now()}`,
@@ -497,7 +515,8 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
         setLaunchServiceForm({ 
             clientId, packageId: '', 
             installationEndDate: client?.installation_end_date || new Date().toISOString().split('T')[0],
-            travelCost: 0
+            travelCost: 0,
+            negotiatedTotalValue: 0
         });
         setIsClientLocked(!!clientId);
         setIsLaunchServiceModalOpen(true);
@@ -522,7 +541,7 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                     <div><p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest leading-none mb-1">{usePeriodFilter ? 'Arrecadado no período' : `Arrecadado em ${new Date().getFullYear()}`}</p><p className="text-xl font-black text-indigo-700 dark:text-indigo-300 leading-none">{formatCurrency(totalArrecadado)}</p><p className="text-[8px] text-indigo-400 font-bold mt-1 uppercase tracking-tighter">* Inclui histórico completo da lista atual</p></div>
                 </div>
                 <div className="flex flex-wrap justify-center gap-3">
-                    <button onClick={() => { setEditingPackage(null); setPackageForm({ name: '', color: PRESET_COLORS[0].hex, wash_qty: 4, price_per_plate: 0 }); setIsPackageModalOpen(true); }} className="flex items-center gap-2 px-5 py-2.5 bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-200 border border-gray-200 dark:border-gray-600 rounded-xl font-black text-xs hover:bg-gray-100 transition-all tracking-tight">Planos</button>
+                    <button onClick={() => { setEditingPackage(null); setPackageForm({ name: '', color: PRESET_COLORS[0].hex, wash_qty: 4, price_per_plate: 0, is_negotiated: false }); setIsPackageModalOpen(true); }} className="flex items-center gap-2 px-5 py-2.5 bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-200 border border-gray-200 dark:border-gray-600 rounded-xl font-black text-xs hover:bg-gray-100 transition-all tracking-tight">Planos</button>
                     <button onClick={() => { setEditingClient(null); setClientForm({name:'', phone:'', cep:'', address:'', address_number:'', complement:'', city:'', plates_count:0, installation_end_date: '', observations: ''}); setIsClientModalOpen(true); }} className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-600 rounded-xl font-black text-xs hover:bg-gray-100 transition-all tracking-tight">Novo cliente</button>
                     <button onClick={() => handleOpenLaunchModal()} className="flex items-center gap-2 px-8 py-2.5 bg-cyan-600 text-white rounded-xl font-black text-xs shadow-xl shadow-cyan-600/20 hover:bg-cyan-700 transition-all active:scale-95">Lançar serviço</button>
                 </div>
@@ -768,8 +787,190 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
 
             {isClientModalOpen && (<Modal title={editingClient ? "Editar cadastro de cliente" : "Novo cliente solar"} onClose={() => setIsClientModalOpen(false)} maxWidth="max-w-2xl"><form onSubmit={handleSaveClient} className="space-y-6 pt-2 animate-fade-in"><div className="space-y-4"><SectionHeader icon={<UsersIcon />} title="Identificação do Cliente" color="bg-indigo-600" /><div className="grid grid-cols-1 md:grid-cols-12 gap-4"><div className="md:col-span-8"><FormLabel>Nome completo do titular</FormLabel><div className="relative"><UsersIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" /><input required value={clientForm.name} onChange={e => setClientForm(prev => ({...prev, name: e.target.value}))} className={`${inputClass} pl-10`} placeholder="Ex: João da Silva" /></div></div><div className="md:col-span-4"><FormLabel>Telefone de contato</FormLabel><div className="relative"><PhoneIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" /><input value={clientForm.phone} onChange={e => setClientForm(prev => ({...prev, phone: e.target.value}))} className={`${inputClass} pl-10`} placeholder="(00) 00000-0000" /></div></div></div></div><div className="space-y-4"><SectionHeader icon={<MapPinIcon />} title="Endereço de Instalação" color="bg-teal-600" /><div className="grid grid-cols-1 md:grid-cols-12 gap-4"><div className="md:col-span-3"><FormLabel>CEP</FormLabel><div className="relative"><input placeholder="00000-000" maxLength={9} value={clientForm.cep} onChange={e => setClientForm(prev => ({...prev, cep: e.target.value}))} className={inputClass} />{isLoadingCep && <div className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>}</div></div><div className="md:col-span-6"><FormLabel>Logradouro / Endereço</FormLabel><input required value={clientForm.address} onChange={e => setClientForm(prev => ({...prev, address: e.target.value}))} className={inputClass} placeholder="Rua, Avenida..." /></div><div className="md:col-span-3"><FormLabel>Cidade</FormLabel><input required value={clientForm.city} onChange={e => setClientForm(prev => ({...prev, city: e.target.value}))} className={inputClass} placeholder="Cidade" /></div><div className="md:col-span-3"><FormLabel>Nº</FormLabel><input required value={clientForm.address_number} onChange={e => setClientForm(prev => ({...prev, address_number: e.target.value}))} className={inputClass} placeholder="S/N" /></div><div className="md:col-span-9"><FormLabel>Complemento (Referência)</FormLabel><input value={clientForm.complement} onChange={e => setClientForm(prev => ({...prev, complement: e.target.value}))} className={inputClass} placeholder="Apto, Bloco, Travessa..." /></div></div></div><div className="space-y-4"><SectionHeader icon={<BoltIcon />} title="Configurações do Projeto" color="bg-amber-600" /><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div><FormLabel>Potência (Qtd. de Placas)</FormLabel><div className="relative"><BoltIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500" /><input type="number" required value={clientForm.plates_count} onChange={e => setClientForm(prev => ({...prev, plates_count: parseInt(e.target.value) || 0}))} className={`${inputClass} pl-10 font-black text-amber-700 bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-900`} /></div></div><div><FormLabel>Término da instalação original</FormLabel><div className="relative"><CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" /><input type="date" value={clientForm.installation_end_date} onChange={e => setClientForm(prev => ({...prev, installation_end_date: e.target.value}))} className={`${inputClass} pl-10`} /></div></div></div></div><div className="space-y-4"><SectionHeader icon={<ClipboardListIcon />} title="Notas e Observações" color="bg-gray-400" /><textarea rows={3} value={clientForm.observations} onChange={e => setClientForm(prev => ({...prev, observations: e.target.value}))} className={`${inputClass} resize-none min-h-[80px] font-medium text-xs`} placeholder="Notas técnicas ou comerciais..." /></div><div className="flex gap-3 pt-6 border-t dark:border-gray-700"><button type="button" onClick={() => setIsClientModalOpen(false)} className="flex-1 py-4 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-300 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 transition-all">Cancelar</button><button type="submit" disabled={isSaving} className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-95">{isSaving ? 'Gravando...' : (editingClient ? 'Atualizar Cliente' : 'Salvar Cadastro')}</button></div></form></Modal>)}
             {isWashModalOpen && selectedClient && (<Modal title={`Cronograma: ${selectedClient.name}`} onClose={() => { setIsWashModalOpen(false); setSelectedClient(null); }} maxWidth="max-w-2xl"><form onSubmit={handleSaveFullSchedule} className="space-y-6 pt-2">{(() => { const info = getClientPackageInfo(selectedClient); const packageColor = info.pkg?.color || '#6366f1'; return (<><div style={{ backgroundColor: `${packageColor}10`, borderColor: packageColor }} className="p-4 rounded-2xl border-2 border-dashed"><SectionHeader icon={<ClockIcon />} title="Gerador inteligente" color={packageColor} /><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div><label className="block text-[11px] font-bold text-gray-500 mb-1 ml-1 tracking-tight">Data da 1ª lavagem</label><input required type="date" value={scheduleDates[0] || ''} onChange={e => applyFrequency(e.target.value, frequency)} className="w-full rounded-xl bg-white p-3 text-sm font-black shadow-sm border" /></div><div><label className="block text-[11px] font-bold text-gray-500 mb-1 ml-1 tracking-tight">Frequência</label><select value={frequency} onChange={e => { setFrequency(e.target.value as Frequency); applyFrequency(scheduleDates[0], e.target.value as Frequency); }} className="w-full rounded-xl bg-white p-3 text-sm font-bold shadow-sm border"><option value="trimestral">Trimestral</option><option value="semestral">Semestral</option><option value="anual">Anual</option><option value="manual">Manual</option></select></div></div></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-64 overflow-y-auto pr-1 custom-scrollbar p-1">{scheduleDates.map((date, idx) => (<div key={idx} className="relative group"><span style={{ color: packageColor }} className="absolute -top-2.5 left-3 px-1.5 bg-white text-[8px] font-black z-10 border rounded tracking-tighter">{idx + 1}ª lavagem</span><input type="date" value={date} onChange={e => { const newDates = [...scheduleDates]; newDates[idx] = e.target.value; setScheduleDates(newDates); setFrequency('manual'); }} className="w-full rounded-xl bg-gray-50 p-3 text-xs font-black outline-none border-2 border-transparent focus:border-indigo-400 transition-all" /></div>))}</div><div className="flex gap-3 pt-4 border-t"><button type="button" onClick={() => setIsWashModalOpen(false)} className="flex-1 py-3 bg-gray-100 text-gray-500 rounded-xl font-bold text-xs">Cancelar</button><button type="submit" disabled={isSaving || !scheduleDates[0]} style={{ backgroundColor: packageColor }} className="flex-[2] py-3 text-white rounded-xl font-black text-xs shadow-lg hover:brightness-110 transition-all">Agendar cronograma</button></div></>); })()}</form></Modal>)}
-            {isPackageModalOpen && (<Modal title="Gerenciar planos" onClose={() => { setIsPackageModalOpen(false); setEditingPackage(null); }} maxWidth="max-w-2xl"><div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-2"><div className="space-y-4"><h4 className="text-[10px] font-black text-gray-400 uppercase border-b pb-2">Planos cadastrados</h4><div className="space-y-2 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">{packages.map(pkg => (<div key={pkg.id} className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border flex items-center justify-between group"><div className="flex items-center gap-3"><div className="w-3 h-3 rounded-full" style={{ backgroundColor: pkg.color }}></div><div><p className="text-xs font-black text-gray-800 dark:text-white leading-tight">{pkg.name}</p><p className="text-[9px] text-gray-400 font-bold">{pkg.wash_qty} visitas • {formatCurrency(pkg.price_per_plate)}/placa</p></div></div><div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => handleEditPackage(pkg)} className="p-1 text-gray-400 hover:text-indigo-600 transition-colors"><EditIcon className="w-4 h-4" /></button><button onClick={() => handleDeletePackage(pkg.id)} className="p-1 text-gray-400 hover:text-red-500"><TrashIcon className="w-4 h-4" /></button></div></div>))}</div></div><form onSubmit={handleSavePackage} className="space-y-4 bg-gray-50 dark:bg-gray-900/40 p-5 rounded-2xl border"><h4 className="text-[10px] font-black text-indigo-600 uppercase">{editingPackage ? 'Editar plano' : 'Novo plano'}</h4><div><FormLabel>Nome do plano</FormLabel><input required value={packageForm.name} onChange={e => setPackageForm(prev => ({...prev, name: e.target.value}))} className="w-full rounded-xl bg-white p-2.5 text-xs font-bold shadow-sm" placeholder="Ex: Anual Ouro 4x" /></div><div><FormLabel>Cor</FormLabel><div className="grid grid-cols-4 gap-1.5 mt-1">{PRESET_COLORS.map(color => (<button key={color.hex} type="button" onClick={() => setPackageForm({...packageForm, color: color.hex})} className={`h-7 rounded-lg border-2 transition-all flex items-center justify-center ${packageForm.color === color.hex ? 'border-indigo-500 scale-105' : 'border-transparent opacity-70'}`} style={{ backgroundColor: color.hex }}>{packageForm.color === color.hex && <CheckCircleIcon className="w-3 h-3 text-white" />}</button>))}</div></div><div className="grid grid-cols-2 gap-3"><div><FormLabel>Qtd. visitas</FormLabel><input type="number" required min="1" value={packageForm.wash_qty} onChange={e => setPackageForm(prev => ({...prev, wash_qty: parseInt(e.target.value) || 1}))} className="w-full rounded-xl bg-white p-2.5 text-xs font-bold" /></div><div><FormLabel>V. placa (R$)</FormLabel><input type="number" step="0.01" required value={packageForm.price_per_plate || ''} onChange={e => setPackageForm(prev => ({...prev, price_per_plate: parseFloat(e.target.value) || 0}))} className="w-full rounded-xl bg-white p-2.5 text-xs font-bold text-emerald-600" /></div></div><button type="submit" disabled={isSaving} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-black text-[10px] shadow-lg uppercase tracking-widest">{isSaving ? 'Salvando...' : (editingPackage ? 'Atualizar' : 'Criar')}</button></form></div></Modal>)}
-            {isLaunchServiceModalOpen && (<Modal title="Lançar serviço" onClose={() => setIsLaunchServiceModalOpen(false)} maxWidth="max-w-md"><form onSubmit={handleLaunchService} className="space-y-5 pt-2"><div><FormLabel>Cliente</FormLabel><select required disabled={isClientLocked} value={launchServiceForm.clientId} onChange={e => setLaunchServiceForm(prev => ({...prev, clientId: e.target.value}))} className={`w-full rounded-xl bg-gray-50 dark:bg-gray-700 p-3 text-sm font-bold shadow-sm ${isClientLocked ? 'opacity-70 cursor-not-allowed' : ''}`}><option value="">Escolha...</option>{clients.filter(c => !c.package_id || c.id === launchServiceForm.clientId).map(c => <option key={c.id} value={c.id}>{c.name} ({c.plates_count} placas)</option>)}</select></div><div><FormLabel>Término da instalação</FormLabel><input readOnly required type="date" value={launchServiceForm.installationEndDate} className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 p-3 text-sm font-bold shadow-sm opacity-70 cursor-not-allowed border-none outline-none" /></div><div><FormLabel>Plano contratado</FormLabel><select required value={launchServiceForm.packageId} onChange={e => setLaunchServiceForm(prev => ({...prev, packageId: e.target.value}))} className="w-full rounded-xl bg-gray-50 p-3 text-sm font-bold shadow-sm"><option value="">Escolha...</option>{packages.map(p => <option key={p.id} value={p.id}>{p.name} ({p.wash_qty}x • {formatCurrency(p.price_per_plate)}/placa)</option>)}</select></div>{launchServiceForm.clientId && launchServiceForm.packageId && (() => { const client = clients.find(c => c.id === launchServiceForm.clientId); const pkg = packages.find(p => p.id === launchServiceForm.packageId); if (!client || !pkg) return null; const subtotalPlacas = pkg.price_per_plate * client.plates_count; const totalPlano = subtotalPlacas * pkg.wash_qty; const totalGeral = totalPlano + Number(launchServiceForm.travelCost || 0); return (<div className="p-4 bg-indigo-50 dark:bg-indigo-900/30 rounded-2xl border-2 border-indigo-100 dark:border-indigo-800 animate-fade-in"><h4 className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-3 flex items-center gap-2"><ClipboardListIcon className="w-3 h-3" /> Memorial de cálculo</h4><div className="space-y-2"><div className="flex justify-between items-center text-[11px] font-bold text-gray-600 dark:text-gray-300"><span>Base ({client.plates_count} placas x {formatCurrency(pkg.price_per_plate)})</span><span>{formatCurrency(subtotalPlacas)} /visita</span></div><div className="flex justify-between items-center text-[11px] font-bold text-gray-600 dark:text-gray-300 border-b border-indigo-100 dark:border-indigo-800 pb-2"><span>Ciclo ({pkg.wash_qty} visitas)</span><span>{formatCurrency(totalPlano)}</span></div><div className="py-2"><label className="block text-[10px] font-black text-indigo-500 dark:text-indigo-400 mb-1 ml-0.5 uppercase">Taxa Desloc. (Opcional)</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-indigo-400 font-bold text-xs">R$</span><input type="number" step="0.01" value={launchServiceForm.travelCost || ''} onChange={e => setLaunchServiceForm(prev => ({...prev, travelCost: parseFloat(e.target.value) || 0}))} className="w-full rounded-xl bg-white dark:bg-gray-900 p-2 pl-9 text-xs font-black text-indigo-600 dark:text-indigo-400 shadow-inner border border-indigo-100 dark:border-indigo-800 outline-none focus:ring-2 focus:ring-indigo-500/20" placeholder="0,00" /></div></div><div className="pt-2 border-t border-indigo-200 dark:border-indigo-700 flex justify-between items-center"><span className="text-[12px] font-black text-indigo-700 dark:text-indigo-300 uppercase">Investimento Total</span><span className="text-lg font-black text-indigo-800 dark:text-indigo-100">{formatCurrency(totalGeral)}</span></div></div></div>); })()}<div className="flex gap-3 pt-4 border-t"><button type="button" onClick={() => setIsLaunchServiceModalOpen(false)} className="flex-1 py-3 bg-gray-100 text-gray-500 rounded-xl font-bold text-xs">Cancelar</button><button type="submit" disabled={isSaving || !launchServiceForm.packageId} className="flex-[2] py-3 bg-cyan-600 text-white rounded-xl font-black text-xs shadow-lg shadow-cyan-600/20 hover:bg-cyan-700 transition-all active:scale-95">Confirmar vínculo</button></div></form></Modal>)}
+            {isPackageModalOpen && (
+                <Modal title="Gerenciar planos" onClose={() => { setIsPackageModalOpen(false); setEditingPackage(null); }} maxWidth="max-w-2xl">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-2">
+                        <div className="space-y-4">
+                            <h4 className="text-[10px] font-black text-gray-400 uppercase border-b pb-2">Planos cadastrados</h4>
+                            <div className="space-y-2 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
+                                {packages.map(pkg => (
+                                    <div key={pkg.id} className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-xl border flex items-center justify-between group">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: pkg.color }}></div>
+                                            <div>
+                                                <p className="text-xs font-black text-gray-800 dark:text-white leading-tight">{pkg.name}</p>
+                                                <p className="text-[9px] text-gray-400 font-bold">
+                                                    {pkg.wash_qty} visitas • {pkg.is_negotiated ? 'Valor fechado' : `${formatCurrency(pkg.price_per_plate)}/placa`}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button onClick={() => handleEditPackage(pkg)} className="p-1 text-gray-400 hover:text-indigo-600 transition-colors">
+                                                <EditIcon className="w-4 h-4" />
+                                            </button>
+                                            <button onClick={() => handleDeletePackage(pkg.id)} className="p-1 text-gray-400 hover:text-red-500">
+                                                <TrashIcon className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <form onSubmit={handleSavePackage} className="space-y-4 bg-gray-50 dark:bg-gray-900/40 p-5 rounded-2xl border">
+                            <h4 className="text-[10px] font-black text-indigo-600 uppercase">{editingPackage ? 'Editar plano' : 'Novo plano'}</h4>
+                            <div>
+                                <FormLabel>Nome do plano</FormLabel>
+                                <input required value={packageForm.name} onChange={e => setPackageForm(prev => ({...prev, name: e.target.value}))} className="w-full rounded-xl bg-white p-2.5 text-xs font-bold shadow-sm" placeholder="Ex: Anual Ouro 4x" />
+                            </div>
+                            <div>
+                                <FormLabel>Cor</FormLabel>
+                                <div className="grid grid-cols-4 gap-1.5 mt-1">
+                                    {PRESET_COLORS.map(color => (
+                                        <button key={color.hex} type="button" onClick={() => setPackageForm({...packageForm, color: color.hex})} className={`h-7 rounded-lg border-2 transition-all flex items-center justify-center ${packageForm.color === color.hex ? 'border-indigo-500 scale-105' : 'border-transparent opacity-70'}`} style={{ backgroundColor: color.hex }}>
+                                            {packageForm.color === color.hex && <CheckCircleIcon className="w-3 h-3 text-white" />}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 pt-1 pb-1">
+                                <input 
+                                    type="checkbox" 
+                                    id="is_negotiated" 
+                                    checked={packageForm.is_negotiated} 
+                                    onChange={e => setPackageForm(prev => ({...prev, is_negotiated: e.target.checked}))} 
+                                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                                />
+                                <label htmlFor="is_negotiated" className="text-xs font-bold text-gray-700 dark:text-gray-300 cursor-pointer select-none">
+                                    Valor negociado/fechado por contrato
+                                </label>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <FormLabel>Qtd. visitas</FormLabel>
+                                    <input type="number" required min="1" value={packageForm.wash_qty} onChange={e => setPackageForm(prev => ({...prev, wash_qty: parseInt(e.target.value) || 1}))} className="w-full rounded-xl bg-white p-2.5 text-xs font-bold" />
+                                </div>
+                                <div>
+                                    <FormLabel>V. placa (R$)</FormLabel>
+                                    <input 
+                                        type="number" 
+                                        step="0.01" 
+                                        required={!packageForm.is_negotiated} 
+                                        disabled={packageForm.is_negotiated} 
+                                        value={packageForm.is_negotiated ? '' : (packageForm.price_per_plate || '')} 
+                                        onChange={e => setPackageForm(prev => ({...prev, price_per_plate: parseFloat(e.target.value) || 0}))} 
+                                        className={`w-full rounded-xl p-2.5 text-xs font-bold text-emerald-600 border border-transparent outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 shadow-inner ${packageForm.is_negotiated ? 'bg-gray-100 dark:bg-gray-800 opacity-50 cursor-not-allowed' : 'bg-white'}`} 
+                                        placeholder={packageForm.is_negotiated ? 'Fechado' : '0,00'}
+                                    />
+                                </div>
+                            </div>
+                            <button type="submit" disabled={isSaving} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-black text-[10px] shadow-lg uppercase tracking-widest hover:bg-indigo-700 transition-all">
+                                {isSaving ? 'Salvando...' : (editingPackage ? 'Atualizar' : 'Criar')}
+                            </button>
+                        </form>
+                    </div>
+                </Modal>
+            )}
+            {isLaunchServiceModalOpen && (
+                <Modal title="Lançar serviço" onClose={() => setIsLaunchServiceModalOpen(false)} maxWidth="max-w-md">
+                    <form onSubmit={handleLaunchService} className="space-y-5 pt-2">
+                        <div>
+                            <FormLabel>Cliente</FormLabel>
+                            <select required disabled={isClientLocked} value={launchServiceForm.clientId} onChange={e => setLaunchServiceForm(prev => ({...prev, clientId: e.target.value}))} className={`w-full rounded-xl bg-gray-50 dark:bg-gray-700 p-3 text-sm font-bold shadow-sm ${isClientLocked ? 'opacity-70 cursor-not-allowed' : ''}`}>
+                                <option value="">Escolha...</option>
+                                {clients.filter(c => !c.package_id || c.id === launchServiceForm.clientId).map(c => <option key={c.id} value={c.id}>{c.name} ({c.plates_count} placas)</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <FormLabel>Término da instalação</FormLabel>
+                            <input readOnly required type="date" value={launchServiceForm.installationEndDate} className="w-full rounded-xl bg-gray-100 dark:bg-gray-800 p-3 text-sm font-bold shadow-sm opacity-70 cursor-not-allowed border-none outline-none" />
+                        </div>
+                        <div>
+                            <FormLabel>Plano contratado</FormLabel>
+                            <select required value={launchServiceForm.packageId} onChange={e => {
+                                const pkg = packages.find(p => p.id === e.target.value);
+                                setLaunchServiceForm(prev => ({
+                                    ...prev, 
+                                    packageId: e.target.value,
+                                    negotiatedTotalValue: pkg?.is_negotiated ? 0 : prev.negotiatedTotalValue
+                                }));
+                            }} className="w-full rounded-xl bg-gray-50 p-3 text-sm font-bold shadow-sm border border-gray-200">
+                                <option value="">Escolha...</option>
+                                {packages.map(p => (
+                                    <option key={p.id} value={p.id}>
+                                        {p.name} ({p.wash_qty}x • {p.is_negotiated ? 'Valor fechado' : `${formatCurrency(p.price_per_plate)}/placa`})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        {launchServiceForm.packageId && (() => {
+                            const pkg = packages.find(p => p.id === launchServiceForm.packageId);
+                            if (!pkg || !pkg.is_negotiated) return null;
+                            return (
+                                <div className="space-y-1 animate-fade-in">
+                                    <FormLabel>Valor fechado negociado (R$)</FormLabel>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs">R$</span>
+                                        <input 
+                                            type="number" 
+                                            step="0.01" 
+                                            required 
+                                            value={launchServiceForm.negotiatedTotalValue || ''} 
+                                            onChange={e => setLaunchServiceForm(prev => ({...prev, negotiatedTotalValue: parseFloat(e.target.value) || 0}))} 
+                                            className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 pl-9 text-xs font-bold text-emerald-600 outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm" 
+                                            placeholder="Ex: 5000,00" 
+                                        />
+                                    </div>
+                                </div>
+                            );
+                        })()}
+                        {launchServiceForm.clientId && launchServiceForm.packageId && (() => {
+                            const client = clients.find(c => c.id === launchServiceForm.clientId);
+                            const pkg = packages.find(p => p.id === launchServiceForm.packageId);
+                            if (!client || !pkg) return null;
+                            
+                            const isPkgNegotiated = !!pkg.is_negotiated;
+                            const subtotalPlacas = isPkgNegotiated 
+                                ? (pkg.wash_qty > 0 ? (launchServiceForm.negotiatedTotalValue / pkg.wash_qty) : 0) 
+                                : (pkg.price_per_plate * client.plates_count);
+                            const totalPlano = isPkgNegotiated ? launchServiceForm.negotiatedTotalValue : (subtotalPlacas * pkg.wash_qty);
+                            const totalGeral = totalPlano + Number(launchServiceForm.travelCost || 0);
+                            
+                            return (
+                                <div className="p-4 bg-indigo-50 dark:bg-indigo-900/30 rounded-2xl border-2 border-indigo-100 dark:border-indigo-800 animate-fade-in">
+                                    <h4 className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                        <ClipboardListIcon className="w-3 h-3" /> Memorial de cálculo
+                                    </h4>
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between items-center text-[11px] font-bold text-gray-600 dark:text-gray-300">
+                                            <span>{isPkgNegotiated ? 'Valor médio por visita' : `Base (${client.plates_count} placas x ${formatCurrency(pkg.price_per_plate)})`}</span>
+                                            <span>{formatCurrency(subtotalPlacas)} /visita</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-[11px] font-bold text-gray-600 dark:text-gray-300 border-b border-indigo-100 dark:border-indigo-800 pb-2">
+                                            <span>{isPkgNegotiated ? `Valor total acordado (${pkg.wash_qty} visitas)` : `Ciclo (${pkg.wash_qty} visitas)`}</span>
+                                            <span>{formatCurrency(totalPlano)}</span>
+                                        </div>
+                                        <div className="py-2">
+                                            <label className="block text-[10px] font-black text-indigo-500 dark:text-indigo-400 mb-1 ml-0.5 uppercase">Taxa Desloc. (Opcional)</label>
+                                            <div className="relative">
+                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-indigo-400 font-bold text-xs">R$</span>
+                                                <input type="number" step="0.01" value={launchServiceForm.travelCost || ''} onChange={e => setLaunchServiceForm(prev => ({...prev, travelCost: parseFloat(e.target.value) || 0}))} className="w-full rounded-xl bg-white dark:bg-gray-900 p-2 pl-9 text-xs font-black text-indigo-600 dark:text-indigo-400 shadow-inner border border-indigo-100 dark:border-indigo-800 outline-none focus:ring-2 focus:ring-indigo-500/20" placeholder="0,00" />
+                                            </div>
+                                        </div>
+                                        <div className="pt-2 border-t border-indigo-200 dark:border-indigo-700 flex justify-between items-center">
+                                            <span className="text-[12px] font-black text-indigo-700 dark:text-indigo-300 uppercase">Investimento Total</span>
+                                            <span className="text-lg font-black text-indigo-800 dark:text-indigo-100">{formatCurrency(totalGeral)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+                        <div className="flex gap-3 pt-4 border-t">
+                            <button type="button" onClick={() => setIsLaunchServiceModalOpen(false)} className="flex-1 py-3 bg-gray-100 text-gray-500 rounded-xl font-bold text-xs">Cancelar</button>
+                            <button type="submit" disabled={isSaving || !launchServiceForm.packageId} className="flex-[2] py-3 bg-cyan-600 text-white rounded-xl font-black text-xs shadow-lg shadow-cyan-600/20 hover:bg-cyan-700 transition-all active:scale-95">Confirmar vínculo</button>
+                        </div>
+                    </form>
+                </Modal>
+            )}
         </div>
     );
 };
