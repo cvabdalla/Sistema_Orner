@@ -152,6 +152,7 @@ export interface HomologacaoEntry {
         procuracao?: ExpenseAttachment[];
         contaEnergia?: ExpenseAttachment[];
         documentoFoto?: ExpenseAttachment[];
+        outrosDocumentos?: ExpenseAttachment[];
     };
     observations?: string;
 }

@@ -77,7 +77,8 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
         files: {
             procuracao: [],
             contaEnergia: [],
-            documentoFoto: []
+            documentoFoto: [],
+            outrosDocumentos: []
         }
     });
 
@@ -169,7 +170,8 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                 files: {
                     procuracao: normalizeFile(fullEntry.files?.procuracao),
                     contaEnergia: normalizeFile(fullEntry.files?.contaEnergia),
-                    documentoFoto: normalizeFile(fullEntry.files?.documentoFoto)
+                    documentoFoto: normalizeFile(fullEntry.files?.documentoFoto),
+                    outrosDocumentos: normalizeFile(fullEntry.files?.outrosDocumentos)
                 },
                 observations: fullEntry.observations || ''
             });
@@ -182,26 +184,42 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
     };
 
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, field: keyof HomologacaoEntry['files']) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+        const filesList = Array.from(e.target.files || []);
+        if (filesList.length === 0) return;
 
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            if (typeof event.target?.result === 'string') {
-                const attachment: ExpenseAttachment = {
-                    name: file.name,
-                    data: event.target.result
-                };
-                setForm(prev => ({
-                    ...prev,
-                    files: {
-                        ...(prev.files || {}),
-                        [field]: [...(prev.files?.[field] || []), attachment]
-                    }
-                }));
+        if (field === 'outrosDocumentos') {
+            const currentFiles = form.files?.outrosDocumentos || [];
+            if (currentFiles.length + filesList.length > 10) {
+                alert("Você pode anexar no máximo 10 arquivos em 'Outros documentos'.");
+                return;
             }
-        };
-        reader.readAsDataURL(file);
+        }
+
+        filesList.forEach((file) => {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                if (typeof event.target?.result === 'string') {
+                    const attachment: ExpenseAttachment = {
+                        name: file.name,
+                        data: event.target.result
+                    };
+                    setForm(prev => {
+                        const currentList = prev.files?.[field] || [];
+                        if (field === 'outrosDocumentos' && currentList.length >= 10) {
+                            return prev;
+                        }
+                        return {
+                            ...prev,
+                            files: {
+                                ...(prev.files || {}),
+                                [field]: [...currentList, attachment]
+                            }
+                        };
+                    });
+                }
+            };
+            reader.readAsDataURL(file);
+        });
     };
 
     const handleRemoveFile = (field: keyof HomologacaoEntry['files'], index: number) => {
@@ -251,7 +269,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
             await dataService.save('homologacao_entries', entry);
             setModalOpen(false);
             setEditingEntryId(null);
-            setForm({ checkinId: '', clientName: '', responsible_user_id: '', status: 'Em Análise', files: { procuracao: [], contaEnergia: [], documentoFoto: [] } });
+            setForm({ checkinId: '', clientName: '', responsible_user_id: '', status: 'Em Análise', files: { procuracao: [], contaEnergia: [], documentoFoto: [], outrosDocumentos: [] } });
             setModalMessage(editingEntryId ? "Homologação atualizada!" : "Homologação registrada!");
             setSuccessModalOpen(true);
             await loadData();
@@ -399,7 +417,13 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                     <label className="flex flex-col items-center justify-center py-3 px-3 bg-gray-50/45 hover:bg-gray-50 dark:bg-gray-900 border border-dashed border-gray-200 dark:border-gray-700/80 rounded-xl cursor-pointer hover:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100 transition-all group">
                         <UploadIcon className="w-4 h-4 text-gray-400 group-hover:text-indigo-600 transition-all duration-200 group-hover:scale-105" />
                         <span className="text-[10px] font-bold text-gray-400 group-hover:text-indigo-600 mt-1 tracking-wider animate-pulse">Anexar</span>
-                        <input type="file" className="hidden" accept="image/*,application/pdf" onChange={(e) => handleFileUpload(e, field)} />
+                        <input 
+                            type="file" 
+                            className="hidden" 
+                            accept="image/*,application/pdf" 
+                            multiple={field === 'outrosDocumentos'} 
+                            onChange={(e) => handleFileUpload(e, field)} 
+                        />
                     </label>
                 )}
             </div>
@@ -504,7 +528,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                     </div>
                 </div>
                 <button 
-                    onClick={() => { setEditingEntryId(null); setForm({ checkinId: '', clientName: '', responsible_user_id: '', status: 'Em Análise', files: { procuracao: [], contaEnergia: [], documentoFoto: [] } }); setModalOpen(true); }} 
+                    onClick={() => { setEditingEntryId(null); setForm({ checkinId: '', clientName: '', responsible_user_id: '', status: 'Em Análise', files: { procuracao: [], contaEnergia: [], documentoFoto: [], outrosDocumentos: [] } }); setModalOpen(true); }} 
                     className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs transition-all active:scale-95 flex items-center gap-2 shadow-sm"
                 >
                     <PlusIcon className="w-4 h-4" /> Nova Homologação
@@ -552,6 +576,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                         const procuracaoFiles = normalize(entry.files?.procuracao);
                         const contaEnergiaFiles = normalize(entry.files?.contaEnergia);
                         const documentoFotoFiles = normalize(entry.files?.documentoFoto);
+                        const outrosDocumentosFiles = normalize(entry.files?.outrosDocumentos);
 
                         return (
                             <div 
@@ -617,6 +642,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                                         {renderEntryFilesSummary(procuracaoFiles, "Procuração", "text-indigo-500", DocumentReportIcon)}
                                         {renderEntryFilesSummary(contaEnergiaFiles, "Conta de Energia", "text-amber-500", BoltIcon)}
                                         {renderEntryFilesSummary(documentoFotoFiles, "Documento com Foto", "text-blue-500", UsersIcon)}
+                                        {renderEntryFilesSummary(outrosDocumentosFiles, "Outros documentos", "text-teal-500", ClipboardListIcon)}
                                     </div>
                                 </div>
 
@@ -735,6 +761,26 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                         </div>
 
                         <div className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <FormLabel>Status da Homologação</FormLabel>
+                                    <select 
+                                        disabled={isViewOnly}
+                                        value={form.status || 'Em Análise'} 
+                                        onChange={e => setForm({...form, status: e.target.value as any})} 
+                                        className="w-full rounded-xl border-2 border-indigo-50 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm transition-all disabled:opacity-70"
+                                    >
+                                        <option value="Em Análise">Em Análise</option>
+                                        <option value="Pendente">Pendente</option>
+                                        <option value="Aprovada">Aprovada (Efetuada)</option>
+                                    </select>
+                                </div>
+                                <div className="text-gray-550 dark:text-gray-400 text-[10px] bg-slate-50 dark:bg-slate-900/20 p-2.5 rounded-xl border border-dashed border-gray-250 dark:border-gray-700 flex flex-col justify-center leading-relaxed">
+                                    <span className="font-extrabold text-indigo-650 dark:text-indigo-400">Permitido salvar incompleto:</span>
+                                    <span>Não é obrigatório anexar os documentos de imediato. Sinta-se livre para iniciar a homologação e anexar ou atualizar os arquivos posteriormente.</span>
+                                </div>
+                            </div>
+
                             <div>
                                 <FormLabel>Observações</FormLabel>
                                 <textarea 
@@ -752,7 +798,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                             <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight font-bold">Anexos ilegíveis causam reprovação imediata na concessionária.</p>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 flex flex-col gap-2">
                                 <FormLabel>Procuração</FormLabel>
                                 {renderFileList(form.files?.procuracao, 'procuracao')}
@@ -764,6 +810,13 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                             <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 flex flex-col gap-2">
                                 <FormLabel>Documento com Foto</FormLabel>
                                 {renderFileList(form.files?.documentoFoto, 'documentoFoto')}
+                            </div>
+                            <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-2xl border border-gray-100 dark:border-gray-700 flex flex-col gap-2">
+                                <div className="flex justify-between items-center">
+                                    <FormLabel>Outros documentos</FormLabel>
+                                    <span className="text-[10px] font-bold text-gray-500 mr-1">(Até 10 arquivos)</span>
+                                </div>
+                                {renderFileList(form.files?.outrosDocumentos, 'outrosDocumentos')}
                             </div>
                         </div>
 

@@ -33,3 +33,9 @@ COMMENT ON COLUMN lavagem_packages."is_negotiated" IS 'Indica se o plano tem val
 COMMENT ON COLUMN lavagem_clients."is_negotiated" IS 'Indica se o vínculo do cliente com o plano foi feito por um valor fixo negociado';
 COMMENT ON COLUMN lavagem_clients."negotiated_total_value" IS 'Instância o valor total fechado e acordado com o cliente para o plano';
 
+-- 7. Garante flexibilidade para homologações incompletas (Sem restrições ou campos obrigatórios de arquivos)
+-- Remove qualquer possível restrição de validação que exija arquivos na tabela de homologação
+ALTER TABLE IF EXISTS homologacao_entries DROP CONSTRAINT IF EXISTS check_files_complete;
+ALTER TABLE IF EXISTS homologacao_entries ALTER COLUMN files DROP NOT NULL;
+ALTER TABLE IF EXISTS homologacao_entries ALTER COLUMN files SET DEFAULT '{}'::jsonb;
+COMMENT ON COLUMN homologacao_entries.files IS 'Armazena a documentação digital (Procuração, Conta de Energia, Documento com Foto e Outros). Pode ser parcialmente preenchido ou vazio.';
