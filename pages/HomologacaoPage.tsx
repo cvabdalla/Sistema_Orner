@@ -666,7 +666,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                     <form onSubmit={handleSave} className="space-y-4 pt-2 animate-fade-in">
                         <div className="space-y-4">
                             <div>
-                                <FormLabel>Check-in (Projetos Efetivados)</FormLabel>
+                                <FormLabel>Check-in (Projetos Efetivados ou Em Aberto)</FormLabel>
                                 <select 
                                     required 
                                     disabled={isViewOnly}
@@ -675,8 +675,10 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                                     className="w-full rounded-xl border-2 border-indigo-100 bg-gray-50 dark:bg-gray-800 p-2 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all disabled:opacity-70"
                                 >
                                     <option value="">Selecione...</option>
-                                    {checkins.filter(c => c.status === 'Efetivado' || c.status === 'Finalizado').map(c => (
-                                        <option key={c.id} value={c.id}>{c.project}</option>
+                                    {checkins.filter(c => c.status === 'Aberto' || c.status === 'Efetivado' || c.status === 'Finalizado' || c.id === form.checkinId).map(c => (
+                                        <option key={c.id} value={c.id}>
+                                            {c.project} {c.status === 'Aberto' ? '(Em Aberto)' : ''}
+                                        </option>
                                     ))}
                                 </select>
                             </div>
