@@ -17,6 +17,7 @@ const formatCurrency = (value: number) => {
 
 const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUser, reportToEdit, onSave }) => {
     const [pendingTransactions, setPendingTransactions] = useState<FinancialTransaction[]>([]);
+    const [allTransactions, setAllTransactions] = useState<FinancialTransaction[]>([]);
     const [categories, setCategories] = useState<FinancialCategory[]>([]);
     const [selectedTxIds, setSelectedTxIds] = useState<string[]>([]);
     const [attachments, setAttachments] = useState<ExpenseAttachment[]>([]);
@@ -64,6 +65,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
             );
 
             setPendingTransactions(filteredTxs.sort((a, b) => a.dueDate.localeCompare(b.dueDate)));
+            setAllTransactions(txs || []);
             setCategories(cats);
 
             if (reportToEdit && reportToEdit.items) {
@@ -84,10 +86,13 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
     }, [reportToEdit]);
 
     const selectedTotal = useMemo(() => {
+        if (isReadOnly && reportToEdit) {
+            return reportToEdit.totalValue || (reportToEdit.items || []).reduce((acc, i) => acc + (i.others || 0), 0);
+        }
         return pendingTransactions
             .filter(t => selectedTxIds.includes(t.id))
             .reduce((acc, curr) => acc + curr.amount, 0);
-    }, [selectedTxIds, pendingTransactions]);
+    }, [selectedTxIds, pendingTransactions, isReadOnly, reportToEdit]);
 
     const toggleSelection = (id: string) => {
         if (isReadOnly) return;
@@ -303,44 +308,87 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                    {filteredList.map(tx => {
-                                        const isSelected = selectedTxIds.includes(tx.id);
-                                        if (isReadOnly && !isSelected) return null;
+                                    {isReadOnly ? (
+                                        (reportToEdit?.items || []).map(item => {
+                                            const tx = allTransactions.find(t => t.id === item.id);
+                                            const categoryName = tx 
+                                                ? (categories.find(c => c.id === tx.categoryId)?.name || 'Não informado') 
+                                                : 'Instalação / Lavagem';
+                                            
+                                            if (searchTerm && !item.description.toLowerCase().includes(searchTerm.toLowerCase())) {
+                                                return null;
+                                            }
 
-                                        return (
-                                            <tr 
-                                                key={tx.id} 
-                                                onClick={() => toggleSelection(tx.id)}
-                                                className={`cursor-pointer transition-all ${isSelected ? 'bg-cyan-50 dark:bg-cyan-900/20 border-l-4 border-cyan-500' : 'hover:bg-gray-50/50 dark:hover:bg-gray-700/30'}`}
-                                            >
-                                                <td className="px-6 py-5 text-center">
-                                                    <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-cyan-600 border-cyan-600 shadow-md' : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700'}`}>
-                                                        {isSelected && <CheckCircleIcon className="w-4 h-4 text-white" />}
-                                                    </div>
-                                                </td>
-                                                <td className="px-4 py-5">
-                                                    <p className={`text-xs font-black ${isSelected ? 'text-cyan-700 dark:text-cyan-400' : 'text-gray-800 dark:text-gray-200'}`}>{tx.description}</p>
-                                                    <p className="text-[9px] text-gray-400 font-bold mt-1 tracking-tighter">
-                                                        {categories.find(c => c.id === tx.categoryId)?.name || 'Não informado'}
-                                                    </p>
-                                                </td>
-                                                <td className="px-4 py-5 text-center">
-                                                    <div className="flex flex-col items-center">
-                                                        <CalendarIcon className="w-3.5 h-3.5 text-gray-300 mb-1" />
-                                                        <span className="text-[11px] font-black text-gray-500">{new Date(tx.dueDate).toLocaleDateString('pt-BR', {timeZone:'UTC'})}</span>
-                                                    </div>
-                                                </td>
-                                                <td className={`px-6 py-5 text-right text-sm font-black ${isSelected ? 'text-cyan-700 dark:text-cyan-400' : 'text-indigo-600'}`}>
-                                                    {formatCurrency(tx.amount)}
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                    {filteredList.length === 0 && (
+                                            return (
+                                                <tr 
+                                                    key={item.id} 
+                                                    className="bg-cyan-50/10 dark:bg-cyan-900/5 border-l-4 border-cyan-500 transition-all cursor-default"
+                                                >
+                                                    <td className="px-6 py-5 text-center">
+                                                        <div className="w-6 h-6 rounded-lg bg-cyan-600 border-2 border-cyan-600 flex items-center justify-center shadow-md">
+                                                            <CheckCircleIcon className="w-4 h-4 text-white" />
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-5">
+                                                        <p className="text-xs font-black text-cyan-700 dark:text-cyan-400">{item.description}</p>
+                                                        <p className="text-[9px] text-gray-400 font-bold mt-1 tracking-tighter">
+                                                            {categoryName}
+                                                        </p>
+                                                    </td>
+                                                    <td className="px-4 py-5 text-center">
+                                                        <div className="flex flex-col items-center">
+                                                            <CalendarIcon className="w-3.5 h-3.5 text-gray-300 mb-1" />
+                                                            <span className="text-[11px] font-black text-gray-500">
+                                                                {item.date ? new Date(item.date).toLocaleDateString('pt-BR', {timeZone:'UTC'}) : 'Sem data'}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-5 text-right text-sm font-black text-cyan-700 dark:text-cyan-400">
+                                                        {formatCurrency(item.others)}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    ) : (
+                                        filteredList.map(tx => {
+                                            const isSelected = selectedTxIds.includes(tx.id);
+                                            return (
+                                                <tr 
+                                                    key={tx.id} 
+                                                    onClick={() => toggleSelection(tx.id)}
+                                                    className={`cursor-pointer transition-all ${isSelected ? 'bg-cyan-50 dark:bg-cyan-900/20 border-l-4 border-cyan-500' : 'hover:bg-gray-50/50 dark:hover:bg-gray-700/30'}`}
+                                                >
+                                                    <td className="px-6 py-5 text-center">
+                                                        <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-cyan-600 border-cyan-600 shadow-md' : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700'}`}>
+                                                            {isSelected && <CheckCircleIcon className="w-4 h-4 text-white" />}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-5">
+                                                        <p className={`text-xs font-black ${isSelected ? 'text-cyan-700 dark:text-cyan-400' : 'text-gray-800 dark:text-gray-200'}`}>{tx.description}</p>
+                                                        <p className="text-[9px] text-gray-400 font-bold mt-1 tracking-tighter">
+                                                            {categories.find(c => c.id === tx.categoryId)?.name || 'Não informado'}
+                                                        </p>
+                                                    </td>
+                                                    <td className="px-4 py-5 text-center">
+                                                        <div className="flex flex-col items-center">
+                                                            <CalendarIcon className="w-3.5 h-3.5 text-gray-300 mb-1" />
+                                                            <span className="text-[11px] font-black text-gray-500">{new Date(tx.dueDate).toLocaleDateString('pt-BR', {timeZone:'UTC'})}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className={`px-6 py-5 text-right text-sm font-black ${isSelected ? 'text-cyan-700 dark:text-cyan-400' : 'text-indigo-600'}`}>
+                                                        {formatCurrency(tx.amount)}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
+                                    {((isReadOnly && (!reportToEdit?.items || reportToEdit.items.length === 0)) || (!isReadOnly && filteredList.length === 0)) && (
                                         <tr>
                                             <td colSpan={4} className="px-6 py-20 text-center space-y-4">
                                                 <ExclamationTriangleIcon className="w-12 h-12 text-gray-200 mx-auto" />
-                                                <p className="text-gray-400 font-bold italic text-sm">Não há lançamentos técnicos pendentes.</p>
+                                                <p className="text-gray-400 font-bold italic text-sm">
+                                                    {isReadOnly ? 'Nenhum item encontrado neste faturamento.' : 'Não há lançamentos técnicos pendentes.'}
+                                                </p>
                                             </td>
                                         </tr>
                                     )}
