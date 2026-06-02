@@ -69,6 +69,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
     const [isSuccessModalOpen, setSuccessModalOpen] = useState(false);
     const [modalMessage, setModalMessage] = useState('');
     const [loadedFiles, setLoadedFiles] = useState<Record<string, HomologacaoEntry['files']>>({});
+    const loadedKeysRef = useRef<Set<string>>(new Set());
 
     const [form, setForm] = useState<Partial<HomologacaoEntry>>({
         checkinId: '',
@@ -119,19 +120,8 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
             const hUsers = (userData || []).filter(u => homologationProfiles.includes(u.profileId));
             setHomologationUsers(hUsers);
 
-            // Carrega os arquivos em segundo plano de forma individual, sem bloquear a listagem nem dar timeout
-            loaded.forEach((entry) => {
-                dataService.getById<HomologacaoEntry>('homologacao_entries', entry.id).then(full => {
-                    if (full && full.files) {
-                        setLoadedFiles(prev => ({
-                            ...prev,
-                            [entry.id]: full.files
-                        }));
-                    }
-                }).catch(err => {
-                    console.warn(`Erro ao carregar arquivos da entrada ${entry.id}:`, err);
-                });
-            });
+            // Limpa o ref de controle de carregamento pois acabamos de recarregar a listagem e os arquivos podem ter mudado
+            loadedKeysRef.current.clear();
 
         } catch (e) {
             console.error("Erro ao carregar homologações:", e);
@@ -162,6 +152,49 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
             return matchesSearch && matchesTab && canSee;
         });
     }, [entries, searchTerm, activeMainTab, isMasterAdmin, currentUser.id]);
+
+    // Carrega arquivos em segundo plano de forma sequencial APENAS para os itens que estão visíveis na aba ativa e no filtro
+    useEffect(() => {
+        if (isLoading || filteredEntries.length === 0) return;
+
+        let isMounted = true;
+
+        const loadVisibleFiles = async () => {
+            // Filtramos apenas as entradas cujo arquivo ainda não foi carregado e não está marcado no Ref
+            const toLoad = filteredEntries.filter(entry => !loadedKeysRef.current.has(entry.id));
+            if (toLoad.length === 0) return;
+
+            // Marcamos como carregando/carregados no ref imediatamente para prevenir concorrência
+            toLoad.forEach(entry => loadedKeysRef.current.add(entry.id));
+
+            for (const entry of toLoad) {
+                if (!isMounted) break;
+                try {
+                    const full = await dataService.getById<HomologacaoEntry>('homologacao_entries', entry.id);
+                    if (full && isMounted) {
+                        setLoadedFiles(prev => ({
+                            ...prev,
+                            [entry.id]: full.files || {}
+                        }));
+                    }
+                } catch (err) {
+                    console.warn(`Erro ao carregar arquivos para ${entry.clientName}:`, err);
+                    // Remove do ref em caso de erro para permitir nova tentativa
+                    if (isMounted) {
+                        loadedKeysRef.current.delete(entry.id);
+                    }
+                }
+                // Aguarda 150ms entre cada chamada para garantir máxima fluidez e performance de rede
+                await new Promise(resolve => setTimeout(resolve, 150));
+            }
+        };
+
+        loadVisibleFiles();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [filteredEntries, isLoading]);
 
     const handleEditEntry = async (entry: HomologacaoEntry, viewOnly = false) => {
         if (!entry) return;
