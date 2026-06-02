@@ -68,6 +68,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
     const [isViewOnly, setIsViewOnly] = useState(false);
     const [isSuccessModalOpen, setSuccessModalOpen] = useState(false);
     const [modalMessage, setModalMessage] = useState('');
+    const [loadedFiles, setLoadedFiles] = useState<Record<string, HomologacaoEntry['files']>>({});
 
     const [form, setForm] = useState<Partial<HomologacaoEntry>>({
         checkinId: '',
@@ -96,8 +97,8 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
     const loadData = async () => {
         setIsLoading(true);
         try {
-            // Buscamos apenas os campos necessários para a listagem principal
-            const homoFields = 'id, owner_id, responsible_user_id, clientName, date, status, checkinId, files, observations';
+            // Buscamos apenas os campos necessários para a listagem principal, excluindo 'files' que causa timeout
+            const homoFields = 'id, owner_id, responsible_user_id, clientName, date, status, checkinId, observations';
             
             const [homoData, checkinData, userData, profileData] = await Promise.all([
                 dataService.getPartial<HomologacaoEntry>('homologacao_entries', homoFields, currentUser.id, isMasterAdmin),
@@ -106,7 +107,8 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                 dataService.getAll<UserProfile>('system_profiles', undefined, true)
             ]);
 
-            setEntries((homoData || []).filter(e => e && e.id).sort((a, b) => (b.date || '').localeCompare(a.date || '')));
+            const loaded = (homoData || []).filter(e => e && e.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+            setEntries(loaded);
             setCheckins(checkinData || []);
             setSystemUsers(userData || []);
 
@@ -116,6 +118,20 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
 
             const hUsers = (userData || []).filter(u => homologationProfiles.includes(u.profileId));
             setHomologationUsers(hUsers);
+
+            // Carrega os arquivos em segundo plano de forma individual, sem bloquear a listagem nem dar timeout
+            loaded.forEach((entry) => {
+                dataService.getById<HomologacaoEntry>('homologacao_entries', entry.id).then(full => {
+                    if (full && full.files) {
+                        setLoadedFiles(prev => ({
+                            ...prev,
+                            [entry.id]: full.files
+                        }));
+                    }
+                }).catch(err => {
+                    console.warn(`Erro ao carregar arquivos da entrada ${entry.id}:`, err);
+                });
+            });
 
         } catch (e) {
             console.error("Erro ao carregar homologações:", e);
@@ -446,7 +462,17 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
         }
     };
 
-    const renderEntryFilesSummary = (files: ExpenseAttachment[] = [], label: string, colorClass: string, Icon: any) => {
+    const renderEntryFilesSummary = (files: ExpenseAttachment[] = [], label: string, colorClass: string, Icon: any, isLoadingFiles = false) => {
+        if (isLoadingFiles) {
+            return (
+                <div className="flex items-center justify-between p-3 bg-gray-50/20 dark:bg-gray-900/10 rounded-2xl border border-gray-150 dark:border-gray-800/80 animate-pulse select-none">
+                    <div className="flex items-center gap-2">
+                        <Icon className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600" />
+                        <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 tracking-tight">Carregando anexo...</span>
+                    </div>
+                </div>
+            );
+        }
         if (!files || files.length === 0) {
             return (
                 <div className="flex items-center justify-between p-3 bg-gray-50/20 dark:bg-gray-900/10 rounded-2xl border border-dashed border-gray-150 dark:border-gray-800/80 opacity-50 select-none">
@@ -573,10 +599,12 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                         const responsibleUser = systemUsers.find(u => u.id === entry.responsible_user_id);
                         
                         const normalize = (f: any) => Array.isArray(f) ? f : (f ? [f] : []);
-                        const procuracaoFiles = normalize(entry.files?.procuracao);
-                        const contaEnergiaFiles = normalize(entry.files?.contaEnergia);
-                        const documentoFotoFiles = normalize(entry.files?.documentoFoto);
-                        const outrosDocumentosFiles = normalize(entry.files?.outrosDocumentos);
+                        const entryFiles = loadedFiles[entry.id] || entry.files || {};
+                        const isFilesLoading = !loadedFiles[entry.id];
+                        const procuracaoFiles = normalize(entryFiles.procuracao);
+                        const contaEnergiaFiles = normalize(entryFiles.contaEnergia);
+                        const documentoFotoFiles = normalize(entryFiles.documentoFoto);
+                        const outrosDocumentosFiles = normalize(entryFiles.outrosDocumentos);
 
                         return (
                             <div 
@@ -639,10 +667,10 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
 
                                     <div className="space-y-2 pt-2 border-t border-gray-50 dark:border-gray-750/45">
                                         <p className="text-[9px] font-black text-gray-400 dark:text-gray-500 tracking-wider ml-0.5">Documentação Digital</p>
-                                        {renderEntryFilesSummary(procuracaoFiles, "Procuração", "text-indigo-500", DocumentReportIcon)}
-                                        {renderEntryFilesSummary(contaEnergiaFiles, "Conta de Energia", "text-amber-500", BoltIcon)}
-                                        {renderEntryFilesSummary(documentoFotoFiles, "Documento com Foto", "text-blue-500", UsersIcon)}
-                                        {renderEntryFilesSummary(outrosDocumentosFiles, "Outros documentos", "text-teal-500", ClipboardListIcon)}
+                                        {renderEntryFilesSummary(procuracaoFiles, "Procuração", "text-indigo-500", DocumentReportIcon, isFilesLoading)}
+                                        {renderEntryFilesSummary(contaEnergiaFiles, "Conta de Energia", "text-amber-500", BoltIcon, isFilesLoading)}
+                                        {renderEntryFilesSummary(documentoFotoFiles, "Documento com Foto", "text-blue-500", UsersIcon, isFilesLoading)}
+                                        {renderEntryFilesSummary(outrosDocumentosFiles, "Outros documentos", "text-teal-500", ClipboardListIcon, isFilesLoading)}
                                     </div>
                                 </div>
 
