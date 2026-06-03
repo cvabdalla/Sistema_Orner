@@ -1,7 +1,8 @@
-import React, { useMemo } from 'react';
-import { PrinterIcon, TableIcon } from '../../assets/icons';
+import React, { useMemo, useState } from 'react';
+import { PrinterIcon, TableIcon, CreditCardIcon } from '../../assets/icons';
 import type { FinancialTransaction, FinancialCategory } from '../../types';
 import type { DrePeriodType } from '../../pages/FinanceiroPage';
+import { CreditCardDREModal } from './CreditCardDREModal';
 
 interface DREViewProps {
     transactions: FinancialTransaction[]; 
@@ -9,6 +10,8 @@ interface DREViewProps {
     periodType: DrePeriodType;
     isCCGrouped: boolean;
     isGroupedByManagerial?: boolean;
+    allTransactions?: FinancialTransaction[];
+    year?: number;
 }
 
 const formatCurrency = (value: number) => {
@@ -48,7 +51,23 @@ const getColumnsConfig = (type: DrePeriodType) => {
     }
 };
 
-const DREView: React.FC<DREViewProps> = ({ transactions, categories, periodType, isCCGrouped, isGroupedByManagerial = false }) => {
+const DREView: React.FC<DREViewProps> = ({ 
+    transactions, 
+    categories, 
+    periodType, 
+    isCCGrouped, 
+    isGroupedByManagerial = false,
+    allTransactions = [],
+    year
+}) => {
+    const [isCCModalOpen, setIsCCModalOpen] = useState(false);
+
+    const currentYear = useMemo(() => {
+        if (year) return year;
+        if (transactions.length === 0) return new Date().getFullYear();
+        const firstDate = transactions[0].paymentDate || transactions[0].dueDate;
+        return firstDate ? parseInt(firstDate.split('-')[0], 10) : new Date().getFullYear();
+    }, [year, transactions]);
     
     const matrixData = useMemo(() => {
         const columns = getColumnsConfig(periodType);
@@ -220,6 +239,12 @@ const DREView: React.FC<DREViewProps> = ({ transactions, categories, periodType,
                     </div>
                 </div>
                 <div className="flex gap-2 print:hidden">
+                    <button 
+                        onClick={() => setIsCCModalOpen(true)} 
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors text-xs font-bold shadow-sm cursor-pointer"
+                    >
+                        <CreditCardIcon className="w-4 h-4 text-indigo-600 dark:text-indigo-400" /> DRE Cartão de Crédito
+                    </button>
                     <button onClick={handlePrint} className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-200 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-100 transition-colors text-xs font-bold">
                         <PrinterIcon className="w-4 h-4" /> Imprimir
                     </button>
@@ -270,6 +295,17 @@ const DREView: React.FC<DREViewProps> = ({ transactions, categories, periodType,
                     </tfoot>
                 </table>
             </div>
+
+            {/* Credit Card DRE Modal */}
+            {isCCModalOpen && (
+                <CreditCardDREModal
+                    isOpen={isCCModalOpen}
+                    onClose={() => setIsCCModalOpen(false)}
+                    transactions={allTransactions}
+                    categories={categories}
+                    year={currentYear}
+                />
+            )}
         </div>
     );
 };

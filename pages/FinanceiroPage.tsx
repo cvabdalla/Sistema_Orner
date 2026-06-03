@@ -512,6 +512,8 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
                             periodType={dreType}
                             isCCGrouped={isCCGrouped}
                             isGroupedByManagerial={isGroupedByManagerial}
+                            allTransactions={filteredTransactions}
+                            year={dreYear}
                         />
                     ) : (
                         activeTab === 'visaoGeral' ? (
