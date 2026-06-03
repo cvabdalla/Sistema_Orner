@@ -150,38 +150,59 @@ const DREView: React.FC<DREViewProps> = ({ transactions, categories, periodType,
 
     const handlePrint = () => window.print();
 
-    const TableRow = ({ label, field, isBold = false, isNegative = false, type = 'fixed', bgColor = '', textColor = 'text-gray-700 dark:text-gray-300' }: any) => (
-        <tr className={`hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors ${bgColor}`}>
-            <td className={`px-3 py-2 whitespace-nowrap sticky left-0 z-10 border-r border-gray-200 dark:border-gray-700 ${bgColor || 'bg-white dark:bg-gray-800'} ${isBold ? 'font-bold' : 'font-medium pl-6'} ${textColor} text-[11px]`}>
-                {label}
-            </td>
-            {matrixData.columnsData.map((col, idx) => {
-                let val = 0;
-                if (type === 'receita') val = col.receitas[field] || 0;
-                else if (type === 'imposto') val = col.impostosMap[field] || 0;
-                else if (type === 'custo') val = col.custosMap[field] || 0;
-                else if (type === 'despesa') val = col.despesasOperacionais[field] || 0;
-                else val = (col as any)[field];
+    const TableRow = ({ label, field, isBold = false, isNegative = false, type = 'fixed', bgColor = '', textColor = 'text-gray-700 dark:text-gray-300' }: any) => {
+        const isLucroLiquido = field === 'lucroLiquido';
 
-                return (
-                    <td key={idx} className={`px-2 py-2 text-right text-[11px] whitespace-nowrap border-r border-gray-100 dark:border-gray-800 ${isNegative && val > 0 ? 'text-red-500' : textColor} ${isBold ? 'font-bold' : ''}`}>
-                        {val !== 0 ? (isNegative ? `(${formatCurrency(val)})` : formatCurrency(val)) : '-'}
-                    </td>
-                );
-            })}
-            <td className={`px-3 py-2 text-right text-[11px] font-bold whitespace-nowrap border-l border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 ${isNegative && (type === 'receita' ? matrixData.totals.receitas[field] : type === 'imposto' ? matrixData.totals.impostosMap[field] : type === 'custo' ? matrixData.totals.custosMap[field] : type === 'despesa' ? matrixData.totals.despesasOperacionais[field] : (matrixData.totals as any)[field]) > 0 ? 'text-red-600' : 'text-gray-900 dark:text-white'}`}>
-                 {(() => {
+        return (
+            <tr className={`hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors ${isLucroLiquido ? '' : bgColor}`}>
+                <td className={`px-3 py-2 whitespace-nowrap sticky left-0 z-10 border-r border-gray-200 dark:border-gray-700 ${isLucroLiquido ? 'bg-gray-100 dark:bg-gray-800/80 font-bold text-gray-800 dark:text-gray-200' : (bgColor || 'bg-white dark:bg-gray-800')} ${isBold ? 'font-bold' : 'font-medium pl-6'} ${isLucroLiquido ? '' : textColor} text-[11px]`}>
+                    {label}
+                </td>
+                {matrixData.columnsData.map((col, idx) => {
+                    let val = 0;
+                    if (type === 'receita') val = col.receitas[field] || 0;
+                    else if (type === 'imposto') val = col.impostosMap[field] || 0;
+                    else if (type === 'custo') val = col.custosMap[field] || 0;
+                    else if (type === 'despesa') val = col.despesasOperacionais[field] || 0;
+                    else val = (col as any)[field];
+
+                    let cellBg = isLucroLiquido 
+                        ? (val < 0 ? 'bg-red-50 dark:bg-red-950/20' : 'bg-green-50 dark:bg-green-950/20') 
+                        : '';
+                    let cellText = isLucroLiquido 
+                        ? (val < 0 ? 'text-red-600 dark:text-red-400 font-extrabold' : 'text-green-700 dark:text-green-400 font-extrabold') 
+                        : (isNegative && val > 0 ? 'text-red-500' : textColor);
+
+                    return (
+                        <td key={idx} className={`px-2 py-2 text-right text-[11px] whitespace-nowrap border-r border-gray-100 dark:border-gray-800 ${cellBg} ${cellText} ${isBold ? 'font-bold' : ''}`}>
+                            {val !== 0 ? (isNegative ? `(${formatCurrency(val)})` : formatCurrency(val)) : '-'}
+                        </td>
+                    );
+                })}
+                {(() => {
                     let val = 0;
                     if (type === 'receita') val = matrixData.totals.receitas[field] || 0;
                     else if (type === 'imposto') val = matrixData.totals.impostosMap[field] || 0;
                     else if (type === 'custo') val = matrixData.totals.custosMap[field] || 0;
                     else if (type === 'despesa') val = matrixData.totals.despesasOperacionais[field] || 0;
                     else val = (matrixData.totals as any)[field] || 0;
-                    return val !== 0 ? (isNegative ? `(${formatCurrency(val)})` : formatCurrency(val)) : '-';
-                 })()}
-            </td>
-        </tr>
-    );
+
+                    let totalBg = isLucroLiquido 
+                        ? (val < 0 ? 'bg-red-100 dark:bg-red-900/30' : 'bg-green-100 dark:bg-green-900/30') 
+                        : 'bg-gray-50 dark:bg-gray-900/50';
+                    let totalText = isLucroLiquido 
+                        ? (val < 0 ? 'text-red-700 dark:text-red-300 font-black' : 'text-green-800 dark:text-green-300 font-black') 
+                        : (isNegative && val > 0 ? 'text-red-600' : 'text-gray-900 dark:text-white');
+
+                    return (
+                        <td className={`px-3 py-2 text-right text-[11px] font-bold whitespace-nowrap border-l border-gray-200 dark:border-gray-700 ${totalBg} ${totalText}`}>
+                            {val !== 0 ? (isNegative ? `(${formatCurrency(val)})` : formatCurrency(val)) : '-'}
+                        </td>
+                    );
+                })()}
+            </tr>
+        );
+    };
 
     return (
         <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-lg print:shadow-none print:border-none print:p-0">
