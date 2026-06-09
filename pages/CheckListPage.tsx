@@ -444,6 +444,11 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
             ...reservedComponents.map((r: any) => String(r.itemId))
         ]);
 
+        const stockItemsToUpdate: StockItem[] = [];
+        const purchaseRequestsToCreate: PurchaseRequest[] = [];
+        const stockMovementsToCreate: StockMovement[] = [];
+        let timestamp = Date.now();
+
         for (const itemId of allInvolvedItemIds) {
             const stockItem = currentStock.find(i => String(i.id) === itemId);
             if (stockItem) {
@@ -459,14 +464,14 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
                     quantity: newQty, 
                     reservedQuantity: newReserved
                 };
-                
-                await dataService.save('stock_items', updatedStockItem);
+                stockItemsToUpdate.push(updatedStockItem);
 
                 if (stockItem.lineStatus !== 'Fora de Linha' && newQty < stockItem.minQuantity && !hasPendingRequest(stockItem.name)) {
                     const buyQty = (stockItem.minQuantity * 2) - newQty;
                     if (buyQty > 0) {
+                        timestamp++;
                         const autoRequest: PurchaseRequest = {
-                            id: `auto-buy-${Date.now()}-${stockItem.id}`,
+                            id: `auto-buy-${timestamp}-${stockItem.id}`,
                             owner_id: currentUser.id,
                             itemName: stockItem.name,
                             quantity: buyQty,
@@ -479,14 +484,15 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
                             purchaseType: 'Reposição',
                             observation: `Pedido automático gerado por conclusão de serviço. Saldo pós-baixa (${newQty}) abaixo do mínimo (${stockItem.minQuantity}). Fórmula aplicada: (Mínimo*2)-Atual.`
                         };
-                        await dataService.save('purchase_requests', autoRequest);
+                        purchaseRequestsToCreate.push(autoRequest);
                     }
                 }
 
                 if (consumedQty > 0) {
+                    timestamp++;
                     const originPath = targetEntry.type === 'manutencao' ? 'Manutenção' : 'Check-out (Instalação)';
                     const movement: StockMovement = { 
-                        id: `mov-${Date.now()}-${stockItem.id}`, 
+                        id: `mov-${timestamp}-${stockItem.id}`, 
                         owner_id: currentUser.id, 
                         itemId: String(stockItem.id), 
                         quantity: consumedQty, 
@@ -495,14 +501,20 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
                         projectName: targetEntry.project, 
                         observation: originPath
                     };
-                    await dataService.save('stock_movements', movement);
+                    stockMovementsToCreate.push(movement);
                 }
             }
         }
+
+        await Promise.all([
+            stockItemsToUpdate.length > 0 ? dataService.saveAll('stock_items', stockItemsToUpdate) : Promise.resolve(),
+            purchaseRequestsToCreate.length > 0 ? dataService.saveAll('purchase_requests', purchaseRequestsToCreate) : Promise.resolve(),
+            stockMovementsToCreate.length > 0 ? dataService.saveAll('stock_movements', stockMovementsToCreate) : Promise.resolve()
+        ]);
     };
 
     const updateStatus = async (status: 'Efetivado' | 'Perdido' | 'Finalizado') => {
-        if (!statusTargetEntry) return;
+        if (!statusTargetEntry || isSaving) return;
         setIsSaving(true);
         try {
             const currentTable = getTableName(statusTargetEntry.type);
@@ -511,6 +523,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
             if (status === 'Efetivado' && statusTargetEntry.type === 'checkin') {
                 const currentStock = await dataService.getAll<StockItem>('stock_items');
                 const components = statusTargetEntry.details.componentesEstoque || [];
+                const stockItemsToUpdate: StockItem[] = [];
                 for (const comp of components) {
                     const stockItem = currentStock.find(i => String(i.id) === String(comp.itemId));
                     if (stockItem) {
@@ -518,8 +531,11 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
                             ...stockItem, 
                             reservedQuantity: (stockItem.reservedQuantity || 0) + comp.qty 
                         };
-                        await dataService.save('stock_items', updatedStockItem);
+                        stockItemsToUpdate.push(updatedStockItem);
                     }
+                }
+                if (stockItemsToUpdate.length > 0) {
+                    await dataService.saveAll('stock_items', stockItemsToUpdate);
                 }
                 const autoCheckout: ChecklistEntry = { 
                     id: statusTargetEntry.id, 
@@ -564,6 +580,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
     };
 
     const handleSave = async () => {
+        if (isSaving) return;
         setIsSaving(true);
         const currentTable = getTableName(activeFormType);
         const project = form.nomeCliente || form.nomeTitular || 'Sem nome';
@@ -909,19 +926,31 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
                         <div className="flex flex-col gap-3">
                             <button 
                                 onClick={() => updateStatus(statusTargetEntry.type === 'checkin' ? 'Efetivado' : 'Finalizado')}
-                                className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2"
+                                disabled={isSaving}
+                                className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 <div className="flex items-center gap-2">
-                                    <CheckCircleIcon className="w-5 h-5" /> 
-                                    {statusTargetEntry.type === 'checkin' ? 'Confirmar venda' : 'Finalizar serviço'}
+                                    {isSaving ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                            <span>Processando...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <CheckCircleIcon className="w-5 h-5" /> 
+                                            {statusTargetEntry.type === 'checkin' ? 'Confirmar venda' : 'Finalizar serviço'}
+                                        </>
+                                    )}
                                 </div>
                             </button>
                             {statusTargetEntry.type === 'checkin' && (
                                 <button 
                                     onClick={() => updateStatus('Perdido')}
-                                    className="w-full py-3 bg-white dark:bg-gray-800 text-red-600 border border-red-200 dark:border-red-900/50 rounded-xl font-bold text-sm hover:bg-red-50 dark:hover:bg-red-900/20 transition-all flex items-center justify-center gap-2"
+                                    disabled={isSaving}
+                                    className="w-full py-3 bg-white dark:bg-gray-800 text-red-600 border border-red-200 dark:border-red-900/50 rounded-xl font-bold text-sm hover:bg-red-50 dark:hover:bg-red-900/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    <XCircleIcon className="w-5 h-5" /> Cancelar venda (Venda perdida)
+                                    <XCircleIcon className="w-5 h-5" /> 
+                                    {isSaving ? 'Processando...' : 'Cancelar venda (Venda perdida)'}
                                 </button>
                             )}
                         </div>
