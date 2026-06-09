@@ -104,7 +104,7 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
         name: '', phone: '', cep: '', address: '', address_number: '', complement: '', city: '', plates_count: 0, installation_end_date: '', observations: ''
     });
     const [packageForm, setPackageForm] = useState({
-        name: '', color: PRESET_COLORS[0].hex, wash_qty: 4, price_per_plate: 0, is_negotiated: false
+        name: '', color: PRESET_COLORS[0].hex, wash_qty: 4, price_per_plate: 0, is_negotiated: false, is_courtesy: false
     });
     const [scheduleDates, setScheduleDates] = useState<string[]>([]);
     const [frequency, setFrequency] = useState<Frequency>('semestral');
@@ -167,18 +167,23 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
         const currentCycleRecords = clientRecords.filter(r => (r.created_at || r.date) >= launchDate);
         const executedCount = currentCycleRecords.filter(r => r.status === 'executed').length;
         const washQtyLimit = client.contract_wash_qty || pkg?.wash_qty || 0;
-        const isClientNegotiated = !!(client.is_negotiated || pkg?.is_negotiated);
-        const pricePerPlate = isClientNegotiated ? 0 : (client.contract_price_per_plate !== undefined ? client.contract_price_per_plate : (pkg?.price_per_plate || 0));
+        const isClientCourtesy = !!(client.is_courtesy || pkg?.is_courtesy);
+        const isClientNegotiated = !isClientCourtesy && !!(client.is_negotiated || pkg?.is_negotiated);
+        const pricePerPlate = (isClientCourtesy || isClientNegotiated) ? 0 : (client.contract_price_per_plate !== undefined ? client.contract_price_per_plate : (pkg?.price_per_plate || 0));
         const allScheduled = currentCycleRecords.filter(r => r.status === 'scheduled').sort((a, b) => a.date.localeCompare(b.date));
         const nextScheduled = allScheduled[0];
         const pendingToScheduleCount = Math.max(0, washQtyLimit - executedCount - allScheduled.length);
         
-        const subtotalPlacas = isClientNegotiated 
-            ? (washQtyLimit > 0 ? (Number(client.negotiated_total_value || 0) / washQtyLimit) : 0)
-            : (pricePerPlate * (client.plates_count || 0));
-        const contractTotalValue = isClientNegotiated
-            ? (Number(client.negotiated_total_value || 0) + (client.travel_cost || 0))
-            : ((pricePerPlate * (client.plates_count || 0) * washQtyLimit) + (client.travel_cost || 0));
+        const subtotalPlacas = isClientCourtesy 
+            ? 0 
+            : (isClientNegotiated 
+                ? (washQtyLimit > 0 ? (Number(client.negotiated_total_value || 0) / washQtyLimit) : 0)
+                : (pricePerPlate * (client.plates_count || 0)));
+        const contractTotalValue = isClientCourtesy 
+            ? (client.travel_cost || 0)
+            : (isClientNegotiated
+                ? (Number(client.negotiated_total_value || 0) + (client.travel_cost || 0))
+                : ((pricePerPlate * (client.plates_count || 0) * washQtyLimit) + (client.travel_cost || 0)));
 
         const clientContracts = contracts
             .filter(c => c.client_id === client.id)
@@ -371,12 +376,13 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                 name: packageForm.name,
                 color: packageForm.color,
                 wash_qty: packageForm.wash_qty,
-                price_per_plate: packageForm.is_negotiated ? 0 : packageForm.price_per_plate,
-                is_negotiated: !!packageForm.is_negotiated
+                price_per_plate: (packageForm.is_negotiated || packageForm.is_courtesy) ? 0 : packageForm.price_per_plate,
+                is_negotiated: !!packageForm.is_negotiated,
+                is_courtesy: !!packageForm.is_courtesy
             };
             await dataService.save('lavagem_packages', data);
             setEditingPackage(null);
-            setPackageForm({ name: '', color: PRESET_COLORS[0].hex, wash_qty: 4, price_per_plate: 0, is_negotiated: false });
+            setPackageForm({ name: '', color: PRESET_COLORS[0].hex, wash_qty: 4, price_per_plate: 0, is_negotiated: false, is_courtesy: false });
             await loadData();
         } finally { setIsSaving(false); }
     };
@@ -397,7 +403,8 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
             color: pkg.color, 
             wash_qty: pkg.wash_qty, 
             price_per_plate: pkg.price_per_plate,
-            is_negotiated: !!pkg.is_negotiated
+            is_negotiated: !!pkg.is_negotiated,
+            is_courtesy: !!pkg.is_courtesy
         });
     };
 
@@ -410,20 +417,22 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
         setIsSaving(true);
         try {
             const launchDate = new Date();
-            const isPkgNegotiated = !!selectedPkg.is_negotiated;
-            const platesTotal = isPkgNegotiated ? 0 : (selectedPkg.price_per_plate * (client.plates_count || 0));
-            const baseContractValue = isPkgNegotiated ? Number(launchServiceForm.negotiatedTotalValue || 0) : (platesTotal * selectedPkg.wash_qty);
+            const isPkgCourtesy = !!selectedPkg.is_courtesy;
+            const isPkgNegotiated = !isPkgCourtesy && !!selectedPkg.is_negotiated;
+            const platesTotal = (isPkgNegotiated || isPkgCourtesy) ? 0 : (selectedPkg.price_per_plate * (client.plates_count || 0));
+            const baseContractValue = isPkgCourtesy ? 0 : (isPkgNegotiated ? Number(launchServiceForm.negotiatedTotalValue || 0) : (platesTotal * selectedPkg.wash_qty));
             const contractTotal = baseContractValue + Number(launchServiceForm.travelCost || 0);
 
             await dataService.save('lavagem_clients', {
                 ...client,
                 package_id: selectedPkg.id,
-                contract_price_per_plate: isPkgNegotiated ? 0 : selectedPkg.price_per_plate,
+                contract_price_per_plate: (isPkgNegotiated || isPkgCourtesy) ? 0 : selectedPkg.price_per_plate,
                 contract_wash_qty: selectedPkg.wash_qty,
                 travel_cost: Number(launchServiceForm.travelCost || 0),
                 installation_end_date: launchServiceForm.installationEndDate,
                 package_launch_date: launchDate.toISOString(),
                 is_negotiated: isPkgNegotiated,
+                is_courtesy: isPkgCourtesy,
                 negotiated_total_value: isPkgNegotiated ? Number(launchServiceForm.negotiatedTotalValue || 0) : 0
             });
             await dataService.save('lavagem_contracts', {
@@ -435,26 +444,33 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                 created_at: launchDate.toISOString()
             });
             
-            const categories = await dataService.getAll<FinancialCategory>('financial_categories');
-            const targetCategoryName = "Receita de Mão de Obra – Lavagem";
-            let categoryId = categories.find(c => c.name === targetCategoryName)?.id || 
-                             categories.find(c => c.name.toLowerCase().includes('lavagem') && c.type === 'receita')?.id ||
-                             categories.find(c => c.name === 'Receita de Vendas' || c.type === 'receita')?.id || '';
-            
-            await dataService.save('financial_transactions', {
-                id: `tx-wash-${Date.now()}`,
-                owner_id: currentUser.id,
-                description: `Contrato Lavagem: ${selectedPkg.name} - ${client.name}`,
-                amount: contractTotal,
-                type: 'receita',
-                dueDate: launchDate.toISOString().split('T')[0],
-                launchDate: launchDate.toISOString().split('T')[0],
-                categoryId: categoryId,
-                status: 'pendente'
-            });
+            // Só lança transação financeira se o montante for maior que zero
+            if (contractTotal > 0) {
+                const categories = await dataService.getAll<FinancialCategory>('financial_categories');
+                const targetCategoryName = "Receita de Mão de Obra – Lavagem";
+                let categoryId = categories.find(c => c.name === targetCategoryName)?.id || 
+                                 categories.find(c => c.name.toLowerCase().includes('lavagem') && c.type === 'receita')?.id ||
+                                 categories.find(c => c.name === 'Receita de Vendas' || c.type === 'receita')?.id || '';
+                
+                await dataService.save('financial_transactions', {
+                    id: `tx-wash-${Date.now()}`,
+                    owner_id: currentUser.id,
+                    description: `Contrato Lavagem: ${selectedPkg.name} - ${client.name}`,
+                    amount: contractTotal,
+                    type: 'receita',
+                    dueDate: launchDate.toISOString().split('T')[0],
+                    launchDate: launchDate.toISOString().split('T')[0],
+                    categoryId: categoryId,
+                    status: 'pendente'
+                });
+            }
             await loadData();
             setIsLaunchServiceModalOpen(false);
-            alert("Plano vinculado e histórico financeiro lançado (Pendente)!");
+            if (contractTotal > 0) {
+                alert("Plano vinculado e histórico financeiro lançado (Pendente)!");
+            } else {
+                alert("Plano gratuito/cortesia vinculado com sucesso!");
+            }
         } finally { setIsSaving(false); }
     };
 
@@ -541,7 +557,7 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                     <div><p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest leading-none mb-1">{usePeriodFilter ? 'Arrecadado no período' : `Arrecadado em ${new Date().getFullYear()}`}</p><p className="text-xl font-black text-indigo-700 dark:text-indigo-300 leading-none">{formatCurrency(totalArrecadado)}</p><p className="text-[8px] text-indigo-400 font-bold mt-1 uppercase tracking-tighter">* Inclui histórico completo da lista atual</p></div>
                 </div>
                 <div className="flex flex-wrap justify-center gap-3">
-                    <button onClick={() => { setEditingPackage(null); setPackageForm({ name: '', color: PRESET_COLORS[0].hex, wash_qty: 4, price_per_plate: 0, is_negotiated: false }); setIsPackageModalOpen(true); }} className="flex items-center gap-2 px-5 py-2.5 bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-200 border border-gray-200 dark:border-gray-600 rounded-xl font-black text-xs hover:bg-gray-100 transition-all tracking-tight">Planos</button>
+                    <button onClick={() => { setEditingPackage(null); setPackageForm({ name: '', color: PRESET_COLORS[0].hex, wash_qty: 4, price_per_plate: 0, is_negotiated: false, is_courtesy: false }); setIsPackageModalOpen(true); }} className="flex items-center gap-2 px-5 py-2.5 bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-200 border border-gray-200 dark:border-gray-600 rounded-xl font-black text-xs hover:bg-gray-100 transition-all tracking-tight">Planos</button>
                     <button onClick={() => { setEditingClient(null); setClientForm({name:'', phone:'', cep:'', address:'', address_number:'', complement:'', city:'', plates_count:0, installation_end_date: '', observations: ''}); setIsClientModalOpen(true); }} className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-600 rounded-xl font-black text-xs hover:bg-gray-100 transition-all tracking-tight">Novo cliente</button>
                     <button onClick={() => handleOpenLaunchModal()} className="flex items-center gap-2 px-8 py-2.5 bg-cyan-600 text-white rounded-xl font-black text-xs shadow-xl shadow-cyan-600/20 hover:bg-cyan-700 transition-all active:scale-95">Lançar serviço</button>
                 </div>
@@ -800,7 +816,7 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                                             <div>
                                                 <p className="text-xs font-black text-gray-800 dark:text-white leading-tight">{pkg.name}</p>
                                                 <p className="text-[9px] text-gray-400 font-bold">
-                                                    {pkg.wash_qty} visitas • {pkg.is_negotiated ? 'Valor fechado' : `${formatCurrency(pkg.price_per_plate)}/placa`}
+                                                    {pkg.wash_qty} visitas • {pkg.is_courtesy ? 'Cortesia (Sem Custo)' : (pkg.is_negotiated ? 'Valor fechado' : `${formatCurrency(pkg.price_per_plate)}/placa`)}
                                                 </p>
                                             </div>
                                         </div>
@@ -832,34 +848,62 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                                     ))}
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2 pt-1 pb-1">
-                                <input 
-                                    type="checkbox" 
-                                    id="is_negotiated" 
-                                    checked={packageForm.is_negotiated} 
-                                    onChange={e => setPackageForm(prev => ({...prev, is_negotiated: e.target.checked}))} 
-                                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
-                                />
-                                <label htmlFor="is_negotiated" className="text-xs font-bold text-gray-700 dark:text-gray-300 cursor-pointer select-none">
-                                    Valor negociado/fechado por contrato
-                                </label>
+                            <div className="flex flex-col gap-2 pt-1 pb-1 border-y py-2 border-dashed dark:border-gray-700">
+                                <div className="flex items-center gap-2">
+                                    <input 
+                                        type="checkbox" 
+                                        id="is_negotiated" 
+                                        checked={packageForm.is_negotiated} 
+                                        disabled={packageForm.is_courtesy}
+                                        onChange={e => setPackageForm(prev => ({...prev, is_negotiated: e.target.checked, is_courtesy: e.target.checked ? false : prev.is_courtesy}))} 
+                                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer disabled:opacity-50"
+                                    />
+                                    <label htmlFor="is_negotiated" className={`text-xs font-bold text-gray-700 dark:text-gray-300 cursor-pointer select-none ${packageForm.is_courtesy ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                        Valor negociado/fechado por contrato
+                                    </label>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <input 
+                                        type="checkbox" 
+                                        id="is_courtesy" 
+                                        checked={packageForm.is_courtesy} 
+                                        onChange={e => setPackageForm(prev => ({
+                                            ...prev, 
+                                            is_courtesy: e.target.checked, 
+                                            is_negotiated: e.target.checked ? false : prev.is_negotiated,
+                                            wash_qty: e.target.checked ? 1 : prev.wash_qty
+                                        }))} 
+                                        className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                                    />
+                                    <label htmlFor="is_courtesy" className="text-xs font-bold text-emerald-600 dark:text-emerald-400 cursor-pointer select-none flex items-center gap-1">
+                                        <SparklesIcon className="w-3 h-3 text-emerald-500" /> Oferecido como Cortesia (Sem custo)
+                                    </label>
+                                </div>
                             </div>
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <FormLabel>Qtd. visitas</FormLabel>
-                                    <input type="number" required min="1" value={packageForm.wash_qty} onChange={e => setPackageForm(prev => ({...prev, wash_qty: parseInt(e.target.value) || 1}))} className="w-full rounded-xl bg-white p-2.5 text-xs font-bold" />
+                                    <input 
+                                        type="number" 
+                                        required 
+                                        min="1" 
+                                        disabled={packageForm.is_courtesy}
+                                        value={packageForm.is_courtesy ? 1 : packageForm.wash_qty} 
+                                        onChange={e => setPackageForm(prev => ({...prev, wash_qty: parseInt(e.target.value) || 1}))} 
+                                        className={`w-full rounded-xl p-2.5 text-xs font-bold ${packageForm.is_courtesy ? 'bg-gray-100 dark:bg-gray-800 opacity-50 cursor-not-allowed' : 'bg-white'}`} 
+                                    />
                                 </div>
                                 <div>
                                     <FormLabel>V. placa (R$)</FormLabel>
                                     <input 
                                         type="number" 
                                         step="0.01" 
-                                        required={!packageForm.is_negotiated} 
-                                        disabled={packageForm.is_negotiated} 
-                                        value={packageForm.is_negotiated ? '' : (packageForm.price_per_plate || '')} 
+                                        required={!packageForm.is_negotiated && !packageForm.is_courtesy} 
+                                        disabled={packageForm.is_negotiated || packageForm.is_courtesy} 
+                                        value={(packageForm.is_negotiated || packageForm.is_courtesy) ? '' : (packageForm.price_per_plate || '')} 
                                         onChange={e => setPackageForm(prev => ({...prev, price_per_plate: parseFloat(e.target.value) || 0}))} 
-                                        className={`w-full rounded-xl p-2.5 text-xs font-bold text-emerald-600 border border-transparent outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 shadow-inner ${packageForm.is_negotiated ? 'bg-gray-100 dark:bg-gray-800 opacity-50 cursor-not-allowed' : 'bg-white'}`} 
-                                        placeholder={packageForm.is_negotiated ? 'Fechado' : '0,00'}
+                                        className={`w-full rounded-xl p-2.5 text-xs font-bold text-emerald-600 border border-transparent outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 shadow-inner ${(packageForm.is_negotiated || packageForm.is_courtesy) ? 'bg-gray-100 dark:bg-gray-800 opacity-50 cursor-not-allowed' : 'bg-white'}`} 
+                                        placeholder={packageForm.is_courtesy ? 'Grátis' : (packageForm.is_negotiated ? 'Fechado' : '0,00')}
                                     />
                                 </div>
                             </div>
@@ -897,7 +941,7 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                                 <option value="">Escolha...</option>
                                 {packages.map(p => (
                                     <option key={p.id} value={p.id}>
-                                        {p.name} ({p.wash_qty}x • {p.is_negotiated ? 'Valor fechado' : `${formatCurrency(p.price_per_plate)}/placa`})
+                                        {p.name} ({p.wash_qty}x • {p.is_courtesy ? 'Cortesia' : (p.is_negotiated ? 'Valor fechado' : `${formatCurrency(p.price_per_plate)}/placa`)})
                                     </option>
                                 ))}
                             </select>
@@ -928,11 +972,14 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                             const pkg = packages.find(p => p.id === launchServiceForm.packageId);
                             if (!client || !pkg) return null;
                             
-                            const isPkgNegotiated = !!pkg.is_negotiated;
-                            const subtotalPlacas = isPkgNegotiated 
-                                ? (pkg.wash_qty > 0 ? (launchServiceForm.negotiatedTotalValue / pkg.wash_qty) : 0) 
-                                : (pkg.price_per_plate * client.plates_count);
-                            const totalPlano = isPkgNegotiated ? launchServiceForm.negotiatedTotalValue : (subtotalPlacas * pkg.wash_qty);
+                            const isPkgCourtesy = !!pkg.is_courtesy;
+                            const isPkgNegotiated = !isPkgCourtesy && !!pkg.is_negotiated;
+                            const subtotalPlacas = isPkgCourtesy
+                                ? 0
+                                : (isPkgNegotiated 
+                                    ? (pkg.wash_qty > 0 ? (launchServiceForm.negotiatedTotalValue / pkg.wash_qty) : 0) 
+                                    : (pkg.price_per_plate * client.plates_count));
+                            const totalPlano = isPkgCourtesy ? 0 : (isPkgNegotiated ? launchServiceForm.negotiatedTotalValue : (subtotalPlacas * pkg.wash_qty));
                             const totalGeral = totalPlano + Number(launchServiceForm.travelCost || 0);
                             
                             return (
@@ -942,12 +989,12 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                                     </h4>
                                     <div className="space-y-2">
                                         <div className="flex justify-between items-center text-[11px] font-bold text-gray-600 dark:text-gray-300">
-                                            <span>{isPkgNegotiated ? 'Valor médio por visita' : `Base (${client.plates_count} placas x ${formatCurrency(pkg.price_per_plate)})`}</span>
-                                            <span>{formatCurrency(subtotalPlacas)} /visita</span>
+                                            <span>{isPkgCourtesy ? 'Plano de Cortesia' : (isPkgNegotiated ? 'Valor médio por visita' : `Base (${client.plates_count} placas x ${formatCurrency(pkg.price_per_plate)})`)}</span>
+                                            <span>{isPkgCourtesy ? 'Grátis' : `${formatCurrency(subtotalPlacas)} /visita`}</span>
                                         </div>
                                         <div className="flex justify-between items-center text-[11px] font-bold text-gray-600 dark:text-gray-300 border-b border-indigo-100 dark:border-indigo-800 pb-2">
-                                            <span>{isPkgNegotiated ? `Valor total acordado (${pkg.wash_qty} visitas)` : `Ciclo (${pkg.wash_qty} visitas)`}</span>
-                                            <span>{formatCurrency(totalPlano)}</span>
+                                            <span>{isPkgCourtesy ? `Cortesia (${pkg.wash_qty} visitas)` : (isPkgNegotiated ? `Valor total acordado (${pkg.wash_qty} visitas)` : `Ciclo (${pkg.wash_qty} visitas)`)}</span>
+                                            <span>{isPkgCourtesy ? 'Sem custo' : formatCurrency(totalPlano)}</span>
                                         </div>
                                         <div className="py-2">
                                             <label className="block text-[10px] font-black text-indigo-500 dark:text-indigo-400 mb-1 ml-0.5 uppercase">Taxa Desloc. (Opcional)</label>
