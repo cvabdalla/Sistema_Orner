@@ -28,6 +28,10 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
     const [isPriceCalcModalOpen, setPriceCalcModalOpen] = useState(false);
     const [desiredMargin, setDesiredMargin] = useState('');
     const [desiredPrice, setDesiredPrice] = useState('');
+    const [isNetProfitCalcModalOpen, setNetProfitCalcModalOpen] = useState(false);
+    const [isNetMarginCalcModalOpen, setNetMarginCalcModalOpen] = useState(false);
+    const [desiredNetProfit, setDesiredNetProfit] = useState('');
+    const [desiredNetMargin, setDesiredNetMargin] = useState('');
     const [isRenameModalOpen, setRenameModalOpen] = useState(false);
     const [tempVariantName, setTempVariantName] = useState('');
     const [isSaveModalOpen, setSaveModalOpen] = useState(false);
@@ -490,6 +494,122 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         setDesiredPrice('');
     };
 
+    const handleNetProfitCalculation = () => {
+        if (isReadOnly) return;
+        const targetLucroLiquido = parseNumber(desiredNetProfit);
+        if (isNaN(targetLucroLiquido)) return;
+
+        const n_terceiroInstalacaoQtd = parseNumber(formState.terceiroInstalacaoQtd);
+        const n_terceiroInstalacaoCusto = parseNumber(formState.terceiroInstalacaoCusto);
+        const n_visitaTecnicaCusto = parseNumber(formState.visitaTecnicaCusto);
+        const n_projetoHomologacaoCusto = parseNumber(formState.projetoHomologacaoCusto);
+        const n_custoViagem = parseNumber(formState.custoViagem);
+        const n_adequacaoLocalCusto = parseNumber(formState.adequacaoLocalCusto);
+        const n_custoSistema = parseNumber(formState.custoSistema);
+        const n_nfServicoPerc = parseNumber(formState.nfServicoPerc);
+        const n_comissaoVendasPerc = parseNumber(formState.comissaoVendasPerc);
+        const n_descontoAplicadoPerc = parseNumber(formState.descontoAplicadoPerc);
+
+        const instalacaoCusto = n_terceiroInstalacaoQtd * n_terceiroInstalacaoCusto;
+        const totalInstalacaoParcial = n_visitaTecnicaCusto + n_projetoHomologacaoCusto + instalacaoCusto + n_custoViagem + n_adequacaoLocalCusto;
+        
+        const totalStockStructure = selectedStockTableItems.reduce((acc: number, item: any) => {
+            const data = (formState.fixedItemsData || {})[String(item.id)] || { qty: 0, cost: item.averagePrice || 0, markup: 0 };
+            const n_qty = parseNumber(data.qty);
+            const n_cost = parseNumber(data.cost);
+            const n_markup = parseNumber(data.markup);
+            const effectiveUnitCost = n_cost * (1 + (n_markup / 100));
+            return acc + (n_qty * effectiveUnitCost);
+        }, 0);
+
+        const totalOffStockStructure = (formState.offStockItems || []).reduce((acc: number, item: any) => {
+            const n_qty = parseNumber(item.qty);
+            const n_cost = parseNumber(item.cost);
+            const n_markup = parseNumber(item.markup);
+            const effectiveUnitCost = n_cost * (1 + (n_markup / 100));
+            return acc + (n_qty * effectiveUnitCost);
+        }, 0);
+
+        const totalEstrutura = totalStockStructure + totalOffStockStructure;
+
+        const E = totalInstalacaoParcial + totalEstrutura;
+        const VVS = n_custoSistema;
+        const nf = n_nfServicoPerc / 100;
+        const com = formState.comissaoVendasOpcao === 'Sim' ? n_comissaoVendasPerc / 100 : 0;
+        const desc = n_descontoAplicadoPerc / 100;
+
+        const numerador = targetLucroLiquido + E * nf + (VVS + E) * (com + desc);
+        const denominador = 1 - nf - com - desc;
+
+        if (denominador === 0) {
+            alert("Não é possível calcular com os valores atuais.");
+            return;
+        }
+
+        const newMOG = roundToCents(numerador / denominador);
+        updateVariantsWithFormState({ ...formState, maoDeObraGeral: newMOG });
+        setNetProfitCalcModalOpen(false);
+        setDesiredNetProfit('');
+    };
+
+    const handleNetMarginCalculation = () => {
+        if (isReadOnly) return;
+        const targetMargin = parseNumber(desiredNetMargin) / 100;
+        if (isNaN(targetMargin)) return;
+
+        const n_terceiroInstalacaoQtd = parseNumber(formState.terceiroInstalacaoQtd);
+        const n_terceiroInstalacaoCusto = parseNumber(formState.terceiroInstalacaoCusto);
+        const n_visitaTecnicaCusto = parseNumber(formState.visitaTecnicaCusto);
+        const n_projetoHomologacaoCusto = parseNumber(formState.projetoHomologacaoCusto);
+        const n_custoViagem = parseNumber(formState.custoViagem);
+        const n_adequacaoLocalCusto = parseNumber(formState.adequacaoLocalCusto);
+        const n_custoSistema = parseNumber(formState.custoSistema);
+        const n_nfServicoPerc = parseNumber(formState.nfServicoPerc);
+        const n_comissaoVendasPerc = parseNumber(formState.comissaoVendasPerc);
+        const n_descontoAplicadoPerc = parseNumber(formState.descontoAplicadoPerc);
+
+        const instalacaoCusto = n_terceiroInstalacaoQtd * n_terceiroInstalacaoCusto;
+        const totalInstalacaoParcial = n_visitaTecnicaCusto + n_projetoHomologacaoCusto + instalacaoCusto + n_custoViagem + n_adequacaoLocalCusto;
+        
+        const totalStockStructure = selectedStockTableItems.reduce((acc: number, item: any) => {
+            const data = (formState.fixedItemsData || {})[String(item.id)] || { qty: 0, cost: item.averagePrice || 0, markup: 0 };
+            const n_qty = parseNumber(data.qty);
+            const n_cost = parseNumber(data.cost);
+            const n_markup = parseNumber(data.markup);
+            const effectiveUnitCost = n_cost * (1 + (n_markup / 100));
+            return acc + (n_qty * effectiveUnitCost);
+        }, 0);
+
+        const totalOffStockStructure = (formState.offStockItems || []).reduce((acc: number, item: any) => {
+            const n_qty = parseNumber(item.qty);
+            const n_cost = parseNumber(item.cost);
+            const n_markup = parseNumber(item.markup);
+            const effectiveUnitCost = n_cost * (1 + (n_markup / 100));
+            return acc + (n_qty * effectiveUnitCost);
+        }, 0);
+
+        const totalEstrutura = totalStockStructure + totalOffStockStructure;
+
+        const E = totalInstalacaoParcial + totalEstrutura;
+        const VVS = n_custoSistema;
+        const nf = n_nfServicoPerc / 100;
+        const com = formState.comissaoVendasOpcao === 'Sim' ? n_comissaoVendasPerc / 100 : 0;
+        const desc = n_descontoAplicadoPerc / 100;
+
+        const numerador = E * nf + (VVS + E) * (targetMargin + com + desc);
+        const denominador = 1 - nf - com - desc - targetMargin;
+
+        if (denominador === 0) {
+            alert("Não é possível calcular com os valores atuais.");
+            return;
+        }
+
+        const newMOG = roundToCents(numerador / denominador);
+        updateVariantsWithFormState({ ...formState, maoDeObraGeral: newMOG });
+        setNetMarginCalcModalOpen(false);
+        setDesiredNetMargin('');
+    };
+
     const handleSaveTrigger = () => {
         if (isReadOnly) return;
         if (!formState.nomeCliente.trim()) {
@@ -611,8 +731,38 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                         </button>
                     )}
                 </div>
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm"><p className="text-xs font-medium text-gray-500 tracking-wide">Lucro líquido</p><p className="text-xl font-bold text-green-600 dark:text-green-400">{formatCurrency(calculated.lucroLiquido || 0)}</p></div>
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm"><p className="text-xs font-medium text-gray-500 tracking-wide">Margem líquida</p><p className="text-xl font-bold text-blue-600 dark:text-blue-400">{calculated.margemLiquida?.toFixed(2) || 0}%</p></div>
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p className="text-xs font-medium text-gray-500 tracking-wide">Lucro líquido</p>
+                        <p className="text-xl font-bold text-green-600 dark:text-green-400">{formatCurrency(calculated.lucroLiquido || 0)}</p>
+                    </div>
+                    {!isReadOnly && (
+                        <button 
+                            type="button"
+                            onClick={() => setNetProfitCalcModalOpen(true)} 
+                            className="p-2 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"
+                            title="Calculadora de lucro líquido alvo"
+                        >
+                            <CalculatorIcon className="w-5 h-5" />
+                        </button>
+                    )}
+                </div>
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p className="text-xs font-medium text-gray-500 tracking-wide">Margem líquida</p>
+                        <p className="text-xl font-bold text-blue-600 dark:text-blue-400">{calculated.margemLiquida?.toFixed(2) || 0}%</p>
+                    </div>
+                    {!isReadOnly && (
+                        <button 
+                            type="button"
+                            onClick={() => setNetMarginCalcModalOpen(true)} 
+                            className="p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                            title="Calculadora de margem líquida alvo"
+                        >
+                            <CalculatorIcon className="w-5 h-5" />
+                        </button>
+                    )}
+                </div>
                 <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-between"><div><p className="text-xs font-medium text-gray-500 tracking-wide">Margem serviço</p><p className="text-xl font-bold text-purple-600 dark:text-purple-400">{calculated.margemLiquidaServico?.toFixed(2) || 0}%</p></div>{!isReadOnly && <button onClick={() => setModalOpen(true)} className="p-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors"><CalculatorIcon className="w-5 h-5" /></button>}</div>
             </div>
 
@@ -1072,6 +1222,119 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                             </button>
                             <button 
                                 onClick={() => setModalOpen(false)} 
+                                className="w-full py-3 text-gray-400 dark:text-gray-500 font-bold text-[10px] uppercase tracking-widest hover:text-gray-600"
+                            >
+                                Cancelar
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
+            {isNetProfitCalcModalOpen && (
+                <Modal title="Ajustar lucro líquido alvo" onClose={() => setNetProfitCalcModalOpen(false)} maxWidth="max-w-md">
+                    <div className="space-y-6 pt-2">
+                        <div className="flex items-center gap-4 p-4 bg-green-50 dark:bg-green-900/30 rounded-2xl border border-green-100 dark:border-green-800">
+                             <div className="w-12 h-12 bg-green-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-green-600/20">
+                                <DollarIcon className="w-6 h-6" />
+                             </div>
+                             <div>
+                                <p className="text-sm font-bold text-gray-800 dark:text-white">Lucro líquido reverso</p>
+                                <p className="text-[10px] font-bold text-gray-500 dark:text-green-400 tracking-tight leading-tight">O sistema recalculará a "Mão de obra geral" para obter o lucro líquido estimado desejado.</p>
+                             </div>
+                        </div>
+
+                        <div className="text-center space-y-4">
+                            <label htmlFor="desiredNetProfit" className="block text-xs font-black text-gray-400 uppercase tracking-widest">Lucro Líquido Desejado</label>
+                            
+                            <div className="relative inline-block">
+                                <span className="absolute -left-8 top-1/2 -translate-y-1/2 text-2xl font-black text-gray-300">R$</span>
+                                <input 
+                                    type="text" 
+                                    inputMode="decimal"
+                                    id="desiredNetProfit" 
+                                    autoFocus
+                                    value={desiredNetProfit || ''} 
+                                    onChange={(e) => setDesiredNetProfit(e.target.value)} 
+                                    className="w-52 text-center text-3xl font-black text-green-600 dark:text-green-400 bg-transparent border-b-4 border-green-200 dark:border-green-800 focus:border-green-500 outline-none py-2 transition-all" 
+                                    placeholder="0,00" 
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
+                            <button 
+                                onClick={handleNetProfitCalculation} 
+                                disabled={!desiredNetProfit || parseNumber(desiredNetProfit) <= 0}
+                                className="w-full py-3.5 bg-green-600 text-white rounded-2xl font-black text-xs shadow-xl shadow-green-600/30 hover:bg-green-700 active:scale-95 transition-all disabled:opacity-50 disabled:grayscale"
+                            >
+                                Aplicar novo lucro líquido
+                            </button>
+                            <button 
+                                onClick={() => setNetProfitCalcModalOpen(false)} 
+                                className="w-full py-3 text-gray-400 dark:text-gray-500 font-bold text-[10px] uppercase tracking-widest hover:text-gray-600"
+                            >
+                                Cancelar
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
+            {isNetMarginCalcModalOpen && (
+                <Modal title="Ajustar margem líquida alvo" onClose={() => setNetMarginCalcModalOpen(false)} maxWidth="max-w-md">
+                    <div className="space-y-6 pt-2">
+                        <div className="flex items-center gap-4 p-4 bg-blue-50 dark:bg-blue-900/30 rounded-2xl border border-blue-100 dark:border-blue-800">
+                             <div className="w-12 h-12 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-blue-600/20">
+                                <CalculatorIcon className="w-6 h-6" />
+                             </div>
+                             <div>
+                                <p className="text-sm font-bold text-gray-800 dark:text-white font-sans">Margem líquida reversa</p>
+                                <p className="text-[10px] font-bold text-gray-500 dark:text-blue-400 tracking-tight leading-tight">O sistema recalculará a "Mão de obra geral" para atingir a margem líquida sobre o preço final.</p>
+                             </div>
+                        </div>
+
+                        <div className="text-center space-y-4">
+                            <label htmlFor="desiredNetMargin" className="block text-xs font-black text-gray-400 uppercase tracking-widest">Margem Líquida Alvo</label>
+                            
+                            <div className="relative inline-block">
+                                <input 
+                                    type="text" 
+                                    inputMode="decimal"
+                                    id="desiredNetMargin" 
+                                    autoFocus
+                                    value={desiredNetMargin || ''} 
+                                    onChange={(e) => setDesiredNetMargin(e.target.value)} 
+                                    className="w-40 text-center text-4xl font-black text-blue-600 dark:text-blue-400 bg-transparent border-b-4 border-blue-200 dark:border-blue-800 focus:border-blue-500 outline-none py-2 transition-all" 
+                                    placeholder="0" 
+                                />
+                                <span className="absolute -right-8 top-1/2 -translate-y-1/2 text-2xl font-black text-gray-300">%</span>
+                            </div>
+
+                            <div className="flex justify-center gap-2 mt-4">
+                                {[5, 10, 15, 20].map(val => (
+                                    <button 
+                                        key={val}
+                                        type="button"
+                                        onClick={() => setDesiredNetMargin(val.toString())}
+                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black transition-all ${desiredNetMargin === val.toString() ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 hover:bg-gray-200'}`}
+                                    >
+                                        {val}%
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
+                            <button 
+                                onClick={handleNetMarginCalculation} 
+                                disabled={!desiredNetMargin || parseNumber(desiredNetMargin) <= 0}
+                                className="w-full py-3.5 bg-blue-600 text-white rounded-2xl font-black text-xs shadow-xl shadow-blue-600/30 hover:bg-blue-700 active:scale-95 transition-all disabled:opacity-50 disabled:grayscale"
+                            >
+                                Aplicar nova margem líquida
+                            </button>
+                            <button 
+                                onClick={() => setNetMarginCalcModalOpen(false)} 
                                 className="w-full py-3 text-gray-400 dark:text-gray-500 font-bold text-[10px] uppercase tracking-widest hover:text-gray-600"
                             >
                                 Cancelar
