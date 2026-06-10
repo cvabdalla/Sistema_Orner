@@ -899,7 +899,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                             <div className="space-y-1">
                                 <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-450 ml-1">Custo do sistema (kit)</label>
                                 <div className="relative flex items-center">
-                                    <span className="absolute left-3 text-xs font-semibold text-gray-450">R$</span>
+                                    <span className="absolute left-3 inset-y-0 flex items-center text-xs font-semibold text-gray-450 pointer-events-none select-none">R$</span>
                                     <input 
                                         type="text" 
                                         inputMode="decimal" 
@@ -907,7 +907,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                         value={formState.custoSistema} 
                                         onChange={handleInputChange} 
                                         disabled={isReadOnly} 
-                                        className={`w-full pl-8 rounded-lg border font-semibold text-gray-900 dark:text-white p-1.5 text-xs focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-950/15 outline-none transition-all ${
+                                        className={`w-full py-1.5 pr-2 pl-8 rounded-lg border font-semibold text-gray-900 dark:text-white text-xs focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-950/15 outline-none transition-all ${
                                             isReadOnly 
                                             ? 'bg-gray-50 dark:bg-gray-900 cursor-not-allowed border-gray-200 dark:border-gray-700' 
                                             : 'bg-amber-50/40 dark:bg-amber-950/10 border-amber-200/50 dark:border-amber-900/10 focus:border-amber-400'
@@ -919,7 +919,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                             <div className="space-y-1">
                                 <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-450 ml-1">Mão de obra geral</label>
                                 <div className="relative flex items-center">
-                                    <span className="absolute left-3 text-xs font-semibold text-gray-450">R$</span>
+                                    <span className="absolute left-3 inset-y-0 flex items-center text-xs font-semibold text-gray-450 pointer-events-none select-none">R$</span>
                                     <input 
                                         type="text" 
                                         inputMode="decimal" 
@@ -927,7 +927,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                         value={formState.maoDeObraGeral} 
                                         onChange={handleInputChange} 
                                         disabled={isReadOnly} 
-                                        className={`w-full pl-8 rounded-lg border font-semibold text-gray-900 dark:text-white p-1.5 text-xs focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-950/15 outline-none transition-all ${
+                                        className={`w-full py-1.5 pr-2 pl-8 rounded-lg border font-semibold text-gray-900 dark:text-white text-xs focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-950/15 outline-none transition-all ${
                                             isReadOnly 
                                             ? 'bg-gray-50 dark:bg-gray-900 cursor-not-allowed border-gray-200 dark:border-gray-700' 
                                             : 'bg-amber-50/40 dark:bg-amber-950/10 border-amber-200/50 dark:border-amber-900/10 focus:border-amber-400'
@@ -959,7 +959,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                 <div key={field.name} className="space-y-1">
                                     <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-450 ml-1">{field.label}</label>
                                     <div className="relative flex items-center">
-                                        <span className="absolute left-3 text-xs font-semibold text-gray-450">R$</span>
+                                        <span className="absolute left-3 inset-y-0 flex items-center text-xs font-semibold text-gray-450 pointer-events-none select-none">R$</span>
                                         <input 
                                             type="text" 
                                             inputMode="decimal" 
@@ -967,7 +967,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                             value={(formState as any)[field.name]} 
                                             onChange={handleInputChange} 
                                             disabled={isReadOnly} 
-                                            className={`w-full pl-8 rounded-lg border font-semibold text-gray-900 dark:text-white p-1.5 text-xs focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-950/15 outline-none transition-all ${
+                                            className={`w-full py-1.5 pr-2 pl-8 rounded-lg border font-semibold text-gray-900 dark:text-white text-xs focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-950/15 outline-none transition-all ${
                                                 isReadOnly 
                                                 ? 'bg-gray-50 dark:bg-gray-900 cursor-not-allowed border-gray-200 dark:border-gray-700' 
                                                 : 'bg-amber-50/40 dark:bg-amber-950/10 border-amber-200/50 dark:border-amber-900/10 focus:border-amber-400'
@@ -1002,7 +1002,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                     </div>
                                     <span className="text-gray-400 font-bold text-[10px]">x</span>
                                     <div className="relative flex-1">
-                                        <span className="absolute left-3 text-xs font-semibold text-gray-400">R$</span>
+                                        <span className="absolute left-3 inset-y-0 flex items-center text-xs font-semibold text-gray-400 pointer-events-none select-none">R$</span>
                                         <input 
                                             type="text" 
                                             inputMode="decimal" 
@@ -1010,7 +1010,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                             value={formState.terceiroInstalacaoCusto} 
                                             onChange={handleInputChange} 
                                             disabled={isReadOnly} 
-                                            className={`w-full pl-8 rounded-lg border font-semibold text-gray-900 dark:text-white p-1.5 text-xs focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-950/15 outline-none transition-all ${
+                                            className={`w-full py-1.5 pr-2 pl-8 rounded-lg border font-semibold text-gray-900 dark:text-white text-xs focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-950/15 outline-none transition-all ${
                                                 isReadOnly 
                                                 ? 'bg-gray-50 dark:bg-gray-900 cursor-not-allowed border-gray-200 dark:border-gray-700' 
                                                 : 'bg-amber-50/40 dark:bg-amber-950/10 border-amber-200/50 dark:border-amber-900/10 focus:border-amber-400'
