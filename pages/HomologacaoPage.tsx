@@ -23,6 +23,53 @@ const toSentenceCase = (str: string) => {
     return clean.charAt(0).toUpperCase() + clean.slice(1);
 };
 
+const compressImage = (file: File, maxWidth = 1600, maxHeight = 1600, quality = 0.75): Promise<string> => {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target?.result as string;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+
+                if (width > height) {
+                    if (width > maxWidth) {
+                        height = Math.round((height * maxWidth) / width);
+                        width = maxWidth;
+                    }
+                } else {
+                    if (height > maxHeight) {
+                        width = Math.round((width * maxHeight) / height);
+                        height = maxHeight;
+                    }
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    resolve(event.target?.result as string);
+                    return;
+                }
+                ctx.drawImage(img, 0, 0, width, height);
+
+                const dataUrl = canvas.toDataURL('image/jpeg', quality);
+                resolve(dataUrl);
+            };
+            img.onerror = () => {
+                resolve(event.target?.result as string);
+            };
+        };
+        reader.onerror = () => {
+            resolve('');
+        };
+    });
+};
+
 const FormLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     <label className="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1 ml-0.5 tracking-tight">{children}</label>
 );
@@ -232,7 +279,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
         }
     };
 
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, field: keyof HomologacaoEntry['files']) => {
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: keyof HomologacaoEntry['files']) => {
         const filesList = Array.from(e.target.files || []);
         if (filesList.length === 0) return;
 
@@ -244,31 +291,55 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
             }
         }
 
-        filesList.forEach((file) => {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                if (typeof event.target?.result === 'string') {
-                    const attachment: ExpenseAttachment = {
-                        name: file.name,
-                        data: event.target.result
-                    };
-                    setForm(prev => {
-                        const currentList = prev.files?.[field] || [];
-                        if (field === 'outrosDocumentos' && currentList.length >= 10) {
-                            return prev;
-                        }
-                        return {
-                            ...prev,
-                            files: {
-                                ...(prev.files || {}),
-                                [field]: [...currentList, attachment]
-                            }
-                        };
+        setIsSaving(true);
+        for (const file of filesList) {
+            if (file.size > 15 * 1024 * 1024) {
+                alert(`O arquivo "${file.name}" é muito grande (maior que 15MB). Por favor, forneça um arquivo menor.`);
+                continue;
+            }
+
+            try {
+                let fileData = '';
+                if (file.type.startsWith('image/')) {
+                    // Comprime imagem para economizar o espaço no Supabase/LocalStorage
+                    fileData = await compressImage(file);
+                } else {
+                    // Outros formatos (como PDF)
+                    fileData = await new Promise<string>((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = (event) => resolve(event.target?.result as string || '');
+                        reader.onerror = (err) => reject(err);
+                        reader.readAsDataURL(file);
                     });
                 }
-            };
-            reader.readAsDataURL(file);
-        });
+
+                if (!fileData) continue;
+
+                const attachment: ExpenseAttachment = {
+                    name: file.name,
+                    data: fileData
+                };
+
+                setForm(prev => {
+                    const currentList = prev.files?.[field] || [];
+                    if (field === 'outrosDocumentos' && currentList.length >= 10) {
+                        return prev;
+                    }
+                    return {
+                        ...prev,
+                        files: {
+                            ...(prev.files || {}),
+                            [field]: [...currentList, attachment]
+                        }
+                    };
+                });
+            } catch (err) {
+                console.error("Erro ao processar arquivo:", err);
+                alert(`Erro ao processar o arquivo "${file.name}".`);
+            }
+        }
+        setIsSaving(false);
+        e.target.value = '';
     };
 
     const handleRemoveFile = (field: keyof HomologacaoEntry['files'], index: number) => {
@@ -322,8 +393,9 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
             setModalMessage(editingEntryId ? "Homologação atualizada!" : "Homologação registrada!");
             setSuccessModalOpen(true);
             await loadData();
-        } catch (e) {
-            alert("Erro ao salvar.");
+        } catch (e: any) {
+            console.error("Erro ao salvar homologação:", e);
+            alert(`Erro ao salvar: ${e?.message || 'Verifique o tamanho do anexo ou sua conexão com o banco de dados.'}`);
         } finally {
             setIsSaving(false);
         }
