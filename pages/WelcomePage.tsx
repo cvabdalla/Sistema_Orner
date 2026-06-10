@@ -72,9 +72,9 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ currentUser, userPermissions,
                                 ) : (
                                     <button
                                         onClick={() => onNavigate(module.id as Page)}
-                                        className="w-full mt-2 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all"
+                                        className="w-full mt-2 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs tracking-widest shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all"
                                     >
-                                        Acessar módulo
+                                        Acessar Módulo
                                     </button>
                                 )}
                             </div>

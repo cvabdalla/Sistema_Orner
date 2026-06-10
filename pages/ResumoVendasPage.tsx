@@ -446,7 +446,7 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                             {filteredSalesData.length > 0 ? filteredSalesData.map((item, index) => (
                                 <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors group">
                                     <td className={`${tdClass} text-center font-bold text-gray-400`}>{index + 1}</td>
-                                    <td className={`${tdClass} text-left font-bold text-gray-900 dark:text-white uppercase truncate max-w-[120px]`}>{item.clientName}</td>
+                                    <td className={`${tdClass} text-left font-bold text-gray-900 dark:text-white truncate max-w-[120px]`}>{item.clientName}</td>
                                     <td className={`${tdClass} text-center`}>{new Date(item.date).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
                                     <td className={`${tdClass} font-bold text-blue-700 dark:text-blue-400`}>{formatCurrency(item.closedValue)}</td>
                                     <td className={tdClass}>{formatCurrency(item.systemCost)}</td>

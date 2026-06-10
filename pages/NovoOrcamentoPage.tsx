@@ -1455,7 +1455,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                         </div>
 
                         <div className="text-center space-y-4">
-                            <label htmlFor="desiredMargin" className="block text-xs font-black text-gray-400 uppercase tracking-widest">Margem líquida alvo</label>
+                            <label htmlFor="desiredMargin" className="block text-xs font-black text-gray-400 tracking-widest">Margem líquida alvo</label>
                             
                             <div className="relative inline-block">
                                 <input 
@@ -1495,7 +1495,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                             </button>
                             <button 
                                 onClick={() => setModalOpen(false)} 
-                                className="w-full py-3 text-gray-400 dark:text-gray-500 font-bold text-[10px] uppercase tracking-widest hover:text-gray-600"
+                                className="w-full py-3 text-gray-400 dark:text-gray-500 font-bold text-[10px] tracking-widest hover:text-gray-600"
                             >
                                 Cancelar
                             </button>
@@ -1518,7 +1518,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                         </div>
 
                         <div className="text-center space-y-4">
-                            <label htmlFor="desiredNetProfit" className="block text-xs font-black text-gray-400 uppercase tracking-widest">Lucro Líquido Desejado</label>
+                            <label htmlFor="desiredNetProfit" className="block text-xs font-black text-gray-400 tracking-widest">Lucro Líquido Desejado</label>
                             
                             <div className="relative inline-block">
                                 <span className="absolute -left-8 top-1/2 -translate-y-1/2 text-2xl font-black text-gray-300">R$</span>
@@ -1545,7 +1545,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                             </button>
                             <button 
                                 onClick={() => setNetProfitCalcModalOpen(false)} 
-                                className="w-full py-3 text-gray-400 dark:text-gray-500 font-bold text-[10px] uppercase tracking-widest hover:text-gray-600"
+                                className="w-full py-3 text-gray-400 dark:text-gray-500 font-bold text-[10px] tracking-widest hover:text-gray-600"
                             >
                                 Cancelar
                             </button>
@@ -1568,7 +1568,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                         </div>
 
                         <div className="text-center space-y-4">
-                            <label htmlFor="desiredNetMargin" className="block text-xs font-black text-gray-400 uppercase tracking-widest">Margem Líquida Alvo</label>
+                            <label htmlFor="desiredNetMargin" className="block text-xs font-black text-gray-400 tracking-widest">Margem Líquida Alvo</label>
                             
                             <div className="relative inline-block">
                                 <input 
@@ -1608,7 +1608,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                             </button>
                             <button 
                                 onClick={() => setNetMarginCalcModalOpen(false)} 
-                                className="w-full py-3 text-gray-400 dark:text-gray-500 font-bold text-[10px] uppercase tracking-widest hover:text-gray-600"
+                                className="w-full py-3 text-gray-400 dark:text-gray-500 font-bold text-[10px] tracking-widest hover:text-gray-600"
                             >
                                 Cancelar
                             </button>

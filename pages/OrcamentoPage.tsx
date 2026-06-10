@@ -409,7 +409,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                 </div>
                 <div className="flex justify-between items-start">
                     <div>
-                        <p className="text-[10px] font-black text-indigo-300 uppercase tracking-widest">Volume Comercial</p>
+                        <p className="text-[10px] font-black text-indigo-300 tracking-widest">Volume Comercial</p>
                         <h3 className="text-2xl font-black mt-1 leading-none tracking-tight">{formatCurrency(filtered.totalVendaFiltrado)}</h3>
                     </div>
                     <span className="p-2.5 bg-indigo-800/40 rounded-xl border border-indigo-700/30 text-indigo-200">
@@ -417,7 +417,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                     </span>
                 </div>
                 <div className="mt-4 flex items-center justify-between border-t border-indigo-800/30 pt-3">
-                    <span className="text-[10px] text-indigo-300 font-bold uppercase tracking-wider">Ticket Médio</span>
+                    <span className="text-[10px] text-indigo-300 font-bold tracking-wider">Ticket Médio</span>
                     <span className="text-xs font-extrabold text-indigo-100">{formatCurrency(avgTicket)}</span>
                 </div>
             </div>
@@ -428,7 +428,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                 </div>
                 <div className="flex justify-between items-start">
                     <div>
-                        <p className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Lucratividade Estimada</p>
+                        <p className="text-[10px] font-black text-gray-400 dark:text-gray-500 tracking-widest">Lucratividade Estimada</p>
                         <h3 className="text-2xl font-black mt-1 leading-none tracking-tight text-emerald-600 dark:text-emerald-400">{formatCurrency(filtered.totalLucroFiltrado)}</h3>
                     </div>
                     <span className="p-2.5 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl border border-emerald-100 dark:border-emerald-800/20 text-emerald-600 dark:text-emerald-400">
@@ -436,7 +436,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                     </span>
                 </div>
                 <div className="mt-4 flex items-center justify-between border-t border-gray-100 dark:border-gray-700 pt-3">
-                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Margem Média Geral</span>
+                    <span className="text-[10px] text-gray-400 font-bold tracking-wider">Margem Média Geral</span>
                     <span className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-0.5 rounded-full border border-emerald-100 dark:border-emerald-800/10">
                         {avgMargin.toFixed(1)}%
                     </span>
@@ -449,7 +449,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                 </div>
                 <div className="flex justify-between items-start">
                     <div>
-                        <p className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Funil & Conversão</p>
+                        <p className="text-[10px] font-black text-gray-400 dark:text-gray-500 tracking-widest">Funil & Conversão</p>
                         <h3 className="text-2xl font-black mt-1 leading-none tracking-tight text-indigo-600 dark:text-indigo-400">{approvedStatsCount} <span className="text-xs font-bold text-gray-400">de {allLength} proj.</span></h3>
                     </div>
                     <span className="p-2.5 bg-indigo-50 dark:bg-indigo-950/30 rounded-xl border border-indigo-100 dark:border-indigo-800/10 text-indigo-600 dark:text-indigo-400">
@@ -457,7 +457,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                     </span>
                 </div>
                 <div className="mt-4 flex items-center justify-between border-t border-gray-100 dark:border-gray-700 pt-3">
-                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Aproveitamento</span>
+                    <span className="text-[10px] text-gray-400 font-bold tracking-wider">Aproveitamento</span>
                     <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2.5 py-0.5 rounded-full border border-indigo-100 dark:border-indigo-800/10">
                         {conversionRate.toFixed(1)}%
                     </span>
@@ -472,8 +472,8 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                     <h2 className="text-xl font-black text-gray-800 dark:text-white leading-tight tracking-tight">Projetos & Oportunidades</h2>
                     <p className="text-xs text-gray-400 font-bold mt-1">Gestão inteligente e acompanhamento comercial da sua carteira solar.</p>
                 </div>
-                <button onClick={() => setCurrentPage('NOVO_ORCAMENTO')} className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-600/15 hover:shadow-indigo-600/30 transition-all font-black text-xs uppercase tracking-wider tracking-widest">
-                    <AddIcon className="w-4 h-4" /> Novo projeto
+                <button onClick={() => setCurrentPage('NOVO_ORCAMENTO')} className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-600/15 hover:shadow-indigo-600/30 transition-all font-black text-xs tracking-wider tracking-widest">
+                    <AddIcon className="w-4 h-4" /> Novo Projeto
                 </button>
             </div>
 
@@ -536,7 +536,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                             </button>
                             {isUserDropdownOpen && (
                                 <div className="absolute top-full left-0 mt-2 w-full bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 z-50 animate-fade-in py-2 max-h-64 overflow-y-auto">
-                                    <p className="px-4 py-1.5 text-[8px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 dark:border-gray-700/50 mb-1">Filtrar por Vendedor</p>
+                                    <p className="px-4 py-1.5 text-[8px] font-black text-gray-400 tracking-widest border-b border-gray-50 dark:border-gray-700/50 mb-1">Filtrar por Vendedor</p>
                                     {users.map(user => (
                                         <label key={user.id} className="flex items-center px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer group transition-colors">
                                             <input type="checkbox" className="hidden" checked={selectedUsers.includes(String(user.id))} onChange={() => toggleUserFilter(String(user.id))} />
@@ -569,7 +569,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                         {/* Month block divider section */}
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-gray-50/70 dark:bg-gray-900/60 px-5 py-3.5 rounded-2xl border border-gray-100/50 dark:border-gray-800/40 gap-3">
                             <div className="flex items-center gap-3">
-                                <span className="p-1 px-3 bg-indigo-600/10 text-indigo-700 dark:text-indigo-400 text-xs font-black rounded-xl uppercase tracking-wider">
+                                <span className="p-1 px-3 bg-indigo-600/10 text-indigo-700 dark:text-indigo-400 text-xs font-black rounded-xl tracking-wider">
                                     {month.label}
                                 </span>
                                 <span className="text-xs text-gray-400 font-bold">
@@ -578,12 +578,12 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                             </div>
                             <div className="flex items-center gap-4 text-xs font-bold text-gray-500 dark:text-gray-400">
                                 <div>
-                                    <span className="text-gray-400 text-[10px] uppercase font-black mr-1.5">Valor Orçado:</span>
+                                    <span className="text-gray-400 text-[10px] font-black mr-1.5">Valor Orçado:</span>
                                     <span className="font-extrabold text-indigo-600 dark:text-indigo-400 text-sm">{formatCurrency(month.totalValue)}</span>
                                 </div>
                                 {month.totalProfit > 0 && (
                                     <div className="border-l border-gray-200 dark:border-gray-800 pl-4">
-                                        <span className="text-gray-400 text-[10px] uppercase font-black mr-1.5">Lucro Est.:</span>
+                                        <span className="text-gray-400 text-[10px] font-black mr-1.5">Lucro Est.:</span>
                                         <span className="font-extrabold text-emerald-600 dark:text-emerald-400 text-sm">{formatCurrency(month.totalProfit)}</span>
                                     </div>
                                 )}
@@ -591,7 +591,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                         </div>
 
                         {/* List of budgets for this month */}
-                        <div className="space-y-4 pl-0 sm:pl-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pl-0 sm:pl-3">
                             {month.items.map(orc => {
                                 const d = getDisplayData(orc);
                                 const isReadOnlyStatus = orc.status === 'Finalizado';
@@ -604,94 +604,126 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                                 return (
                                     <div 
                                         key={orc.id} 
-                                        className={`p-5 rounded-2xl border ${currentTheme.border} bg-white dark:bg-gray-800/70 hover:shadow-xl hover:translate-y-[-1px] transition-all duration-300 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-5 relative overflow-hidden`}
+                                        className={`p-4 rounded-xl border ${currentTheme.border} bg-white dark:bg-gray-800/70 hover:shadow-xl hover:translate-y-[-1px] transition-all duration-300 flex flex-col justify-between gap-3.5 relative overflow-hidden`}
                                     >
                                         {/* Colorful Left Border Accent representing modern commercial states */}
-                                        <div className={`absolute top-0 left-0 w-1.5 h-full ${currentTheme.dot}`}></div>
+                                        <div className={`absolute top-0 left-0 w-1 h-full ${currentTheme.dot}`}></div>
 
-                                        {/* Main Deal & Client Details Group */}
-                                        <div className="flex-1 flex gap-4 pl-1.5">
-                                            {/* Letter container representing initial avatar with floating status indicator */}
-                                            <div className="relative hidden sm:block">
-                                                <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-black text-xs ${currentTheme.badge} shadow-inner`}>
-                                                    {d.clientName.substring(0, 2).toUpperCase()}
+                                        {/* Header Row: Avatar, Client Name, and Actions */}
+                                        <div className="flex justify-between items-start gap-2 pl-1">
+                                            {/* Avatar and Info */}
+                                            <div className="flex gap-2.5 items-center min-w-0">
+                                                <div className="relative shrink-0">
+                                                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-black text-[11px] ${currentTheme.badge} shadow-inner`}>
+                                                        {d.clientName.substring(0, 2).toUpperCase()}
+                                                    </div>
+                                                    <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white dark:border-gray-800 flex items-center justify-center ${currentTheme.dot}`}>
+                                                        <div className="w-1 h-1 bg-white rounded-full animate-pulse"></div>
+                                                    </div>
                                                 </div>
-                                                <div className={`absolute -bottom-1.5 -right-1.5 w-4 h-4 rounded-full border-2 border-white dark:border-gray-800 flex items-center justify-center ${currentTheme.dot}`}>
-                                                    <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></div>
-                                                </div>
-                                            </div>
-
-                                            <div className="space-y-1.5">
-                                                <div className="flex items-center flex-wrap gap-2">
-                                                    <h4 className="font-extrabold text-base text-gray-800 dark:text-slate-100 tracking-tight leading-none">{d.clientName}</h4>
-                                                    <span className="text-[9px] font-black text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-700/40 px-2 py-0.5 rounded-md border border-gray-100 dark:border-gray-700">
-                                                        #ORC-{orc.id}
-                                                    </span>
+                                                <div className="min-w-0">
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                        <h4 className="font-extrabold text-sm text-gray-800 dark:text-slate-100 tracking-tight leading-snug truncate" title={d.clientName}>
+                                                            {d.clientName}
+                                                        </h4>
+                                                        <span className="text-[8px] font-black text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-700/40 px-1.5 py-0.5 rounded-md border border-gray-100 dark:border-gray-700 shrink-0">
+                                                            #{orc.id}
+                                                        </span>
+                                                    </div>
                                                     {orc.lavagem_cadastrada && (
-                                                        <span className="inline-flex items-center gap-1 text-[8px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-full border border-emerald-100 dark:border-emerald-800/10 shadow-sm animate-pulse">
+                                                        <span className="inline-flex items-center gap-1 text-[8px] font-black text-emerald-600 dark:text-emerald-400 tracking-widest mt-0.5">
                                                             <SparklesIcon className="w-2.5 h-2.5 text-emerald-500" /> Lavagem Ativa
                                                         </span>
                                                     )}
                                                 </div>
+                                            </div>
 
-                                                {/* CRM Commercial Tag Metadata list under client info */}
-                                                <div className="flex flex-wrap items-center gap-2">
-                                                    <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-gray-950/20 px-2.5 py-1 rounded-lg text-[10px] font-bold text-gray-500 dark:text-gray-400 border border-gray-100 dark:border-gray-700/50">
-                                                        <CalendarIcon className="w-3.5 h-3.5 text-gray-400" />
-                                                        <span>{new Date(d.dataOrcamento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</span>
-                                                    </div>
-                                                    {d.placasQtd > 0 ? (
-                                                        <div className="flex items-center gap-1.5 bg-indigo-50/50 dark:bg-indigo-950/10 px-2.5 py-1 rounded-lg text-[10px] font-bold text-indigo-600 dark:text-indigo-400 border border-indigo-100/20 dark:border-indigo-800/10">
-                                                            <CalculatorIcon className="w-3.5 h-3.5 text-indigo-500" />
-                                                            <span>{d.placasQtd} Módulos ({Math.round(d.placasQtd * 0.55).toFixed(1)} kWp)</span>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-gray-950/20 px-2.5 py-1 rounded-lg text-[10px] font-bold text-gray-400 dark:text-gray-500 border border-gray-100 dark:border-gray-700/50">
-                                                            <CalculatorIcon className="w-3.5 h-3.5 text-gray-300" />
-                                                            <span>Sem placas salvas</span>
-                                                        </div>
-                                                    )}
-                                                    {d.fornecedor && (
-                                                        <div className="flex items-center gap-1 bg-amber-50/50 dark:bg-amber-950/10 px-2 py-0.5 rounded-lg text-[9px] font-extrabold text-amber-700 dark:text-amber-400 border border-amber-100/10 dark:border-amber-800/10 uppercase tracking-wider">
-                                                            <span>{d.fornecedor}</span>
-                                                        </div>
-                                                    )}
-                                                    <div className="flex items-center gap-1 bg-purple-50/50 dark:bg-purple-950/10 px-2 py-0.5 rounded-lg text-[9px] font-extrabold text-purple-700 dark:text-purple-400 border border-purple-100/10 dark:border-purple-800/10">
-                                                        <span>{d.variantCount} {d.variantCount === 1 ? 'Opção' : 'Opções'}</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-1 bg-slate-100 dark:bg-gray-700 px-2 py-0.5 rounded-lg text-[9px] font-black text-gray-500 dark:text-gray-300 uppercase tracking-tighter">
-                                                        <span>Resp: {d.ownerName}</span>
-                                                    </div>
-                                                </div>
+                                            {/* Top Corner Action Buttons */}
+                                            <div className="flex gap-1 shrink-0">
+                                                <button 
+                                                    onClick={() => onEdit(orc)} 
+                                                    className={`p-1.5 rounded-lg border transition-all duration-200 ${
+                                                        isApproved 
+                                                        ? 'text-blue-600 bg-blue-50 border-blue-100 hover:bg-blue-100 dark:bg-blue-900/20 dark:border-blue-800/10' 
+                                                        : 'text-gray-400 bg-gray-50 border-gray-100 hover:text-indigo-600 hover:bg-indigo-50 dark:bg-gray-800 dark:border-gray-700/50 dark:hover:text-indigo-400'
+                                                    }`} 
+                                                    title={isApproved ? 'Visualizar Proposta' : 'Editar Proposta'}
+                                                >
+                                                    {isApproved ? <EyeIcon className="w-3.5 h-3.5" /> : <EditIcon className="w-3.5 h-3.5" />}
+                                                </button>
+                                                {(currentUser.profileId === ADMIN_PROFILE_ID) && !isReadOnlyStatus && (
+                                                    <button 
+                                                        onClick={() => { setOrcamentoToDeleteId(orc.id); setDeleteModalOpen(true); }} 
+                                                        className="p-1.5 text-gray-400 bg-gray-50 border-gray-100 hover:text-red-600 hover:bg-red-50 dark:bg-gray-800 dark:border-gray-700/50 dark:hover:text-red-400 hover:border-red-100 rounded-lg transition-all duration-200"
+                                                        title="Excluir Orçamento"
+                                                    >
+                                                        <TrashIcon className="w-3.5 h-3.5" />
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
 
-                                        {/* Financials, Interactive Status Pill & Hover Action Items */}
-                                        <div className="flex flex-wrap sm:flex-nowrap items-center justify-between sm:justify-end gap-5 w-full lg:w-auto border-t lg:border-t-0 border-gray-100 dark:border-gray-700 pt-4 lg:pt-0">
-                                            {/* Responsive Financial figures representing price and profit margin metrics */}
-                                            <div className="text-left sm:text-right">
-                                                <span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider">Valor do Contrato</span>
-                                                <h4 className="font-black text-lg text-indigo-600 dark:text-indigo-400 tracking-tight leading-none mt-1">{formatCurrency(d.displayPrice)}</h4>
-                                                {d.lucroLiquido > 0 && (
-                                                    <div className="flex items-center gap-1 sm:justify-end mt-1 text-[10px]">
-                                                        <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">{individualMargin.toFixed(1)}% Margem</span>
-                                                        <span className="text-gray-400">({formatCurrency(d.lucroLiquido)} lucro)</span>
-                                                    </div>
-                                                )}
+                                        {/* Financial Summary Block */}
+                                        <div className="bg-gray-50/50 dark:bg-gray-900/10 p-2.5 rounded-xl border border-gray-100/40 dark:border-gray-700/30 flex justify-between items-center pl-3">
+                                            <div>
+                                                <span className="text-[9px] font-black text-gray-450 dark:text-gray-500 tracking-wider">Valor do Contrato</span>
+                                                <h4 className="font-extrabold text-sm text-indigo-600 dark:text-indigo-400 tracking-tight mt-0.5">{formatCurrency(d.displayPrice)}</h4>
                                             </div>
+                                            {d.lucroLiquido > 0 && (
+                                                <div className="text-right">
+                                                    <span className="text-emerald-600 dark:text-emerald-400 font-extrabold text-[9px] bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded-md border border-emerald-100/20 dark:border-emerald-800/10">
+                                                        {individualMargin.toFixed(1)}% Margem
+                                                    </span>
+                                                    <span className="block text-gray-400 text-[8px] font-bold mt-1">({formatCurrency(d.lucroLiquido)} lucro)</span>
+                                                </div>
+                                            )}
+                                        </div>
 
-                                            {/* Custom beautiful native styled select dropdown mimicking custom pills */}
+                                        {/* Tags Block - Clean Metadata Wrap */}
+                                        <div className="flex flex-wrap gap-1.5 pl-1">
+                                            <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-950/20 px-2 py-0.5 rounded-md text-[9px] font-bold text-gray-500 dark:text-gray-400 border border-gray-100/60 dark:border-gray-700/40">
+                                                <CalendarIcon className="w-3 h-3 text-gray-400" />
+                                                <span>{new Date(d.dataOrcamento).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</span>
+                                            </div>
+                                            {d.placasQtd > 0 ? (
+                                                <div className="flex items-center gap-1 bg-indigo-50/55 dark:bg-indigo-950/10 px-2 py-0.5 rounded-md text-[9px] font-bold text-indigo-600 dark:text-indigo-400 border border-indigo-100/20 dark:border-indigo-800/10">
+                                                    <CalculatorIcon className="w-3 h-3 text-indigo-500" />
+                                                    <span>{d.placasQtd} Mod.</span>
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-950/20 px-2 py-0.5 rounded-md text-[9px] font-bold text-gray-400 dark:text-gray-500 border border-gray-100/60 dark:border-gray-700/40">
+                                                    <CalculatorIcon className="w-3 h-3 text-gray-300" />
+                                                    <span>Sem placas</span>
+                                                </div>
+                                            )}
+                                            {d.fornecedor && (
+                                                <div className="flex items-center gap-1 bg-amber-50/50 dark:bg-amber-950/10 px-1.5 py-0.5 rounded-md text-[8px] font-extrabold text-amber-700 dark:text-amber-400 border border-amber-100/10 dark:border-amber-800/10 tracking-wider">
+                                                    <span>{d.fornecedor}</span>
+                                                </div>
+                                            )}
+                                            <div className="flex items-center gap-1 bg-purple-50/50 dark:bg-purple-950/10 px-1.5 py-0.5 rounded-md text-[8px] font-extrabold text-purple-700 dark:text-purple-400 border border-purple-100/10 dark:border-purple-800/10">
+                                                <span>{d.variantCount} {d.variantCount === 1 ? 'Opção' : 'Opções'}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1 bg-slate-100 dark:bg-gray-700 px-1.5 py-0.5 rounded-md text-[8px] font-black text-gray-500 dark:text-gray-350 tracking-wide">
+                                                <UsersIcon className="w-2.5 h-2.5 text-gray-400" />
+                                                <span>{d.ownerName}</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Footer Row: Status Dropdown */}
+                                        <div className="flex justify-between items-center pt-2.5 border-t border-gray-100 dark:border-gray-700/50 pl-1">
+                                            <span className="text-[9px] font-black text-gray-400 dark:text-gray-500 tracking-wider">Status do Projeto</span>
                                             <div className="relative">
                                                 <select 
                                                     value={orc.status} 
                                                     onChange={e => handleStatusChange(orc.id, e.target.value as any)} 
                                                     disabled={isReadOnlyStatus}
-                                                    className={`pl-3 pr-8 py-2 rounded-xl text-[10px] font-black border uppercase tracking-wider outline-none cursor-pointer hover:shadow-md transition-all bg-no-repeat bg-right ${currentTheme.bg} ${currentTheme.text} ${currentTheme.border} ${isReadOnlyStatus ? 'opacity-65 cursor-not-allowed' : ''}`}
+                                                    className={`pl-2.5 pr-7 py-1.5 rounded-lg text-[9px] font-black border tracking-wider outline-none cursor-pointer hover:shadow-sm transition-all bg-no-repeat bg-right ${currentTheme.bg} ${currentTheme.text} ${currentTheme.border} ${isReadOnlyStatus ? 'opacity-65 cursor-not-allowed' : ''}`}
                                                     style={{ 
                                                         appearance: 'none', 
                                                         backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='currentColor'%3E%3Cpath fill-rule='evenodd' d='M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z' clip-rule='evenodd'/%3E%3C/svg%3E")`, 
-                                                        backgroundSize: '1.15rem', 
-                                                        backgroundPosition: 'right 0.35rem center' 
+                                                        backgroundSize: '1rem', 
+                                                        backgroundPosition: 'right 0.25rem center' 
                                                     }}
                                                 >
                                                     <option value="Em Aberto" className="bg-white dark:bg-gray-800 text-amber-800 font-bold">Em aberto</option>
@@ -700,30 +732,6 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                                                     <option value="Parado" className="bg-white dark:bg-gray-800 text-orange-800 font-bold">Parado</option>
                                                     <option value="Perdido" className="bg-white dark:bg-gray-800 text-rose-800 font-bold">Perdido</option>
                                                 </select>
-                                            </div>
-
-                                            {/* Floating circular key icons */}
-                                            <div className="flex gap-1">
-                                                <button 
-                                                    onClick={() => onEdit(orc)} 
-                                                    className={`p-2.5 rounded-xl border transition-all duration-200 ${
-                                                        isApproved 
-                                                        ? 'text-blue-600 bg-blue-50 border-blue-100 hover:bg-blue-100 dark:bg-blue-900/20 dark:border-blue-800/10' 
-                                                        : 'text-gray-400 bg-gray-50 border-gray-100 hover:text-indigo-600 hover:bg-indigo-50 dark:bg-gray-800 dark:border-gray-700/50 dark:hover:text-indigo-400'
-                                                    }`} 
-                                                    title={isApproved ? 'Visualizar Proposta' : 'Editar Proposta'}
-                                                >
-                                                    {isApproved ? <EyeIcon className="w-4 h-4" /> : <EditIcon className="w-4 h-4" />}
-                                                </button>
-                                                {(currentUser.profileId === ADMIN_PROFILE_ID) && !isReadOnlyStatus && (
-                                                    <button 
-                                                        onClick={() => { setOrcamentoToDeleteId(orc.id); setDeleteModalOpen(true); }} 
-                                                        className="p-2.5 text-gray-400 bg-gray-50 border-gray-100 hover:text-red-600 hover:bg-red-50 dark:bg-gray-800 dark:border-gray-700/50 dark:hover:text-red-400 hover:border-red-100 rounded-xl transition-all duration-200"
-                                                        title="Excluir Orçamento"
-                                                    >
-                                                        <TrashIcon className="w-4 h-4" />
-                                                    </button>
-                                                )}
                                             </div>
                                         </div>
                                     </div>

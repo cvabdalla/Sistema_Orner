@@ -118,8 +118,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, companyLogo }) =>
                     </form>
 
                     <div className="p-6 bg-gray-50 dark:bg-gray-800/30 border-t border-gray-100 dark:border-gray-800 text-center">
-                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">
-                            Orner tecnologia solar &copy; {new Date().getFullYear()}
+                        <p className="text-[10px] text-gray-400 font-bold tracking-tight">
+                            Orner Tecnologia Solar &copy; {new Date().getFullYear()}
                         </p>
                     </div>
                 </div>
