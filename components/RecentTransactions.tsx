@@ -117,8 +117,8 @@ const RecentTransactions: React.FC<RecentTransactionsProps> = ({ transactions, o
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden h-full flex flex-col">
       <div className="p-6 border-b border-gray-100 dark:border-gray-700">
-        <h3 className="text-xl font-bold text-gray-900 dark:text-white">Próximos vencimentos</h3>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-semibold">Resumo organizado e agrupado.</p>
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white">Vencimentos do Mês em Vigor</h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-semibold">Resumo de recebíveis e pagamentos agrupados.</p>
       </div>
       <div className="overflow-x-auto flex-1">
         <table className="min-w-full text-left">

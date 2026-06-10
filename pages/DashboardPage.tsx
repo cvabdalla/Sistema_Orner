@@ -24,6 +24,17 @@ const DashboardPage: React.FC = () => {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Mês e Ano em vigor (Atuais)
+  const now = new Date();
+  const currentMonth = now.getMonth(); // 0-indexed: 5 para Junho
+  const currentYear = now.getFullYear(); // 2026
+
+  const isInCurrentMonth = (dateStr?: string) => {
+      if (!dateStr) return false;
+      const [y, m] = dateStr.split('-');
+      return parseInt(y, 10) === currentYear && parseInt(m, 10) === currentMonth + 1;
+  };
+
   // Estados para edição
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<FinancialTransaction | null>(null);
@@ -63,8 +74,14 @@ const DashboardPage: React.FC = () => {
 
   const metrics = useMemo(() => {
       const activeTxs = transactions.filter(t => t.status !== 'cancelado');
-      const receitaTotal = activeTxs.filter(t => t.type === 'receita' && t.status === 'pago').reduce((a, c) => a + c.amount, 0);
-      const despesaTotal = activeTxs.filter(t => t.type === 'despesa' && t.status === 'pago').reduce((a, c) => a + c.amount, 0);
+      
+      const currentMonthActiveTxs = activeTxs.filter(t => {
+          const dateRef = t.paymentDate || t.dueDate;
+          return isInCurrentMonth(dateRef);
+      });
+
+      const receitaTotal = currentMonthActiveTxs.filter(t => t.type === 'receita' && t.status === 'pago').reduce((a, c) => a + c.amount, 0);
+      const despesaTotal = currentMonthActiveTxs.filter(t => t.type === 'despesa' && t.status === 'pago').reduce((a, c) => a + c.amount, 0);
       const orcamentosAprovados = orcamentos.filter(o => o.status === 'Aprovado').length;
       const orcamentosTotal = orcamentos.length;
 
@@ -181,8 +198,8 @@ const DashboardPage: React.FC = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <DashboardCard title="Receita (Realizada)" value={formatCurrency(metrics.receitaTotal)} icon={FinanceiroIcon} color="bg-green-500" />
-        <DashboardCard title="Despesa (Realizada)" value={formatCurrency(metrics.despesaTotal)} icon={TrendUpIcon} color="bg-red-500" />
+        <DashboardCard title="Receita (Mês Atual)" value={formatCurrency(metrics.receitaTotal)} icon={FinanceiroIcon} color="bg-green-500" />
+        <DashboardCard title="Despesa (Mês Atual)" value={formatCurrency(metrics.despesaTotal)} icon={TrendUpIcon} color="bg-red-500" />
         <DashboardCard title="Projetos aprovados" value={metrics.orcamentosAprovados.toString()} icon={OrcamentoIcon} color="bg-blue-500" />
         <DashboardCard title="Total de orçamentos" value={metrics.orcamentosTotal.toString()} icon={UsersIcon} color="bg-indigo-500" />
       </div>
@@ -269,7 +286,7 @@ const DashboardPage: React.FC = () => {
         </div>
         <div className="lg:col-span-1">
             <RecentTransactions 
-                transactions={transactions.filter(t => t.status === 'pendente')} 
+                transactions={transactions.filter(t => t.status === 'pendente' && isInCurrentMonth(t.dueDate))} 
                 onEdit={handleEditTransaction}
                 onDelete={handleDeleteTransaction}
             />
