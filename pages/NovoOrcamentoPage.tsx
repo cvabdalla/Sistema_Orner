@@ -688,187 +688,380 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
 
     return (
         <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                    {variants.map(variant => (
-                        <div key={variant.id} onClick={() => setActiveVariantId(variant.id)} className={`group relative flex items-center gap-2 px-4 py-2 rounded-lg cursor-pointer transition-all border text-sm font-medium ${activeVariantId === variant.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-transparent hover:bg-gray-200 dark:hover:bg-gray-600'}`}>
-                            {variant.isPrincipal && <svg className={`w-3.5 h-3.5 ${activeVariantId === variant.id ? 'text-yellow-300' : 'text-yellow-500'} fill-current`} viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>}
-                            <span className="select-none">{variant.name}</span>
-                            {activeVariantId === variant.id && !isReadOnly && (
-                                 <div className="flex items-center ml-2 pl-2 border-l border-white/30 space-x-1">
-                                    <button type="button" onClick={startRename} className="p-0.5 hover:bg-white/20 rounded"><EditIcon className="w-3 h-3" /></button>
-                                    {!variant.isPrincipal && <button type="button" onClick={(e) => setPrincipal(variant.id, e)} className="p-0.5 hover:bg-white/20 rounded"><CheckCircleIcon className="w-3 h-3" /></button>}
-                                    <button type="button" onClick={(e) => removeVariant(variant.id, e)} className="p-0.5 hover:bg-red-500/80 rounded"><TrashIcon className="w-3 h-3" /></button>
-                                 </div>
-                            )}
-                        </div>
-                    ))}
-                    {!isReadOnly && <button type="button" onClick={addNewVariant} className="p-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full transition-colors text-gray-600 dark:text-gray-300" title="Nova opção"><AddIcon className="w-4 h-4" /></button>}
+            {/* Top Navigation & Option Variants Row */}
+            <div className="flex flex-col md:flex-row justify-between items-center gap-3 bg-white dark:bg-gray-800 p-3 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700/50">
+                <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+                    {variants.map(variant => {
+                        const isMainActive = activeVariantId === variant.id;
+                        return (
+                            <div 
+                                key={variant.id} 
+                                onClick={() => setActiveVariantId(variant.id)} 
+                                className={`group relative flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg cursor-pointer transition-all duration-200 border text-xs font-semibold ${
+                                    isMainActive 
+                                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/10' 
+                                    : 'bg-gray-50 dark:bg-gray-800/80 hover:bg-gray-100 dark:hover:bg-gray-700/80 text-gray-500 dark:text-gray-300 border-gray-100 dark:border-gray-700'
+                                }`}
+                            >
+                                {variant.isPrincipal && (
+                                    <svg className={`w-3.5 h-3.5 ${isMainActive ? 'text-amber-300' : 'text-amber-500'} fill-current`} viewBox="0 0 20 20">
+                                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                    </svg>
+                                )}
+                                <span>{variant.name}</span>
+                                {isMainActive && !isReadOnly && (
+                                     <div className="flex items-center ml-2 pl-2 border-l border-white/30 space-x-1">
+                                        <button type="button" onClick={startRename} className="p-1 hover:bg-white/20 rounded-lg transition-colors" title="Renomear">
+                                            <EditIcon className="w-3 h-3" />
+                                        </button>
+                                        {!variant.isPrincipal && (
+                                            <button type="button" onClick={(e) => setPrincipal(variant.id, e)} className="p-1 hover:bg-white/20 rounded-lg transition-colors" title="Definir Principal">
+                                                <CheckCircleIcon className="w-3 h-3" />
+                                            </button>
+                                        )}
+                                        <button type="button" onClick={(e) => removeVariant(variant.id, e)} className="p-1 hover:bg-red-500 rounded-lg transition-colors" title="Excluir">
+                                            <TrashIcon className="w-3 h-3" />
+                                        </button>
+                                     </div>
+                                 )}
+                            </div>
+                        );
+                    })}
+                    {!isReadOnly && (
+                        <button 
+                            type="button" 
+                            onClick={addNewVariant} 
+                            className="p-2 bg-gray-50 dark:bg-gray-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/20 text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 border border-gray-100 dark:border-gray-700/50 rounded-lg transition-all" 
+                            title="Nova opção de orçamento"
+                        >
+                            <AddIcon className="w-4 h-4" />
+                        </button>
+                    )}
                 </div>
                 {isReadOnly && (
                     <button 
                         onClick={() => setCurrentPage('ORCAMENTO')} 
-                        className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-semibold shadow-lg transition-all"
+                        className="w-full md:w-auto flex items-center justify-center gap-1.5 px-4 py-1.5 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-200 border border-gray-200/50 dark:border-gray-700 rounded-lg font-semibold text-xs transition-all"
                     >
-                        <ArrowLeftIcon className="w-5 h-5" /> Voltar para lista
+                        <ArrowLeftIcon className="w-4 h-4" /> Voltar para lista
                     </button>
                 )}
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-xl p-4 text-white shadow-lg flex items-center justify-between">
-                    <div>
-                        <p className="text-xs font-medium opacity-80 tracking-wide">Preço venda final</p>
-                        <p className="text-2xl font-bold">{formatCurrency(calculated.precoVendaFinal || 0)}</p>
+            {/* Core Financial Indicators Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {/* Preço venda card */}
+                <div className="bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-800 rounded-xl p-3.5 text-white shadow-md flex items-center justify-between border border-indigo-500/10 relative overflow-hidden group">
+                    <div className="absolute right-[-10%] top-[-20%] w-32 h-32 rounded-full bg-white/5 blur-xl pointer-events-none group-hover:scale-125 transition-transform duration-500"></div>
+                    <div className="space-y-0.5 z-10">
+                        <span className="text-[10px] font-bold opacity-75 block">Preço Venda Final</span>
+                        <span className="text-xl font-bold tracking-tight block">{formatCurrency(calculated.precoVendaFinal || 0)}</span>
                     </div>
                     {!isReadOnly && (
                         <button 
                             onClick={() => setPriceCalcModalOpen(true)} 
-                            className="p-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
-                            title="Calculadora de preço alvo"
+                            className="p-2 bg-white/10 hover:bg-white/20 active:scale-95 text-white rounded-lg transition-all shadow-inner z-10 border border-white/10"
+                            title="Ajustar preço final (Mão de Obra ajustável)"
                         >
-                            <CalculatorIcon className="w-5 h-5" />
+                            <CalculatorIcon className="w-4 h-4" />
                         </button>
                     )}
                 </div>
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-between">
-                    <div>
-                        <p className="text-xs font-medium text-gray-500 tracking-wide">Lucro líquido</p>
-                        <p className="text-xl font-bold text-green-600 dark:text-green-400">{formatCurrency(calculated.lucroLiquido || 0)}</p>
+
+                {/* Lucro líquido card */}
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-3.5 border border-emerald-100/80 dark:border-emerald-800/20 shadow-sm flex items-center justify-between hover:shadow-md transition-all duration-300 relative overflow-hidden group">
+                    <div className="absolute left-0 top-0 w-1 h-full bg-green-500"></div>
+                    <div className="space-y-0.5">
+                        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 block">Lucro Líquido</span>
+                        <span className="text-xl font-bold text-green-600 dark:text-green-400 tracking-tight block">{formatCurrency(calculated.lucroLiquido || 0)}</span>
                     </div>
                     {!isReadOnly && (
                         <button 
                             type="button"
                             onClick={() => setNetProfitCalcModalOpen(true)} 
-                            className="p-2 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"
-                            title="Calculadora de lucro líquido alvo"
+                            className="p-2 bg-green-50 dark:bg-green-950/40 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/60 active:scale-95 rounded-lg border border-green-100/30 dark:border-green-800/10 transition-all shadow-sm"
+                            title="Ajustar lucro líquido desejado"
                         >
-                            <CalculatorIcon className="w-5 h-5" />
+                            <CalculatorIcon className="w-4 h-4" />
                         </button>
                     )}
                 </div>
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-between">
-                    <div>
-                        <p className="text-xs font-medium text-gray-500 tracking-wide">Margem líquida</p>
-                        <p className="text-xl font-bold text-blue-600 dark:text-blue-400">{calculated.margemLiquida?.toFixed(2) || 0}%</p>
+
+                {/* Margem líquida card */}
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-3.5 border border-sky-100/80 dark:border-sky-800/20 shadow-sm flex items-center justify-between hover:shadow-md transition-all duration-300 relative overflow-hidden group">
+                    <div className="absolute left-0 top-0 w-1 h-full bg-blue-500"></div>
+                    <div className="space-y-0.5">
+                        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 block">Margem Líquida</span>
+                        <span className="text-xl font-bold text-blue-600 dark:text-blue-400 tracking-tight block">{calculated.margemLiquida?.toFixed(2) || 0}%</span>
                     </div>
                     {!isReadOnly && (
                         <button 
                             type="button"
                             onClick={() => setNetMarginCalcModalOpen(true)} 
-                            className="p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
-                            title="Calculadora de margem líquida alvo"
+                            className="p-2 bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/60 active:scale-95 rounded-lg border border-blue-100/30 dark:border-blue-800/10 transition-all shadow-sm"
+                            title="Ajustar margem líquida alvo"
                         >
-                            <CalculatorIcon className="w-5 h-5" />
+                            <CalculatorIcon className="w-4 h-4" />
                         </button>
                     )}
                 </div>
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-between"><div><p className="text-xs font-medium text-gray-500 tracking-wide">Margem serviço</p><p className="text-xl font-bold text-purple-600 dark:text-purple-400">{calculated.margemLiquidaServico?.toFixed(2) || 0}%</p></div>{!isReadOnly && <button onClick={() => setModalOpen(true)} className="p-2 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors"><CalculatorIcon className="w-5 h-5" /></button>}</div>
+
+                {/* Margem serviço card */}
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-3.5 border border-purple-100/80 dark:border-purple-800/20 shadow-sm flex items-center justify-between hover:shadow-md transition-all duration-300 relative overflow-hidden group">
+                    <div className="absolute left-0 top-0 w-1 h-full bg-purple-500"></div>
+                    <div className="space-y-0.5">
+                        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 block">Margem Serviço</span>
+                        <span className="text-xl font-bold text-purple-600 dark:text-purple-400 tracking-tight block">{calculated.margemLiquidaServico?.toFixed(2) || 0}%</span>
+                    </div>
+                    {!isReadOnly && (
+                        <button 
+                            type="button"
+                            onClick={() => setModalOpen(true)} 
+                            className="p-2 bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/60 active:scale-95 rounded-lg border border-purple-100/30 dark:border-purple-800/10 transition-all shadow-sm"
+                            title="Ajustar margem líquida de serviço"
+                        >
+                            <CalculatorIcon className="w-4 h-4" />
+                        </button>
+                    )}
+                </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                <div className="lg:col-span-8 space-y-6">
-                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                        <h3 className="text-sm font-bold text-gray-900 dark:text-white tracking-wide border-b border-gray-100 dark:border-gray-700 pb-3 mb-4 flex items-center gap-2"><span className="w-1 h-4 bg-indigo-500 rounded-full"></span> Dados iniciais</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Data do orçamento</label><input type="date" name="dataOrcamento" value={formState.dataOrcamento} onChange={handleInputChange} disabled={isReadOnly} className={`w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 p-2.5 text-sm outline-none text-gray-700 dark:text-white font-bold focus:ring-2 focus:ring-indigo-500 transition-all ${isReadOnly ? 'opacity-70 cursor-not-allowed' : ''}`} /></div>
-                            <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Nome do cliente</label><input type="text" name="nomeCliente" value={formState.nomeCliente} onChange={handleInputChange} disabled={isReadOnly} className={`w-full rounded-lg border-gray-300 dark:border-gray-600 ${isReadOnly ? 'bg-gray-50 cursor-not-allowed' : 'bg-yellow-100 dark:bg-yellow-900/30'} p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 dark:text-white font-bold transition-all`} placeholder="Ex: João Silva" /></div>
+            {/* Main Interactive Work Stage */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                
+                {/* Form Input Columns */}
+                <div className="lg:col-span-8 space-y-4">
+                    
+                    {/* Panel 1: Dados do Cliente */}
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700/50 p-4 relative overflow-hidden">
+                        <h3 className="text-xs font-bold text-gray-800 dark:text-white border-b border-gray-100 dark:border-gray-700/60 pb-2 mb-4 flex items-center gap-2">
+                            <span className="w-1.5 h-3.5 bg-indigo-600 rounded-full"></span> 
+                            Dados iniciais do projeto
+                        </h3>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                            <div className="space-y-1">
+                                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-450 ml-1">Data do orçamento</label>
+                                <input 
+                                    type="date" 
+                                    name="dataOrcamento" 
+                                    value={formState.dataOrcamento} 
+                                    onChange={handleInputChange} 
+                                    disabled={isReadOnly} 
+                                    className={`w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 py-1.5 px-3 text-xs outline-none text-gray-700 dark:text-white font-semibold focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-950/15 focus:border-indigo-500 transition-all ${isReadOnly ? 'opacity-70 cursor-not-allowed bg-gray-50' : 'cursor-pointer'}`} 
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-450 ml-1">Nome do cliente</label>
+                                <input 
+                                    type="text" 
+                                    name="nomeCliente" 
+                                    value={formState.nomeCliente} 
+                                    onChange={handleInputChange} 
+                                    disabled={isReadOnly} 
+                                    className={`w-full rounded-lg border py-1.5 px-3 text-xs focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-950/15 outline-none text-gray-900 dark:text-white font-semibold transition-all ${
+                                        isReadOnly 
+                                        ? 'bg-gray-50 dark:bg-gray-900 cursor-not-allowed border-gray-200 dark:border-gray-700' 
+                                        : 'bg-amber-50/40 dark:bg-amber-950/10 border-amber-200/50 dark:border-amber-900/10 focus:border-amber-400'
+                                    }`} 
+                                    placeholder="Nome completo do cliente" 
+                                />
+                            </div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-                            <div>
-                                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Fornecedor do kit</label>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 mt-3.5">
+                            <div className="space-y-1">
+                                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-450 ml-1">Fornecedor do kit</label>
                                 <div className="relative">
                                     <select 
                                         name="fornecedor" 
                                         value={formState.fornecedor} 
                                         onChange={handleInputChange} 
                                         disabled={isReadOnly} 
-                                        className={`w-full rounded-lg border-gray-300 dark:border-gray-600 ${isReadOnly ? 'bg-gray-50 cursor-not-allowed' : 'bg-yellow-100 dark:bg-yellow-900/30'} p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-gray-900 dark:text-white font-bold transition-all appearance-none cursor-pointer`}
+                                        className={`w-full rounded-lg border py-1.5 px-3 text-xs focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-950/15 outline-none text-gray-900 dark:text-white font-semibold transition-all appearance-none cursor-pointer ${
+                                            isReadOnly 
+                                            ? 'bg-gray-50 dark:bg-gray-900 cursor-not-allowed border-gray-200 dark:border-gray-700' 
+                                            : 'bg-amber-50/40 dark:bg-amber-950/10 border-amber-200/50 dark:border-amber-900/10 focus:border-amber-400'
+                                        }`}
                                     >
-                                        <option value="">Selecione um fornecedor...</option>
+                                        <option value="">Selecione o fornecedor...</option>
                                         {suppliers.map(sup => (
                                             <option key={sup.id} value={sup.name}>{sup.name}</option>
                                         ))}
                                     </select>
-                                    {!isReadOnly && <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-40"><ChevronDownIcon className="w-4 h-4" /></div>}
+                                    {!isReadOnly && <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400"><ChevronDownIcon className="w-3.5 h-3.5" /></div>}
                                 </div>
                                 {suppliers.length === 0 && !isReadOnly && (
-                                    <p className="text-[10px] text-orange-600 font-bold mt-1 leading-tight">Nenhum fornecedor cadastrado. Vá em Configurações Gerais.</p>
+                                    <p className="text-[9px] text-orange-600 font-semibold mt-1 leading-tight bg-orange-50 dark:bg-orange-950/20 px-2 py-0.5 rounded border border-orange-100 dark:border-orange-900/30">Nenhum fornecedor cadastrado nas Configurações Gerais.</p>
                                 )}
                             </div>
-                            <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Custo do sistema (kit)</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">R$</span><input type="text" inputMode="decimal" name="custoSistema" value={formState.custoSistema} onChange={handleInputChange} disabled={isReadOnly} className={`w-full pl-8 rounded-lg border-gray-300 dark:border-gray-600 ${isReadOnly ? 'bg-gray-50 cursor-not-allowed' : 'bg-yellow-100 dark:bg-yellow-900/30'} font-bold text-gray-900 dark:text-white p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none`} /></div></div>
-                            <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Mão de obra geral</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">R$</span><input type="text" inputMode="decimal" name="maoDeObraGeral" value={formState.maoDeObraGeral} onChange={handleInputChange} disabled={isReadOnly} className={`w-full pl-8 rounded-lg border-gray-300 dark:border-gray-600 ${isReadOnly ? 'bg-gray-50 cursor-not-allowed' : 'bg-yellow-100 dark:bg-yellow-900/30'} font-bold text-gray-900 dark:text-white p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none`} /></div></div>
+
+                            <div className="space-y-1">
+                                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-450 ml-1">Custo do sistema (kit)</label>
+                                <div className="relative flex items-center">
+                                    <span className="absolute left-3 text-xs font-semibold text-gray-450">R$</span>
+                                    <input 
+                                        type="text" 
+                                        inputMode="decimal" 
+                                        name="custoSistema" 
+                                        value={formState.custoSistema} 
+                                        onChange={handleInputChange} 
+                                        disabled={isReadOnly} 
+                                        className={`w-full pl-8 rounded-lg border font-semibold text-gray-900 dark:text-white p-1.5 text-xs focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-950/15 outline-none transition-all ${
+                                            isReadOnly 
+                                            ? 'bg-gray-50 dark:bg-gray-900 cursor-not-allowed border-gray-200 dark:border-gray-700' 
+                                            : 'bg-amber-50/40 dark:bg-amber-950/10 border-amber-200/50 dark:border-amber-900/10 focus:border-amber-400'
+                                        }`} 
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-450 ml-1">Mão de obra geral</label>
+                                <div className="relative flex items-center">
+                                    <span className="absolute left-3 text-xs font-semibold text-gray-450">R$</span>
+                                    <input 
+                                        type="text" 
+                                        inputMode="decimal" 
+                                        name="maoDeObraGeral" 
+                                        value={formState.maoDeObraGeral} 
+                                        onChange={handleInputChange} 
+                                        disabled={isReadOnly} 
+                                        className={`w-full pl-8 rounded-lg border font-semibold text-gray-900 dark:text-white p-1.5 text-xs focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-950/15 outline-none transition-all ${
+                                            isReadOnly 
+                                            ? 'bg-gray-50 dark:bg-gray-900 cursor-not-allowed border-gray-200 dark:border-gray-700' 
+                                            : 'bg-amber-50/40 dark:bg-amber-950/10 border-amber-200/50 dark:border-amber-900/10 focus:border-amber-400'
+                                        }`} 
+                                    />
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                        <h3 className="text-sm font-bold text-gray-900 dark:text-white tracking-wide border-b border-gray-100 dark:border-gray-700 pb-3 mb-4 flex items-center justify-between">
+                    {/* Panel 2: Custos de Instalação e Terceiros */}
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700/50 p-4">
+                        <h3 className="text-xs font-bold text-gray-800 dark:text-white border-b border-gray-100 dark:border-gray-700/60 pb-2 mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
-                                <span className="w-1 h-4 bg-orange-500 rounded-full"></span> 
-                                Custos de instalação e terceiros
+                                <span className="w-1.5 h-3.5 bg-orange-500 rounded-full"></span> 
+                                Serviços e custos de instalação
                             </div>
-                            <span className="text-[10px] font-black text-orange-600 bg-orange-50 dark:bg-orange-900/30 px-2.5 py-1 rounded-lg border border-orange-100 dark:border-orange-900 shadow-sm">
+                            <span className="text-[10px] font-bold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/30 px-2.5 py-0.5 rounded-lg border border-orange-100 dark:border-orange-850/20 shadow-sm animate-fade-in">
                                 Total do quadro: {formatCurrency(calculated.totalInstalacao || 0)}
                             </span>
                         </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
                             {[
                                 { label: "Visita técnica", name: "visitaTecnicaCusto" }, 
                                 { label: "Projeto / homologação", name: "projetoHomologacaoCusto" }, 
                                 { label: "Custo de viagem", name: "custoViagem" }, 
-                                { label: "Adequacao local", name: "adequacaoLocalCusto" }
+                                { label: "Adequação local", name: "adequacaoLocalCusto" }
                             ].map(field => (
-                                <div key={field.name}>
-                                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{field.label}</label>
-                                    <div className="relative">
-                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">R$</span>
-                                        <input type="text" inputMode="decimal" name={field.name} value={(formState as any)[field.name]} onChange={handleInputChange} disabled={isReadOnly} className={`w-full pl-8 rounded-lg border-gray-300 dark:border-gray-600 ${isReadOnly ? 'bg-gray-50 cursor-not-allowed' : 'bg-yellow-100 dark:bg-yellow-900/30'} font-bold text-gray-900 dark:text-white p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none`} />
+                                <div key={field.name} className="space-y-1">
+                                    <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-450 ml-1">{field.label}</label>
+                                    <div className="relative flex items-center">
+                                        <span className="absolute left-3 text-xs font-semibold text-gray-450">R$</span>
+                                        <input 
+                                            type="text" 
+                                            inputMode="decimal" 
+                                            name={field.name} 
+                                            value={(formState as any)[field.name]} 
+                                            onChange={handleInputChange} 
+                                            disabled={isReadOnly} 
+                                            className={`w-full pl-8 rounded-lg border font-semibold text-gray-900 dark:text-white p-1.5 text-xs focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-950/15 outline-none transition-all ${
+                                                isReadOnly 
+                                                ? 'bg-gray-50 dark:bg-gray-900 cursor-not-allowed border-gray-200 dark:border-gray-700' 
+                                                : 'bg-amber-50/40 dark:bg-amber-950/10 border-amber-200/50 dark:border-amber-900/10 focus:border-amber-400'
+                                            }`} 
+                                        />
                                     </div>
                                 </div>
                             ))}
-                            <div>
-                                <div className="flex justify-between items-center mb-1"><label className="block text-xs font-medium text-gray-500 dark:text-gray-400">Instalação - placas</label><span className="text-[10px] font-bold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">Subtotal: {formatCurrency(parseNumber(formState.terceiroInstalacaoQtd) * parseNumber(formState.terceiroInstalacaoCusto))}</span></div>
-                                <div className="flex items-center gap-2"><div className="relative w-20"><input type="text" inputMode="numeric" name="terceiroInstalacaoQtd" value={formState.terceiroInstalacaoQtd} onChange={handleInputChange} disabled={isReadOnly} className={`w-full rounded-lg border-gray-300 dark:border-gray-600 ${isReadOnly ? 'bg-gray-50 cursor-not-allowed' : 'bg-yellow-100 dark:bg-yellow-900/30'} font-bold text-gray-900 dark:text-white p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-center`} placeholder="Qtd" /></div><span className="text-gray-400 text-xs">x</span><div className="relative flex-1"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs font-bold">R$</span><input type="text" inputMode="decimal" name="terceiroInstalacaoCusto" value={formState.terceiroInstalacaoCusto} onChange={handleInputChange} disabled={isReadOnly} className={`w-full pl-8 rounded-lg border-gray-300 dark:border-gray-600 ${isReadOnly ? 'bg-gray-50 cursor-not-allowed' : 'bg-yellow-100 dark:bg-yellow-900/30'} font-bold text-gray-900 dark:text-white p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none`} placeholder="Unitário" /></div></div>
+                            <div className="space-y-1 sm:col-span-2 md:col-span-1">
+                                <div className="flex justify-between items-center ml-1">
+                                    <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-450">Instalação (placas)</label>
+                                    <span className="text-[10px] font-bold text-orange-600 dark:text-orange-400">
+                                        Subtotal: {formatCurrency(parseNumber(formState.terceiroInstalacaoQtd) * parseNumber(formState.terceiroInstalacaoCusto))}
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <div className="relative w-16">
+                                        <input 
+                                            type="text" 
+                                            inputMode="numeric" 
+                                            name="terceiroInstalacaoQtd" 
+                                            value={formState.terceiroInstalacaoQtd} 
+                                            onChange={handleInputChange} 
+                                            disabled={isReadOnly} 
+                                            className={`w-full rounded-lg border font-semibold text-gray-900 dark:text-white p-1.5 text-xs focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-950/15 outline-none text-center transition-all ${
+                                                isReadOnly 
+                                                ? 'bg-gray-50 dark:bg-gray-900 cursor-not-allowed border-gray-200 dark:border-gray-700' 
+                                                : 'bg-amber-50/40 dark:bg-amber-950/10 border-amber-200/50 dark:border-amber-900/10 focus:border-amber-400'
+                                            }`} 
+                                            placeholder="Qtd" 
+                                        />
+                                    </div>
+                                    <span className="text-gray-400 font-bold text-[10px]">x</span>
+                                    <div className="relative flex-1">
+                                        <span className="absolute left-3 text-xs font-semibold text-gray-400">R$</span>
+                                        <input 
+                                            type="text" 
+                                            inputMode="decimal" 
+                                            name="terceiroInstalacaoCusto" 
+                                            value={formState.terceiroInstalacaoCusto} 
+                                            onChange={handleInputChange} 
+                                            disabled={isReadOnly} 
+                                            className={`w-full pl-8 rounded-lg border font-semibold text-gray-900 dark:text-white p-1.5 text-xs focus:ring-2 focus:ring-indigo-100 dark:focus:ring-indigo-950/15 outline-none transition-all ${
+                                                isReadOnly 
+                                                ? 'bg-gray-50 dark:bg-gray-900 cursor-not-allowed border-gray-200 dark:border-gray-700' 
+                                                : 'bg-amber-50/40 dark:bg-amber-950/10 border-amber-200/50 dark:border-amber-900/10 focus:border-amber-400'
+                                            }`} 
+                                            placeholder="Custo placa" 
+                                        />
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-                        <div className="p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/30 flex justify-between items-center">
-                            <h3 className="text-sm font-bold text-gray-900 dark:text-white tracking-wide flex items-center gap-2">
-                                <CubeIcon className="w-4 h-4 text-indigo-500" /> Materiais e estrutura
+                    {/* Panel 3: Componentes e Materiais Adicionais */}
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700/50 overflow-hidden">
+                        <div className="p-3 border-b border-gray-100 dark:border-gray-700/60 bg-gray-50/80 dark:bg-gray-900/50 flex justify-between items-center flex-wrap gap-2">
+                            <h3 className="text-xs font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                                <CubeIcon className="w-4 h-4 text-indigo-500" /> Materiais e componentes adicionais
                             </h3>
-                            <div className="flex items-center gap-4">
-                                <span className="text-xs font-bold bg-indigo-100 text-indigo-700 px-2 py-1 rounded">Total: {formatCurrency(calculated.totalEstrutura || 0)}</span>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100/30 dark:border-indigo-800/30 px-2 py-0.5 rounded-lg">
+                                    Total: {formatCurrency(calculated.totalEstrutura || 0)}
+                                </span>
                                 {!isReadOnly && (
                                     <button 
                                         type="button"
                                         onClick={() => setIsAddItemModalOpen(true)}
-                                        className="flex items-center gap-2 text-[10px] font-black bg-indigo-600 text-white px-3 py-1.5 rounded-lg shadow-sm hover:bg-indigo-700 transition-all"
+                                        className="flex items-center gap-1 text-[10px] font-bold bg-indigo-600 text-white hover:bg-indigo-700 px-2.5 py-1 rounded-lg shadow-sm transition-all"
                                     >
-                                        <PlusIcon className="w-3.5 h-3.5" /> Adicionar item
+                                        <PlusIcon className="w-3 h-3" /> Incluir item
                                     </button>
                                 )}
                             </div>
                         </div>
                         <div className="overflow-x-auto">
-                            <table className="w-full text-sm text-left">
-                                <thead className="text-xs text-gray-500 bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
-                                    <tr>
-                                        <th className="px-6 py-3">Item / descrição</th>
-                                        <th className="px-6 py-3 text-center w-24">Qtd</th>
-                                        <th className="px-6 py-3 text-right w-28">Custo unit.</th>
-                                        <th className="px-6 py-3 text-center w-24">% Acrésc.</th>
-                                        <th className="px-6 py-3 text-right w-32">Total</th>
-                                        {!isReadOnly && <th className="px-4 w-10"></th>}
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="text-[11px] font-medium text-gray-450 bg-gray-50/50 dark:bg-gray-900/20 border-b border-gray-100 dark:border-gray-800">
+                                        <th className="px-4 py-2">Item / descrição</th>
+                                        <th className="px-4 py-2 text-center w-24">Qtd</th>
+                                        <th className="px-4 py-2 text-right w-28">Custo unitário</th>
+                                        <th className="px-4 py-2 text-center w-24">% Acrésc.</th>
+                                        <th className="px-4 py-2 text-right w-32">Total ajustado</th>
+                                        {!isReadOnly && <th className="px-3 w-10 text-center"></th>}
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-xs">
                                     {combinedSortedItems.map((item) => {
                                         const itemId = String(item.id);
                                         const isFromStock = item.isFromStock;
                                         const data = isFromStock ? item.itemData : item;
-                                        
+                                         
                                         const n_qty = parseNumber(data.qty);
                                         const n_cost = parseNumber(data.cost);
                                         const n_markup = parseNumber(data.markup);
@@ -876,18 +1069,29 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                         const totalItemValue = n_qty * effectiveUnitCost;
 
                                         return (
-                                            <tr key={`${isFromStock ? 'stock' : 'off'}-${itemId}`} className={`transition-colors ${!isFromStock ? 'bg-amber-50/50 dark:bg-amber-900/10 border-l-4 border-l-amber-400 hover:bg-amber-100/50' : 'hover:bg-indigo-50 dark:hover:bg-indigo-900/10'}`}>
-                                                <td className={`px-6 py-2 font-bold ${!isFromStock ? 'text-amber-800 dark:text-amber-200' : (item.isFixedInBudget ? 'text-gray-700 dark:text-gray-200' : 'text-indigo-600')}`}>
-                                                    <div className="flex items-center gap-2">
+                                            <tr 
+                                                key={`${isFromStock ? 'stock' : 'off'}-${itemId}`} 
+                                                className={`transition-colors duration-150 ${
+                                                    !isFromStock 
+                                                    ? 'bg-amber-50/20 dark:bg-amber-950/5 border-l-4 border-l-amber-400 hover:bg-amber-50/30' 
+                                                    : 'hover:bg-indigo-50/20 dark:hover:bg-indigo-950/5'
+                                                }`}
+                                            >
+                                                <td className="px-4 py-2">
+                                                    <div className="flex items-center gap-1.5">
                                                         {!isFromStock ? (
-                                                            <span className="text-[9px] bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded font-black whitespace-nowrap">Externo</span>
+                                                            <span className="text-[8px] bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-400 border border-amber-200/50 dark:border-amber-800/10 px-1.5 py-0.5 rounded font-bold">Externo</span>
                                                         ) : (
-                                                            !item.isFixedInBudget && <span className="text-[9px] bg-indigo-100 px-1.5 py-0.5 rounded font-black whitespace-nowrap">Manual</span>
+                                                            !item.isFixedInBudget && (
+                                                                <span className="text-[8px] bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-400 border border-indigo-100/50 dark:border-indigo-800/10 px-1.5 py-0.5 rounded font-bold">Estoque</span>
+                                                            )
                                                         )}
-                                                        {item.name}
+                                                        <span className={`font-semibold ${!isFromStock ? 'text-amber-800 dark:text-amber-200' : 'text-gray-700 dark:text-gray-200'}`}>
+                                                            {item.name}
+                                                        </span>
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-2">
+                                                <td className="px-4 py-2 text-center">
                                                     <input 
                                                         type="text" 
                                                         inputMode="decimal"
@@ -897,25 +1101,34 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                                             : handleOffStockItemChange(itemId, 'qty', e.target.value)
                                                         } 
                                                         disabled={isReadOnly} 
-                                                        className={`w-full text-center bg-transparent border-b outline-none py-1 font-semibold ${!isFromStock ? 'border-amber-300 focus:border-amber-600' : 'border-gray-300 focus:border-indigo-600'}`} 
+                                                        className={`w-14 text-center bg-transparent border-b outline-none py-1 text-xs font-semibold ${
+                                                            !isFromStock 
+                                                            ? 'border-amber-300 focus:border-amber-600 text-amber-700 dark:text-amber-400' 
+                                                            : 'border-gray-200 focus:border-indigo-600 focus:ring-0 text-gray-700 dark:text-gray-200'
+                                                        }`} 
                                                     />
                                                 </td>
-                                                <td className={`px-6 py-2 text-right font-medium ${!isFromStock ? 'text-amber-600' : 'text-gray-500'}`}>
+                                                <td className="px-4 py-2 text-right">
                                                     {!isFromStock ? (
-                                                        <input 
-                                                            type="text" 
-                                                            inputMode="decimal"
-                                                            value={data.cost} 
-                                                            onChange={(e) => handleOffStockItemChange(itemId, 'cost', e.target.value)} 
-                                                            disabled={isReadOnly} 
-                                                            className="w-full text-right bg-transparent border-none focus:ring-0 p-1 text-[10px]" 
-                                                        />
+                                                        <div className="flex items-center justify-end">
+                                                            <span className="text-gray-400 text-xs mr-0.5 font-semibold">R$</span>
+                                                            <input 
+                                                                type="text" 
+                                                                inputMode="decimal"
+                                                                value={data.cost} 
+                                                                onChange={(e) => handleOffStockItemChange(itemId, 'cost', e.target.value)} 
+                                                                disabled={isReadOnly} 
+                                                                className="w-16 text-right bg-transparent border-b border-amber-300 focus:border-amber-600 outline-none py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400" 
+                                                            />
+                                                        </div>
                                                     ) : (
-                                                        formatCurrency(n_cost)
+                                                        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+                                                            {formatCurrency(n_cost)}
+                                                        </span>
                                                     )}
                                                 </td>
-                                                <td className="px-6 py-2">
-                                                    <div className="flex items-center justify-center gap-1">
+                                                <td className="px-4 py-2 text-center">
+                                                    <div className="flex items-center justify-center gap-0.5">
                                                         <input 
                                                             type="text" 
                                                             inputMode="decimal"
@@ -925,23 +1138,27 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                                                 : handleOffStockItemChange(itemId, 'markup', e.target.value)
                                                             } 
                                                             disabled={isReadOnly} 
-                                                            className={`w-12 text-center bg-transparent border-b outline-none py-1 font-bold ${!isFromStock ? 'border-amber-300 focus:border-amber-600 text-amber-700' : 'border-indigo-300 focus:border-indigo-600 text-indigo-600'}`} 
+                                                            className={`w-10 text-center bg-transparent border-b outline-none py-1 text-xs font-semibold ${
+                                                                !isFromStock 
+                                                                ? 'border-amber-300 focus:border-amber-600 text-amber-800 dark:text-amber-400' 
+                                                                : 'border-indigo-200 focus:border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                                                            }`} 
                                                         />
                                                         <span className={`text-[10px] font-bold ${!isFromStock ? 'text-amber-500' : 'text-indigo-400'}`}>%</span>
                                                     </div>
                                                 </td>
-                                                <td className={`px-6 py-2 text-right font-bold ${!isFromStock ? 'text-amber-700 dark:text-amber-300' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                                                <td className={`px-4 py-2 text-right font-bold text-xs ${!isFromStock ? 'text-amber-700 dark:text-amber-300' : 'text-indigo-600 dark:text-indigo-400'}`}>
                                                     {formatCurrency(totalItemValue)}
                                                 </td>
                                                 {!isReadOnly && (
-                                                    <td className="px-4 text-center">
+                                                    <td className="px-3 text-center">
                                                         <button 
                                                             type="button"
                                                             onClick={() => isFromStock ? removeStockManualItem(itemId) : removeOffStockItem(itemId)}
-                                                            className="text-red-400 hover:text-red-600 transition-colors"
-                                                            title="Remover item"
+                                                            className="p-1 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/25 transition-all"
+                                                            title="Remover componente"
                                                         >
-                                                            <TrashIcon className="w-4 h-4" />
+                                                            <TrashIcon className="w-3.5 h-3.5" />
                                                         </button>
                                                     </td>
                                                 )}
@@ -951,9 +1168,9 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
 
                                     {combinedSortedItems.length === 0 && (
                                         <tr>
-                                            <td colSpan={6} className="px-6 py-12 text-center text-gray-400 italic text-xs">
-                                                Nenhum item configurado. <br/>
-                                                Use o botão "Adicionar item" acima para incluir componentes.
+                                            <td colSpan={6} className="px-4 py-10 text-center text-gray-400 italic text-xs">
+                                                Nenhum item adicional configurado. <br className="mb-1"/>
+                                                Use o botão <strong className="text-indigo-600 dark:text-indigo-400">"Incluir item"</strong> acima para incluir materiais adicionais.
                                             </td>
                                         </tr>
                                     )}
@@ -963,53 +1180,109 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                     </div>
                 </div>
 
-                <div className="lg:col-span-4 space-y-6">
-                    <div className="sticky top-6 space-y-6">
-                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-indigo-100 dark:border-gray-700 overflow-hidden">
-                            <div className="bg-indigo-600 p-4 text-white"><h3 className="font-bold flex items-center gap-2"><DollarIcon className="w-5 h-5" /> Fechamento financeiro</h3></div>
-                            <div className="p-6 space-y-4">
-                                <div className="flex justify-between items-center text-sm"><span className="text-gray-500 dark:text-gray-400">Custo do sistema</span><span className="font-medium text-gray-900 dark:text-white">{formatCurrency(calculated.valorVendaSistema)}</span></div>
-                                <div className="flex justify-between items-center text-sm"><span className="text-gray-500 dark:text-gray-400">Custo mão de obra total</span><span className="font-medium text-gray-900 dark:text-white">{formatCurrency(calculated.custoMO)}</span></div>
-                                <div className="border-t border-gray-100 dark:border-gray-700 pt-3 flex justify-between items-center"><span className="text-lg font-bold text-gray-800 dark:text-white">Preço venda</span><span className="text-xl font-bold text-indigo-600 dark:text-indigo-400">{formatCurrency(calculated.precoVendaFinal)}</span></div>
+                {/* Sticky Side Panel for Financial Breakdown & Saving */}
+                <div className="lg:col-span-4 space-y-4">
+                    <div className="sticky top-4 space-y-4">
+                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-100 dark:border-gray-700/50 overflow-hidden text-xs">
+                            <div className="bg-indigo-600 p-3.5 text-white flex items-center gap-2 shadow-sm">
+                                <DollarIcon className="w-4 h-4 text-indigo-200" />
+                                <h3 className="font-bold text-xs">Fechamento do orçamento</h3>
                             </div>
-                            <div className="bg-gray-50 dark:bg-gray-900/50 p-6 border-t border-gray-200 dark:border-gray-700 space-y-4">
-                                <h4 className="text-xs font-bold text-gray-500 tracking-wide mb-3">Impostos e comissões</h4>
-                                <div className="flex items-center justify-between">
-                                    <label className="text-sm text-gray-600 dark:text-gray-400">nf serviço (%)</label>
-                                    <div className="flex items-center gap-2">
-                                        <input type="text" inputMode="decimal" name="nfServicoPerc" value={formState.nfServicoPerc} onChange={handleInputChange} disabled={isReadOnly} className={`w-16 text-right rounded border-gray-300 p-1 text-sm ${isReadOnly ? 'bg-gray-100' : 'bg-white'}`} />
-                                        <span className="text-sm font-medium w-20 text-right">{formatCurrency(calculated.nfServicoValor)}</span>
+                            <div className="p-4 space-y-2.5">
+                                <div className="flex justify-between items-center font-medium">
+                                    <span className="text-gray-500 dark:text-gray-400">Total equipamentos</span>
+                                    <span className="font-bold text-gray-800 dark:text-gray-100">{formatCurrency(calculated.valorVendaSistema)}</span>
+                                </div>
+                                <div className="flex justify-between items-center font-medium">
+                                    <span className="text-gray-500 dark:text-gray-400">Total mão de obra</span>
+                                    <span className="font-bold text-gray-800 dark:text-gray-100">{formatCurrency(calculated.custoMO)}</span>
+                                </div>
+                                <div className="border-t border-gray-100 dark:border-gray-700/60 pt-3 flex justify-between items-center bg-indigo-50/20 dark:bg-indigo-950/10 px-3 py-1.5 rounded-lg border border-indigo-100/10">
+                                    <span className="text-xs font-bold text-indigo-800 dark:text-indigo-300">Preço final</span>
+                                    <span className="text-lg font-bold text-indigo-700 dark:text-indigo-400 tracking-tight">{formatCurrency(calculated.precoVendaFinal)}</span>
+                                </div>
+                            </div>
+                            
+                            {/* Impostos, Comissoes e Outras variaveis */}
+                            <div className="bg-gray-55/40 dark:bg-gray-900/40 p-4 border-t border-gray-100 dark:border-gray-700/60 space-y-3">
+                                <h4 className="text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2">Deduções, taxas e descontos</h4>
+                                
+                                <div className="flex items-center justify-between gap-3">
+                                    <label className="font-medium text-gray-500 dark:text-gray-400">Imposto serviço (%)</label>
+                                    <div className="flex items-center gap-1.5">
+                                        <input 
+                                            type="text" 
+                                            inputMode="decimal" 
+                                            name="nfServicoPerc" 
+                                            value={formState.nfServicoPerc} 
+                                            onChange={handleInputChange} 
+                                            disabled={isReadOnly} 
+                                            className={`w-12 text-center rounded-lg border border-gray-200 dark:border-gray-700 p-1 text-xs font-semibold ${isReadOnly ? 'bg-gray-100 text-gray-400' : 'bg-white text-gray-850 dark:bg-gray-800 dark:text-white focus:border-indigo-500 outline-none'}`} 
+                                        />
+                                        <span className="text-xs font-semibold text-gray-500 w-20 text-right">{formatCurrency(calculated.nfServicoValor)}</span>
                                     </div>
                                 </div>
-                                <div className="flex items-center justify-between">
-                                    <label className="text-sm text-gray-600 dark:text-gray-400">Comissão venda</label>
-                                    <div className="flex items-center gap-2">
-                                        <select name="comissaoVendasOpcao" value={formState.comissaoVendasOpcao} onChange={handleInputChange} disabled={isReadOnly} className={`rounded border-gray-300 p-1 text-xs ${isReadOnly ? 'bg-gray-100' : 'bg-white'}`}>
+
+                                <div className="flex items-center justify-between gap-3">
+                                    <label className="font-medium text-gray-500 dark:text-gray-400">Comissão de venda</label>
+                                    <div className="flex items-center gap-1.5">
+                                        <select 
+                                            name="comissaoVendasOpcao" 
+                                            value={formState.comissaoVendasOpcao} 
+                                            onChange={handleInputChange} 
+                                            disabled={isReadOnly} 
+                                            className={`rounded-lg border border-gray-200 dark:border-gray-700 p-1 text-xs font-semibold ${isReadOnly ? 'bg-gray-100' : 'bg-white dark:bg-gray-800'}`}
+                                        >
                                             <option value="Não">Não</option>
                                             <option value="Sim">Sim</option>
                                         </select>
-                                        {formState.comissaoVendasOpcao === 'Sim' && <input type="text" inputMode="decimal" name="comissaoVendasPerc" value={formState.comissaoVendasPerc} onChange={handleInputChange} disabled={isReadOnly} className={`w-12 text-right rounded border-gray-300 p-1 text-sm ${isReadOnly ? 'bg-gray-100' : 'bg-white'}`} />}
-                                        <span className="text-sm font-medium w-20 text-right">{formatCurrency(calculated.comissaoVendasValor)}</span>
+                                        {formState.comissaoVendasOpcao === 'Sim' && (
+                                            <input 
+                                                type="text" 
+                                                inputMode="decimal" 
+                                                name="comissaoVendasPerc" 
+                                                value={formState.comissaoVendasPerc} 
+                                                onChange={handleInputChange} 
+                                                disabled={isReadOnly} 
+                                                className={`w-8 text-center rounded-lg border border-gray-200 dark:border-gray-700 p-1 text-xs font-semibold ${isReadOnly ? 'bg-gray-100' : 'bg-white text-gray-850 dark:bg-gray-800 dark:text-white focus:border-indigo-500 outline-none'}`} 
+                                            />
+                                        )}
+                                        <span className="text-xs font-semibold text-gray-500 w-20 text-right">{formatCurrency(calculated.comissaoVendasValor)}</span>
                                     </div>
                                 </div>
-                                <div className="flex items-center justify-between">
-                                    <label className="text-sm text-gray-600 dark:text-gray-400">Desconto (%)</label>
-                                    <div className="flex items-center gap-2">
-                                        <input type="text" inputMode="decimal" name="descontoAplicadoPerc" value={formState.descontoAplicadoPerc} onChange={handleInputChange} disabled={isReadOnly} className={`w-16 text-right rounded border-gray-300 p-1 text-sm ${isReadOnly ? 'bg-gray-100' : 'bg-white'}`} />
-                                        <span className="text-sm font-medium w-20 text-right text-red-500">-{formatCurrency(calculated.descontoAplicadoValor)}</span>
+
+                                <div className="flex items-center justify-between gap-3">
+                                    <label className="font-medium text-gray-550 dark:text-gray-400 text-red-500/90">Desconto geral (%)</label>
+                                    <div className="flex items-center gap-1.5">
+                                        <input 
+                                            type="text" 
+                                            inputMode="decimal" 
+                                            name="descontoAplicadoPerc" 
+                                            value={formState.descontoAplicadoPerc} 
+                                            onChange={handleInputChange} 
+                                            disabled={isReadOnly} 
+                                            className={`w-12 text-center rounded-lg border border-gray-200 dark:border-gray-700 p-1 text-xs font-semibold ${isReadOnly ? 'bg-gray-100' : 'bg-white text-gray-850 dark:bg-gray-800 dark:text-white focus:border-indigo-500 outline-none'}`} 
+                                        />
+                                        <span className="text-xs font-bold text-red-500 dark:text-red-400 w-20 text-right">-{formatCurrency(calculated.descontoAplicadoValor)}</span>
                                     </div>
                                 </div>
                             </div>
-                            <div className="bg-green-50 dark:bg-green-900/20 p-4 border-t border-green-100 dark:border-green-800 text-center"><p className="text-xs text-green-600 dark:text-green-400 font-bold tracking-wide mb-1">Lucro líquido real</p><p className="text-2xl font-bold text-green-700 dark:text-green-300">{formatCurrency(calculated.lucroLiquido)}</p></div>
+                            
+                            {/* Real Liquid Profit display */}
+                            <div className="bg-emerald-500/10 dark:bg-emerald-950/20 p-4 border-t border-emerald-100 dark:border-emerald-900/30 text-center">
+                                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold mb-0.5">Lucro líquido real estimado</p>
+                                <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300 tracking-tight">{formatCurrency(calculated.lucroLiquido)}</p>
+                            </div>
                         </div>
 
                         {!isReadOnly && (
                             <button 
                                 onClick={handleSaveTrigger} 
                                 disabled={isSaving}
-                                className={`w-full flex items-center justify-center gap-3 py-4 ${isSaving ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'} text-white rounded-2xl font-black text-sm shadow-xl shadow-green-600/20 transition-all active:scale-95`}
+                                className={`w-full flex items-center justify-center gap-1.5 py-2.5 ${isSaving ? 'bg-gray-400 grayscale cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 hover:shadow-emerald-600/15 hover:shadow-md'} text-white rounded-xl font-bold text-xs transition-all active:scale-95 shadow-md shadow-emerald-500/10`}
                             >
-                                <SaveIcon className="w-6 h-6" /> {isSaving ? 'Salvando...' : (orcamentoToEdit ? 'Atualizar orçamento' : 'Finalizar e salvar projeto')}
+                                <SaveIcon className="w-4 h-4" /> 
+                                <span>{isSaving ? 'Salvando...' : (orcamentoToEdit ? 'Atualizar orçamento' : 'Gravar e salvar projeto')}</span>
                             </button>
                         )}
                     </div>
