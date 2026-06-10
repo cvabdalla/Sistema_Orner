@@ -35,6 +35,12 @@ const DashboardPage: React.FC = () => {
       return parseInt(y, 10) === currentYear && parseInt(m, 10) === currentMonth + 1;
   };
 
+  const isInCurrentYear = (dateStr?: string) => {
+      if (!dateStr) return false;
+      const y = dateStr.substring(0, 4);
+      return parseInt(y, 10) === currentYear;
+  };
+
   // Estados para edição
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<FinancialTransaction | null>(null);
@@ -75,15 +81,17 @@ const DashboardPage: React.FC = () => {
   const metrics = useMemo(() => {
       const activeTxs = transactions.filter(t => t.status !== 'cancelado');
       
-      const currentMonthActiveTxs = activeTxs.filter(t => {
+      const currentYearActiveTxs = activeTxs.filter(t => {
           const dateRef = t.paymentDate || t.dueDate;
-          return isInCurrentMonth(dateRef);
+          return isInCurrentYear(dateRef);
       });
 
-      const receitaTotal = currentMonthActiveTxs.filter(t => t.type === 'receita' && t.status === 'pago').reduce((a, c) => a + c.amount, 0);
-      const despesaTotal = currentMonthActiveTxs.filter(t => t.type === 'despesa' && t.status === 'pago').reduce((a, c) => a + c.amount, 0);
-      const orcamentosAprovados = orcamentos.filter(o => o.status === 'Aprovado').length;
-      const orcamentosTotal = orcamentos.length;
+      const receitaTotal = currentYearActiveTxs.filter(t => t.type === 'receita' && t.status === 'pago').reduce((a, c) => a + c.amount, 0);
+      const despesaTotal = currentYearActiveTxs.filter(t => t.type === 'despesa' && t.status === 'pago').reduce((a, c) => a + c.amount, 0);
+      
+      const currentYearOrcamentos = orcamentos.filter(o => isInCurrentYear(o.savedAt));
+      const orcamentosAprovados = currentYearOrcamentos.filter(o => o.status === 'Aprovado').length;
+      const orcamentosTotal = currentYearOrcamentos.length;
 
       const openPurchaseRequests = purchaseRequests.filter(r => r.status === 'Aberto').length;
       const lowStockItems = stockItems.filter(i => i.lineStatus !== 'Fora de Linha' && i.quantity <= i.minQuantity).length;
@@ -198,10 +206,10 @@ const DashboardPage: React.FC = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <DashboardCard title="Receita (Mês Atual)" value={formatCurrency(metrics.receitaTotal)} icon={FinanceiroIcon} color="bg-green-500" />
-        <DashboardCard title="Despesa (Mês Atual)" value={formatCurrency(metrics.despesaTotal)} icon={TrendUpIcon} color="bg-red-500" />
-        <DashboardCard title="Projetos aprovados" value={metrics.orcamentosAprovados.toString()} icon={OrcamentoIcon} color="bg-blue-500" />
-        <DashboardCard title="Total de orçamentos" value={metrics.orcamentosTotal.toString()} icon={UsersIcon} color="bg-indigo-500" />
+        <DashboardCard title="Receita (YTD)" value={formatCurrency(metrics.receitaTotal)} icon={FinanceiroIcon} color="bg-green-500" />
+        <DashboardCard title="Despesa (YTD)" value={formatCurrency(metrics.despesaTotal)} icon={TrendUpIcon} color="bg-red-500" />
+        <DashboardCard title="Projetos aprovados (YTD)" value={metrics.orcamentosAprovados.toString()} icon={OrcamentoIcon} color="bg-blue-500" />
+        <DashboardCard title="Total de orçamentos (YTD)" value={metrics.orcamentosTotal.toString()} icon={UsersIcon} color="bg-indigo-500" />
       </div>
 
       <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-lg border border-orange-100 dark:border-orange-900/30">
