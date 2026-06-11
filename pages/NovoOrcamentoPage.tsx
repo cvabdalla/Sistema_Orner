@@ -647,11 +647,15 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         if (isReadOnly) return;
         const newId = Date.now().toString();
         const activeVariant = variants.find(v => v.id === activeVariantId) || variants[0];
+        const today = new Date().toISOString().split('T')[0];
         const newVariant: OrcamentoVariant = {
             id: newId,
             name: `Opção ${variants.length + 1}`,
             isPrincipal: false,
-            formState: { ...activeVariant.formState },
+            formState: { 
+                ...activeVariant.formState,
+                dataOrcamento: today
+            },
             calculated: { ...activeVariant.calculated }
         };
         setVariants([...variants, newVariant]);
