@@ -27,7 +27,8 @@ export type Page =
   | 'INSTALACOES_CADASTRO'
   | 'INSTALACOES_LAVAGEM'
   | 'USUARIOS_GESTAO'
-  | 'USUARIOS_PERFIL';
+  | 'USUARIOS_PERFIL'
+  | 'LOGIN_ACESSO';
 
 export interface User {
     id: string;
@@ -39,6 +40,21 @@ export interface User {
     active: boolean;
     darkMode?: boolean;
     biometricsEnabled?: boolean;
+}
+
+export interface AccessLogPageVisit {
+    page: string;
+    label: string;
+    timestamp: string;
+}
+
+export interface AccessLogEntry {
+    id: string;
+    owner_id: string;
+    user_name: string;
+    user_email: string;
+    login_at: string;
+    visited_pages: AccessLogPageVisit[];
 }
 
 export interface Supplier {

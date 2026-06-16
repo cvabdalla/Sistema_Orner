@@ -119,7 +119,8 @@ class SupabaseDataService implements IDataService {
                 'checklist_checkout',
                 'checklist_manutencao',
                 'suppliers',
-                'homologacao_entries'
+                'homologacao_entries',
+                'login_access_logs'
             ];
 
             if (!isAdmin && userId && privateCollections.includes(collection)) {
@@ -156,7 +157,8 @@ class SupabaseDataService implements IDataService {
                 'checklist_checkout',
                 'checklist_manutencao',
                 'suppliers',
-                'homologacao_entries'
+                'homologacao_entries',
+                'login_access_logs'
             ];
 
             // Se for admin, não filtra. Se não for admin e tiver userId em coleção privada, filtra.

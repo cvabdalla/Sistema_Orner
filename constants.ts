@@ -101,6 +101,7 @@ export const MENU_ITEMS: MenuItem[] = [
         { id: 'RELATORIOS_CONFIG', label: 'Configurações Gerais', icon: CogIcon },
         { id: 'USUARIOS_GESTAO', label: 'Gestão de Usuários', icon: UsersIcon },
         { id: 'USUARIOS_PERFIL', label: 'Perfis de Acesso', icon: LockClosedIcon },
+        { id: 'LOGIN_ACESSO', label: 'Login Acesso', icon: ClipboardListIcon },
     ]
   }
 ];
@@ -122,7 +123,7 @@ export const MOCK_PROFILES: UserProfile[] = [
             'CHECKLIST_MENU', 'CHECKLIST_CHECKIN', 'CHECKLIST_CHECKOUT', 'CHECKLIST_MANUTENCAO', 'CHECKLIST_HOMOLOGACAO',
             'RELATORIOS_MENU', 'RELATORIOS_NOVO', 'RELATORIOS_STATUS', 'RELATORIOS_HISTORICO', 'RELATORIOS_VISAO_GERAL',
             'INSTALACOES_MENU', 'INSTALACOES_CALENDARIO', 'INSTALACOES_CADASTRO', 'INSTALACOES_LAVAGEM',
-            'USUARIOS_MENU', 'RELATORIOS_CONFIG', 'USUARIOS_GESTAO', 'USUARIOS_PERFIL',
+            'USUARIOS_MENU', 'RELATORIOS_CONFIG', 'USUARIOS_GESTAO', 'USUARIOS_PERFIL', 'LOGIN_ACESSO',
             'INSTALACAO_LAVAGEM_SOLIC'
         ] 
     }

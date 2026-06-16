@@ -18,10 +18,12 @@ import InstalacoesPage from './pages/InstalacoesPage';
 import InstalacoesCadastroPage from './pages/InstalacoesCadastroPage';
 import LavagemPage from './pages/LavagemPage';
 import InstalacaoLavagemPage from './pages/InstalacaoLavagemPage';
+import LoginAcessoPage from './pages/LoginAcessoPage';
 import { LockClosedIcon, ExclamationTriangleIcon } from './assets/icons';
 import type { Page, SavedOrcamento, ExpenseReport, User, UserProfile } from './types';
 import { dataService } from './services/dataService';
 import { authService } from './services/authService';
+import { accessLogService } from './services/accessLogService';
 import { testSupabaseConnection } from './supabaseClient';
 import { MOCK_PROFILES } from './constants';
 
@@ -107,6 +109,15 @@ const App: React.FC = () => {
       document.documentElement.classList.remove('dark');
     }
   }, [currentUser?.darkMode]);
+
+  // Registra as janelas/páginas que o usuário acessa no sistema
+  useEffect(() => {
+    if (currentUser) {
+      accessLogService.logPageVisit(currentUser, currentPage).catch(err => {
+        console.warn("Erro ao salvar log de acesso:", err);
+      });
+    }
+  }, [currentPage, currentUser]);
 
   const fetchPermissions = async (user: User) => {
     const profileId = user.profileId;
@@ -194,6 +205,9 @@ const App: React.FC = () => {
   const handleLoginSuccess = (user: User) => {
       setCurrentUser(user);
       fetchPermissions(user);
+      accessLogService.logLogin(user).catch(err => {
+          console.warn("Erro ao registrar log de login:", err);
+      });
   };
 
   const handleSetCurrentPage = (page: Page) => {
@@ -282,6 +296,7 @@ const App: React.FC = () => {
       case 'INSTALACOES_LAVAGEM': return <LavagemPage currentUser={currentUser} />;
       case 'USUARIOS_GESTAO': return <UsuariosPage view="gestao" currentUser={currentUser} />;
       case 'USUARIOS_PERFIL': return <UsuariosPage view="perfil" currentUser={currentUser} />;
+      case 'LOGIN_ACESSO': return <LoginAcessoPage currentUser={currentUser} />;
       default: return <DashboardPage />;
     }
   };
