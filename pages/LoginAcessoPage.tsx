@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   LockClosedIcon, ClockIcon, SearchIcon, ArrowDownIcon,
-  XCircleIcon, EyeIcon, ArrowLeftIcon, CalendarIcon, TrashIcon
+  XCircleIcon, EyeIcon, ArrowLeftIcon, CalendarIcon
 } from '../assets/icons';
 import type { User, AccessLogEntry, AccessLogPageVisit } from '../types';
 import { accessLogService } from '../services/accessLogService';
@@ -18,8 +18,6 @@ const LoginAcessoPage: React.FC<LoginAcessoPageProps> = ({ currentUser }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLog, setSelectedLog] = useState<AccessLogEntry | null>(null);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [isClearing, setIsClearing] = useState(false);
   const [filterDate, setFilterDate] = useState('');
 
   // Perfil e validação de Admin
@@ -61,20 +59,6 @@ const LoginAcessoPage: React.FC<LoginAcessoPageProps> = ({ currentUser }) => {
   useEffect(() => {
     loadData();
   }, []);
-
-  const handleClearAllLogs = async () => {
-    setIsClearing(true);
-    try {
-      await accessLogService.clearLogs();
-      setLogs([]);
-      setIsDeleteModalOpen(false);
-      setSelectedLog(null);
-    } catch (error) {
-      console.error("Erro ao limpar registros de acesso:", error);
-    } finally {
-      setIsClearing(false);
-    }
-  };
 
   // Formata data e hora legível para o usuário brasileiro (PT-BR)
   const formatDateTime = (isoString?: string) => {
@@ -150,15 +134,6 @@ const LoginAcessoPage: React.FC<LoginAcessoPageProps> = ({ currentUser }) => {
             <ClockIcon className="w-4 h-4" />
             Atualizar
           </button>
-          
-          <button
-            onClick={() => setIsDeleteModalOpen(true)}
-            disabled={logs.length === 0}
-            className="px-4 py-2 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 rounded-xl hover:bg-red-100 dark:hover:bg-red-950/40 font-bold text-xs transition duration-200 flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <TrashIcon className="w-4 h-4" />
-            Limpar Logs
-          </button>
         </div>
       </div>
 
@@ -200,7 +175,7 @@ const LoginAcessoPage: React.FC<LoginAcessoPageProps> = ({ currentUser }) => {
                     onClick={() => setFilterDate('')}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xs font-bold"
                   >
-                    Clear
+                    Limpar
                   </button>
                 )}
               </div>
@@ -226,7 +201,7 @@ const LoginAcessoPage: React.FC<LoginAcessoPageProps> = ({ currentUser }) => {
               <div className="overflow-x-auto">
                 <table className="min-w-full text-left">
                   <thead>
-                    <tr className="border-b border-gray-100 dark:border-gray-700 text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                    <tr className="border-b border-gray-100 dark:border-gray-700 text-xs font-bold text-gray-500 tracking-wide">
                       <th className="py-3 px-4">Usuário</th>
                       <th className="py-3 px-4">Data e Hora de Entrada</th>
                       <th className="py-3 px-4 text-center">Telas Abertas</th>
@@ -304,17 +279,17 @@ const LoginAcessoPage: React.FC<LoginAcessoPageProps> = ({ currentUser }) => {
                 
                 {/* Cabeçalho da Sessão Selecionada */}
                 <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 relative">
-                  <p className="text-xs text-gray-400 font-bold uppercase tracking-wide">Usuário Autenticado</p>
+                  <p className="text-xs text-gray-400 font-bold tracking-wide">Usuário Autenticado</p>
                   <p className="text-base font-black text-gray-950 dark:text-white mt-1 leading-tight">{selectedLog.user_name}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-medium">{selectedLog.user_email}</p>
                   
                   <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-gray-200/55 dark:border-gray-800">
                     <div>
-                      <p className="text-[9px] text-gray-400 font-bold uppercase">Entrada</p>
+                      <p className="text-[10px] text-gray-400 font-bold">Entrada</p>
                       <p className="text-[11px] font-bold text-gray-700 dark:text-gray-300">{formatTimeOnly(selectedLog.login_at)}</p>
                     </div>
                     <div>
-                      <p className="text-[9px] text-gray-400 font-bold uppercase">Total Telas</p>
+                      <p className="text-[10px] text-gray-400 font-bold">Total Telas</p>
                       <p className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400">{selectedLog.visited_pages?.length || 0}</p>
                     </div>
                   </div>
@@ -346,8 +321,8 @@ const LoginAcessoPage: React.FC<LoginAcessoPageProps> = ({ currentUser }) => {
                                 {formatTimeOnly(visit.timestamp)}
                               </span>
                             </div>
-                            <p className="text-[9px] text-gray-400 dark:text-gray-500 font-bold mt-1 uppercase tracking-wider">
-                              ID: {visit.page}
+                            <p className="text-[10px] text-gray-400 dark:text-gray-500 font-bold mt-1 tracking-wider">
+                              Id: {visit.page}
                             </p>
                           </div>
                         </div>
@@ -361,42 +336,6 @@ const LoginAcessoPage: React.FC<LoginAcessoPageProps> = ({ currentUser }) => {
         </div>
 
       </div>
-
-      {/* Modal para confirmação de limpeza */}
-      {isDeleteModalOpen && (
-        <Modal title="Limpar registros de acessos" onClose={() => setIsDeleteModalOpen(false)}>
-          <div className="space-y-4">
-            <div className="p-4 bg-red-100 rounded-2xl text-red-600 inline-flex flex-col items-center">
-              <TrashIcon className="w-10 h-10" />
-            </div>
-            
-            <div className="text-center">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Deseja remover todo o histórico?</h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 max-w-sm">
-                Esta ação é irreversível. Todas as sessões salvas e o histórico de navegações de tela de todos os usuários serão apagadas permanentemente do banco de dados.
-              </p>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
-              <button
-                type="button"
-                onClick={() => setIsDeleteModalOpen(false)}
-                className="px-5 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleClearAllLogs}
-                disabled={isClearing}
-                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5"
-              >
-                {isClearing ? 'Apagando...' : 'Excluir Todos de Vez'}
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
     </div>
   );
 };

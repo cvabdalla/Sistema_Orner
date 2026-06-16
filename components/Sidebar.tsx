@@ -57,6 +57,18 @@ const Sidebar: React.FC<SidebarProps> = ({
     setOpenSubMenu(parent ? parent.id : null);
   }, [currentPage, filteredMenuItems]);
 
+  useEffect(() => {
+    if (openSubMenu) {
+      setTimeout(() => {
+        const idStr = `menu-group-${openSubMenu}`;
+        const activeElement = document.getElementById(idStr);
+        if (activeElement) {
+          activeElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }, 150);
+    }
+  }, [openSubMenu]);
+
   const handleNavigation = (page: Page) => {
     setCurrentPage(page);
     if (window.innerWidth < 768) {
@@ -91,7 +103,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         <nav className="flex-1 space-y-1 overflow-y-auto custom-scrollbar">
           {filteredMenuItems.map((item) => (
             item.children && item.children.length > 0 ? (
-              <div key={item.id}>
+              <div key={item.id} id={`menu-group-${item.id}`}>
                 <button
                   onClick={() => toggleSubMenu(item.id)}
                   className={`w-full flex items-center justify-between space-x-3 py-2 px-3 rounded-md transition duration-200 hover:bg-gray-800 hover:text-white ${
