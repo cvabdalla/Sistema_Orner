@@ -39,3 +39,23 @@ ALTER TABLE IF EXISTS homologacao_entries DROP CONSTRAINT IF EXISTS check_files_
 ALTER TABLE IF EXISTS homologacao_entries ALTER COLUMN files DROP NOT NULL;
 ALTER TABLE IF EXISTS homologacao_entries ALTER COLUMN files SET DEFAULT '{}'::jsonb;
 COMMENT ON COLUMN homologacao_entries.files IS 'Armazena a documentação digital (Procuração, Conta de Energia, Documento com Foto e Outros). Pode ser parcialmente preenchido ou vazio.';
+
+-- 8. Tabela de instaladores para cadastro completo e estimativas de deslocamento
+CREATE TABLE IF NOT EXISTS "instaladores" (
+    "id" text PRIMARY KEY,
+    "owner_id" text NOT NULL,
+    "nome" text NOT NULL,
+    "whatsapp" text,
+    "documento" text,
+    "cep" text,
+    "endereco" text,
+    "cidade" text,
+    "uf" text,
+    "valor_km" numeric DEFAULT 1.50,
+    "ativo" boolean DEFAULT true,
+    "observacoes" text,
+    "created_at" timestamp with time zone DEFAULT timezone('utc'::text, now())
+);
+
+COMMENT ON TABLE "instaladores" IS 'Cadastro completo de parceiros instaladores para cálculo de deslocamentos e custos de frete/viagem';
+

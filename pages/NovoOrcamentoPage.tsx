@@ -39,6 +39,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
     
     const [allStockItems, setAllStockItems] = useState<StockItem[]>([]);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+    const [instaladores, setInstaladores] = useState<any[]>([]);
     const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
     const [addItemTab, setAddItemTab] = useState<'estoque' | 'manual'>('estoque');
 
@@ -56,8 +57,14 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         projetoHomologacaoCusto: 600,
         terceiroInstalacaoQtd: 12,
         terceiroInstalacaoCusto: 120, // Default fallback
+        deslocamento: 0,
+        pedagio: 0,
         custoViagem: 0,
         adequacaoLocalCusto: 0,
+        instaladorId: '',
+        distanciaObraKM: '',
+        quantidadeDiasViagem: 1,
+        considerarIdaVolta: true,
         manualStockItemIds: [] as string[],
         offStockItems: [] as { id: string, name: string, cost: number, qty: number, markup: number }[],
         fixedItemsData: {} as Record<string, { qty: number, cost: number, markup: number }>,
@@ -76,14 +83,16 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
 
     useEffect(() => {
         const loadInitialData = async () => {
-            const [items, remoteConfigs, supplierData] = await Promise.all([
+            const [items, remoteConfigs, supplierData, instaladoresData] = await Promise.all([
                 dataService.getAll<StockItem>('stock_items'),
                 dataService.getAll<any>('system_configs', undefined, true),
-                dataService.getAll<Supplier>('suppliers', undefined, true)
+                dataService.getAll<Supplier>('suppliers', undefined, true),
+                dataService.getAll<any>('instaladores', undefined, true)
             ]);
             
             setAllStockItems(items);
             setSuppliers(supplierData.sort((a, b) => a.name.localeCompare(b.name)));
+            setInstaladores((instaladoresData || []).filter((i: any) => i.ativo));
             
             // Tenta obter o custo de instalação global do banco de dados
             const remoteInst = remoteConfigs.find(c => c.id === 'installation_value');
@@ -149,28 +158,38 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         if (orcamentoToEdit) {
             let loadedVariants: OrcamentoVariant[] = [];
             if (orcamentoToEdit.variants && orcamentoToEdit.variants.length > 0) {
-                loadedVariants = orcamentoToEdit.variants.map(v => ({
-                    ...v,
-                    formState: {
-                        ...initialFormState,
-                        ...v.formState,
-                        nomeCliente: v.formState.nomeCliente || orcamentoToEdit.formState?.nomeCliente || '',
-                        fornecedor: v.formState.fornecedor || orcamentoToEdit.formState?.fornecedor || '',
-                        dataOrcamento: v.formState.dataOrcamento || orcamentoToEdit.formState?.dataOrcamento || today
+                loadedVariants = orcamentoToEdit.variants.map(v => {
+                    const fState = { ...initialFormState, ...v.formState };
+                    if (fState.deslocamento === undefined || fState.deslocamento === null) {
+                        fState.deslocamento = fState.custoViagem !== undefined ? fState.custoViagem : 0;
+                        fState.pedagio = 0;
                     }
-                }));
+                    return {
+                        ...v,
+                        formState: {
+                            ...fState,
+                            nomeCliente: fState.nomeCliente || orcamentoToEdit.formState?.nomeCliente || '',
+                            fornecedor: fState.fornecedor || orcamentoToEdit.formState?.fornecedor || '',
+                            dataOrcamento: fState.dataOrcamento || orcamentoToEdit.formState?.dataOrcamento || today
+                        }
+                    };
+                });
             } else if (orcamentoToEdit.formState) {
+                const fState = { ...initialFormState, ...orcamentoToEdit.formState };
+                if (fState.deslocamento === undefined || fState.deslocamento === null) {
+                    fState.deslocamento = fState.custoViagem !== undefined ? fState.custoViagem : 0;
+                    fState.pedagio = 0;
+                }
                 loadedVariants = [{
                     id: '1',
                     name: 'Opção 1',
                     isPrincipal: true,
                     formState: { 
-                        ...initialFormState, 
-                        ...orcamentoToEdit.formState, 
-                        dataOrcamento: orcamentoToEdit.formState.dataOrcamento || today,
-                        fixedItemsData: orcamentoToEdit.formState.fixedItemsData || {},
-                        manualStockItemIds: orcamentoToEdit.formState.manualStockItemIds || [],
-                        offStockItems: orcamentoToEdit.formState.offStockItems || []
+                        ...fState, 
+                        dataOrcamento: fState.dataOrcamento || today,
+                        fixedItemsData: fState.fixedItemsData || {},
+                        manualStockItemIds: fState.manualStockItemIds || [],
+                        offStockItems: fState.offStockItems || []
                     }, 
                     calculated: orcamentoToEdit.calculated || {}
                 }];
@@ -305,7 +324,9 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         const n_terceiroInstalacaoCusto = parseNumber(formState.terceiroInstalacaoCusto);
         const n_visitaTecnicaCusto = parseNumber(formState.visitaTecnicaCusto);
         const n_projetoHomologacaoCusto = parseNumber(formState.projetoHomologacaoCusto);
-        const n_custoViagem = parseNumber(formState.custoViagem);
+        const n_deslocamento = parseNumber(formState.deslocamento);
+        const n_pedagio = parseNumber(formState.pedagio);
+        const n_custoViagem = n_deslocamento + n_pedagio;
         const n_adequacaoLocalCusto = parseNumber(formState.adequacaoLocalCusto);
         const n_custoSistema = parseNumber(formState.custoSistema);
         const n_maoDeObraGeral = parseNumber(formState.maoDeObraGeral);
@@ -402,7 +423,9 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         const n_terceiroInstalacaoCusto = parseNumber(formState.terceiroInstalacaoCusto);
         const n_visitaTecnicaCusto = parseNumber(formState.visitaTecnicaCusto);
         const n_projetoHomologacaoCusto = parseNumber(formState.projetoHomologacaoCusto);
-        const n_custoViagem = parseNumber(formState.custoViagem);
+        const n_deslocamento = parseNumber(formState.deslocamento);
+        const n_pedagio = parseNumber(formState.pedagio);
+        const n_custoViagem = n_deslocamento + n_pedagio;
         const n_adequacaoLocalCusto = parseNumber(formState.adequacaoLocalCusto);
         const n_custoSistema = parseNumber(formState.custoSistema);
         const n_nfServicoPerc = parseNumber(formState.nfServicoPerc);
@@ -462,7 +485,9 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         const n_terceiroInstalacaoCusto = parseNumber(formState.terceiroInstalacaoCusto);
         const n_visitaTecnicaCusto = parseNumber(formState.visitaTecnicaCusto);
         const n_projetoHomologacaoCusto = parseNumber(formState.projetoHomologacaoCusto);
-        const n_custoViagem = parseNumber(formState.custoViagem);
+        const n_deslocamento = parseNumber(formState.deslocamento);
+        const n_pedagio = parseNumber(formState.pedagio);
+        const n_custoViagem = n_deslocamento + n_pedagio;
         const n_adequacaoLocalCusto = parseNumber(formState.adequacaoLocalCusto);
         const n_custoSistema = parseNumber(formState.custoSistema);
 
@@ -503,7 +528,9 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         const n_terceiroInstalacaoCusto = parseNumber(formState.terceiroInstalacaoCusto);
         const n_visitaTecnicaCusto = parseNumber(formState.visitaTecnicaCusto);
         const n_projetoHomologacaoCusto = parseNumber(formState.projetoHomologacaoCusto);
-        const n_custoViagem = parseNumber(formState.custoViagem);
+        const n_deslocamento = parseNumber(formState.deslocamento);
+        const n_pedagio = parseNumber(formState.pedagio);
+        const n_custoViagem = n_deslocamento + n_pedagio;
         const n_adequacaoLocalCusto = parseNumber(formState.adequacaoLocalCusto);
         const n_custoSistema = parseNumber(formState.custoSistema);
         const n_nfServicoPerc = parseNumber(formState.nfServicoPerc);
@@ -561,7 +588,9 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         const n_terceiroInstalacaoCusto = parseNumber(formState.terceiroInstalacaoCusto);
         const n_visitaTecnicaCusto = parseNumber(formState.visitaTecnicaCusto);
         const n_projetoHomologacaoCusto = parseNumber(formState.projetoHomologacaoCusto);
-        const n_custoViagem = parseNumber(formState.custoViagem);
+        const n_deslocamento = parseNumber(formState.deslocamento);
+        const n_pedagio = parseNumber(formState.pedagio);
+        const n_custoViagem = n_deslocamento + n_pedagio;
         const n_adequacaoLocalCusto = parseNumber(formState.adequacaoLocalCusto);
         const n_custoSistema = parseNumber(formState.custoSistema);
         const n_nfServicoPerc = parseNumber(formState.nfServicoPerc);
@@ -957,7 +986,8 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                             {[
                                 { label: "Visita técnica", name: "visitaTecnicaCusto" }, 
                                 { label: "Projeto / homologação", name: "projetoHomologacaoCusto" }, 
-                                { label: "Custo de viagem", name: "custoViagem" }, 
+                                { label: "Deslocamento", name: "deslocamento" }, 
+                                { label: "Pedágio", name: "pedagio" }, 
                                 { label: "Adequação local", name: "adequacaoLocalCusto" }
                             ].map(field => (
                                 <div key={field.name} className="space-y-1">
@@ -1024,6 +1054,144 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                     </div>
                                 </div>
                             </div>
+                            
+                            {/* Estimativa Baseada no Cadastro de Instaladores */}
+                            {!isReadOnly && instaladores.length > 0 && (
+                                <div className="col-span-1 sm:col-span-2 md:col-span-3 border-t border-gray-100 dark:border-gray-700/60 pt-4 mt-2 space-y-2">
+                                    <div className="flex items-center gap-1.5 text-xs font-bold text-gray-700 dark:text-gray-300">
+                                        <span className="p-1 rounded bg-orange-50 dark:bg-orange-950/40 text-orange-500 font-bold">🚚</span>
+                                        <span>Estimador de Deslocamento do Parceiro</span>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-gray-50/50 dark:bg-gray-900/45 p-3.5 rounded-xl border border-gray-100 dark:border-gray-700/60">
+                                        
+                                        {/* Dropdown de Instalador */}
+                                        <div className="space-y-1">
+                                            <label className="block text-[10px] font-black text-gray-400 dark:text-gray-500">Instalador Responsável</label>
+                                            <select
+                                                value={formState.instaladorId || ''}
+                                                onChange={e => {
+                                                    const instId = e.target.value;
+                                                    setFormState((prev: any) => ({
+                                                        ...prev,
+                                                        instaladorId: instId
+                                                    }));
+                                                }}
+                                                className="w-full text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-2 outline-none dark:text-white"
+                                            >
+                                                <option value="">Selecione parceiro...</option>
+                                                {instaladores.map(i => (
+                                                    <option key={i.id} value={i.id}>{i.nome} ({formatCurrency(i.valor_km)}/km)</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        {/* Distância da Obra */}
+                                        <div className="space-y-1">
+                                            <label className="block text-[10px] font-black text-gray-400 dark:text-gray-500">Distância Obra (km / ida)</label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                value={formState.distanciaObraKM || ''}
+                                                onChange={e => {
+                                                    const val = e.target.value;
+                                                    setFormState((prev: any) => ({
+                                                        ...prev,
+                                                        distanciaObraKM: val
+                                                    }));
+                                                }}
+                                                className="w-full text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-2 outline-none dark:text-white"
+                                                placeholder="Ex: 50"
+                                            />
+                                        </div>
+
+                                        {/* Quantidade de Dias */}
+                                        <div className="space-y-1">
+                                            <label className="block text-[10px] font-black text-gray-400 dark:text-gray-500">Dias / Viagens</label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                value={formState.quantidadeDiasViagem || 1}
+                                                onChange={e => {
+                                                    const val = parseInt(e.target.value) || 1;
+                                                    setFormState((prev: any) => ({
+                                                        ...prev,
+                                                        quantidadeDiasViagem: val
+                                                    }));
+                                                }}
+                                                className="w-full text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-2 outline-none dark:text-white"
+                                            />
+                                        </div>
+
+                                        {/* Checkbox Considerar Ida e Volta */}
+                                        <div className="flex items-center gap-2 pt-4">
+                                            <label className="flex items-center gap-2 cursor-pointer text-[10px] font-bold text-gray-500 dark:text-gray-400">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={formState.considerarIdaVolta !== false}
+                                                    onChange={e => {
+                                                        const val = e.target.checked;
+                                                        setFormState((prev: any) => ({
+                                                            ...prev,
+                                                            considerarIdaVolta: val
+                                                        }));
+                                                    }}
+                                                    className="rounded border-gray-300 text-orange-600 focus:ring-orange-500 h-4 w-4"
+                                                />
+                                                <span>Considerar Ida e Volta</span>
+                                            </label>
+                                        </div>
+
+                                        {/* Informações Auxiliares do Instalador & Botão de Aplicar */}
+                                        {formState.instaladorId && (
+                                            <div className="col-span-1 sm:col-span-2 lg:col-span-4 bg-orange-550/5 dark:bg-orange-500/10 p-3 rounded-lg border border-orange-500/10 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs mt-1">
+                                                <div className="text-[11px] text-gray-600 dark:text-gray-400 space-y-0.5">
+                                                    {(() => {
+                                                        const selInst = instaladores.find(i => i.id === formState.instaladorId);
+                                                        if (!selInst) return null;
+                                                        const vKm = selInst.valor_km || 0;
+                                                        const dist = parseFloat(formState.distanciaObraKM) || 0;
+                                                        const vias = formState.quantidadeDiasViagem || 1;
+                                                        const idaVolta = formState.considerarIdaVolta !== false;
+                                                        const totalKm = dist * (idaVolta ? 2 : 1) * vias;
+                                                        const totalSugestao = totalKm * vKm;
+
+                                                        return (
+                                                            <>
+                                                                <p className="font-semibold text-gray-705 dark:text-gray-200">📍 Origem do Parceiro: <span className="font-bold underline">{selInst.endereco || selInst.cidade || 'Não informado'}</span></p>
+                                                                <p>Custo Km do Instalador: <span className="font-bold">{formatCurrency(vKm)}</span> | Distância percorrida total: <span className="font-bold">{totalKm} km</span></p>
+                                                                <p className="text-orange-600 dark:text-orange-400 font-bold">Custo Estimado Viagem: {formatCurrency(totalSugestao)}</p>
+                                                            </>
+                                                        );
+                                                    })()}
+                                                </div>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const selInst = instaladores.find(i => i.id === formState.instaladorId);
+                                                        if (selInst) {
+                                                            const vKm = selInst.valor_km || 0;
+                                                            const dist = parseFloat(formState.distanciaObraKM) || 0;
+                                                            const vias = formState.quantidadeDiasViagem || 1;
+                                                            const idaVolta = formState.considerarIdaVolta !== false;
+                                                            const totalSugestao = dist * (idaVolta ? 2 : 1) * vias * vKm;
+                                                            
+                                                            setFormState((prev: any) => ({
+                                                                ...prev,
+                                                                deslocamento: String(roundToCents(totalSugestao)).replace('.', ',')
+                                                            }));
+                                                        }
+                                                    }}
+                                                    className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black text-xs rounded-xl shadow-md transition-all active:scale-95 flex items-center justify-center gap-1 mt-1 md:mt-0"
+                                                >
+                                                    ⚡ Aplicar Deslocamento
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
 

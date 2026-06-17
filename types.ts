@@ -28,7 +28,23 @@ export type Page =
   | 'INSTALACOES_LAVAGEM'
   | 'USUARIOS_GESTAO'
   | 'USUARIOS_PERFIL'
-  | 'LOGIN_ACESSO';
+  | 'LOGIN_ACESSO'
+  | 'CADASTRO_INSTALADOR';
+
+export interface Instalador {
+    id: string;
+    owner_id: string;
+    nome: string;
+    whatsapp: string;
+    documento: string;
+    cep: string;
+    endereco: string;
+    cidade: string;
+    uf: string;
+    valor_km: number;
+    ativo: boolean;
+    observacoes?: string;
+}
 
 export interface User {
     id: string;

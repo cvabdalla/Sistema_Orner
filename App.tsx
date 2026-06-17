@@ -19,6 +19,7 @@ import InstalacoesCadastroPage from './pages/InstalacoesCadastroPage';
 import LavagemPage from './pages/LavagemPage';
 import InstalacaoLavagemPage from './pages/InstalacaoLavagemPage';
 import LoginAcessoPage from './pages/LoginAcessoPage';
+import CadastroInstaladorPage from './pages/CadastroInstaladorPage';
 import { LockClosedIcon, ExclamationTriangleIcon } from './assets/icons';
 import type { Page, SavedOrcamento, ExpenseReport, User, UserProfile } from './types';
 import { dataService } from './services/dataService';
@@ -297,6 +298,7 @@ const App: React.FC = () => {
       case 'USUARIOS_GESTAO': return <UsuariosPage view="gestao" currentUser={currentUser} />;
       case 'USUARIOS_PERFIL': return <UsuariosPage view="perfil" currentUser={currentUser} />;
       case 'LOGIN_ACESSO': return <LoginAcessoPage currentUser={currentUser} />;
+      case 'CADASTRO_INSTALADOR': return <CadastroInstaladorPage currentUser={currentUser} />;
       default: return <DashboardPage />;
     }
   };

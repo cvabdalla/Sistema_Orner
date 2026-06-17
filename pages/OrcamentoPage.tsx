@@ -208,7 +208,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({ setCurrentPage, onEdit, c
                           visitaTecnica: parseSafeNumber(fs.visitaTecnicaCusto),
                           homologation: parseSafeNumber(fs.projetoHomologacaoCusto),
                           installation: thirdPartyInstallation,
-                          travelCost: parseSafeNumber(fs.custoViagem),
+                          travelCost: fs.deslocamento !== undefined ? (parseSafeNumber(fs.deslocamento) + parseSafeNumber(fs.pedagio)) : parseSafeNumber(fs.custoViagem),
                           adequationCost: parseSafeNumber(fs.adequacaoLocalCusto),
                           materialCost: parseSafeNumber(calc.totalEstrutura),
                           invoicedTax: existing ? parseSafeNumber(existing.invoicedTax) : parseSafeNumber(calc.nfServicoValor),
