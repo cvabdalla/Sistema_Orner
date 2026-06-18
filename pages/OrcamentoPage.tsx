@@ -679,19 +679,67 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
     );
 
     setCalcInstaladorId(fs.instaladorId || "");
-    setCalcCep(matchingClient?.cep || fs.cep || "");
-    setCalcRua(matchingClient?.address || fs.logradouro || fs.endereco || "");
-    setCalcNumero(matchingClient?.address_number || fs.numero || "");
-    setCalcCidade(matchingClient?.city || fs.cidade || "");
-    setCalcUf(matchingClient?.uf || fs.uf || "");
-    setCalcDistanceKm(null);
+    setCalcCep(calcCep || matchingClient?.cep || fs.cep || "");
+    setCalcRua(calcRua || matchingClient?.address || fs.logradouro || fs.endereco || "");
+    setCalcNumero(calcNumero || matchingClient?.address_number || fs.numero || "");
+    setCalcCidade(calcCidade || matchingClient?.city || fs.cidade || "");
+    setCalcUf(calcUf || matchingClient?.uf || fs.uf || "");
 
-    const selInst = instaladores.find((i) => i.id === (fs.instaladorId || ""));
-    setCalcValorKm(String(systemKmValue));
+    const savedDistance =
+      trackCustosReais?.deslocamentoDistanceKm !== undefined
+        ? trackCustosReais.deslocamentoDistanceKm
+        : orc.custos_reais?.deslocamentoDistanceKm;
 
-    setCalcIdaVolta(fs.considerarIdaVolta !== false);
-    setCalcHotel("0");
-    setCalcMargem("0");
+    const savedValorKm =
+      trackCustosReais?.deslocamentoValorKm !== undefined
+        ? trackCustosReais.deslocamentoValorKm
+        : orc.custos_reais?.deslocamentoValorKm;
+
+    const savedIdaVolta =
+      trackCustosReais?.deslocamentoIdaVolta !== undefined
+        ? trackCustosReais.deslocamentoIdaVolta
+        : orc.custos_reais?.deslocamentoIdaVolta;
+
+    const savedHotel =
+      trackCustosReais?.deslocamentoHotel !== undefined
+        ? trackCustosReais.deslocamentoHotel
+        : orc.custos_reais?.deslocamentoHotel;
+
+    const savedMargem =
+      trackCustosReais?.deslocamentoMargem !== undefined
+        ? trackCustosReais.deslocamentoMargem
+        : orc.custos_reais?.deslocamentoMargem;
+
+    if (savedDistance !== undefined && savedDistance !== null && savedDistance !== 0) {
+      setCalcDistanceKm(Number(savedDistance));
+    } else {
+      setCalcDistanceKm(null);
+    }
+
+    if (savedValorKm !== undefined && savedValorKm !== null) {
+      setCalcValorKm(String(savedValorKm));
+    } else {
+      setCalcValorKm(String(systemKmValue));
+    }
+
+    if (savedIdaVolta !== undefined && savedIdaVolta !== null) {
+      setCalcIdaVolta(!!savedIdaVolta);
+    } else {
+      setCalcIdaVolta(fs.considerarIdaVolta !== false);
+    }
+
+    if (savedHotel !== undefined && savedHotel !== null) {
+      setCalcHotel(String(savedHotel));
+    } else {
+      setCalcHotel("0");
+    }
+
+    if (savedMargem !== undefined && savedMargem !== null) {
+      setCalcMargem(String(savedMargem));
+    } else {
+      setCalcMargem("0");
+    }
+
     setShowDistanceModal(true);
   };
 
@@ -2880,6 +2928,16 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
                                         <div className="flex justify-between items-center text-[8px] font-black text-gray-400 dark:text-gray-500">
                                           <span className="flex items-center gap-1">
                                             <span>{item.label}</span>
+                                            {item.key === "deslocamento" && (
+                                              <button
+                                                type="button"
+                                                onClick={() => handleOpenDistanceCalculator(editingTrackId!)}
+                                                className="text-indigo-650 dark:text-indigo-400 hover:underline hover:text-indigo-700 font-extrabold ml-1 flex items-center gap-0.5 outline-none text-[8px] cursor-pointer"
+                                                title="Calcular Deslocamento"
+                                              >
+                                                ⚡ Calcular
+                                              </button>
+                                            )}
                                             {isMaterialsAndHasCheckout && (
                                               <span
                                                 className="text-emerald-600 dark:text-emerald-400 font-extrabold text-[7px]"
@@ -3681,7 +3739,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
                     %
                   </span>
                 </div>
-                <span className="text-xl font-extrabold text-emerald-600 dark:text-emerald-450">
+                <span className="text-base sm:text-xl font-extrabold text-emerald-600 dark:text-emerald-450 whitespace-nowrap">
                   R${" "}
                   {(
                     ((calcDistanceKm || 0) *
