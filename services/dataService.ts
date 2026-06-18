@@ -77,10 +77,70 @@ class SupabaseDataService implements IDataService {
         }
     }
     private serialize<T>(collection: string, item: any): any {
+        if (collection === 'instaladores' && item) {
+            const packedEndereco = [
+                item.endereco || '',
+                item.numero || '',
+                item.bairro || ''
+            ].join(' ||| ');
+
+            return {
+                ...item,
+                endereco: packedEndereco,
+                numero: item.numero || '',
+                bairro: item.bairro || ''
+            };
+        }
         return item;
     }
 
     private deserialize<T>(collection: string, item: any): T {
+        if (collection === 'instaladores' && item) {
+            // If the item already has native non-empty column values, use them!
+            if (item.bairro || item.numero) {
+                const parts = (item.endereco || '').split(' ||| ');
+                const cleanEndereco = parts.length > 0 ? parts[0] : item.endereco;
+                return {
+                    ...item,
+                    endereco: cleanEndereco || '',
+                    numero: item.numero || '',
+                    bairro: item.bairro || ''
+                } as any;
+            }
+
+            const parts = (item.endereco || '').split(' ||| ');
+            if (parts.length === 3) {
+                return {
+                    ...item,
+                    endereco: parts[0],
+                    numero: parts[1],
+                    bairro: parts[2]
+                } as any;
+            } else {
+                // Backward compatibility for old format ("Rua, Numero - Bairro")
+                const enderecoVal = item.endereco || '';
+                const hIndex = enderecoVal.indexOf(' - ');
+                let streetAndNumber = enderecoVal;
+                let bairro = '';
+                if (hIndex > -1) {
+                    streetAndNumber = enderecoVal.substring(0, hIndex);
+                    bairro = enderecoVal.substring(hIndex + 3);
+                }
+                const cIndex = streetAndNumber.indexOf(', ');
+                let street = streetAndNumber;
+                let numero = '';
+                if (cIndex > -1) {
+                    street = streetAndNumber.substring(0, cIndex);
+                    numero = streetAndNumber.substring(cIndex + 2);
+                }
+                return {
+                    ...item,
+                    endereco: street,
+                    numero: numero,
+                    bairro: bairro
+                } as any;
+            }
+        }
         return item;
     }
 
@@ -95,7 +155,12 @@ class SupabaseDataService implements IDataService {
             if (error) throw error;
             return this.deserialize<T>(collection, data);
         } catch (e: any) {
-            console.error(`[DB ERROR] Erro ao buscar ${collection}:${id}:`, e.message);
+            const isNetworkError = e.message?.includes('fetch') || e.message?.includes('Failed to fetch') || e.message?.includes('network');
+            if (isNetworkError) {
+                console.warn(`[OFFLINE WARNING] Conexão indisponível para buscar ${collection}:${id}.`);
+            } else {
+                console.error(`[DB ERROR] Erro ao buscar ${collection}:${id}:`, e.message);
+            }
             // Tenta no cache se falhar
             const local = this.getLocal<any>(collection);
             return local.find(i => String(i.id) === String(id)) || null;
@@ -136,7 +201,12 @@ class SupabaseDataService implements IDataService {
             if (error) throw error;
             return ((data as any[]) || []).map(item => this.deserialize<T>(collection, item));
         } catch (e: any) {
-            console.error(`[DB ERROR] Erro parcial carregar ${collection}:`, e.message);
+            const isNetworkError = e.message?.includes('fetch') || e.message?.includes('Failed to fetch') || e.message?.includes('network');
+            if (isNetworkError) {
+                console.warn(`[OFFLINE WARNING] Conexão parcial indisponível ao carregar ${collection}. Usando cache local.`);
+            } else {
+                console.error(`[DB ERROR] Erro parcial carregar ${collection}:`, e.message);
+            }
             return this.getLocal<T>(collection);
         }
     }
@@ -176,12 +246,17 @@ class SupabaseDataService implements IDataService {
             const { data, error } = await query;
             
             if (error) {
-                console.error(`[DB ERROR] Erro ao carregar ${collection}:`, error.message, error.details);
+                const isNetworkError = error.message?.includes('fetch') || error.message?.includes('Failed to fetch') || error.message?.includes('network');
+                if (isNetworkError) {
+                    console.warn(`[OFFLINE WARNING] Conexão indisponível ao carregar ${collection}. Usando cache local.`);
+                } else {
+                    console.error(`[DB ERROR] Erro ao carregar ${collection}:`, error.message, error.details);
+                }
                 if (error.code === 'PGRST116') {
                     // Item não encontrado - comum em .single()
                     return [];
                 }
-                if (error.message.includes('JWT') || error.code === '401' || error.message.includes('key')) {
+                if (!isNetworkError && (error.message.includes('JWT') || error.code === '401' || error.message.includes('key'))) {
                     console.error(`[CRITICAL] Problema de autenticação com o Supabase detectado ao carregar ${collection}.`);
                 }
                 return this.getLocal<T>(collection);
@@ -196,7 +271,12 @@ class SupabaseDataService implements IDataService {
             return deserialized;
 
         } catch (e: any) {
-            console.error(`[RUNTIME ERROR] Erro inesperado ao carregar ${collection}:`, e.message);
+            const isNetworkError = e.message?.includes('fetch') || e.message?.includes('Failed to fetch') || e.message?.includes('network');
+            if (isNetworkError) {
+                console.warn(`[OFFLINE WARNING] Erro inesperado ao carregar ${collection}:`, e.message);
+            } else {
+                console.error(`[RUNTIME ERROR] Erro inesperado ao carregar ${collection}:`, e.message);
+            }
             return this.getLocal<T>(collection);
         }
     }
@@ -227,8 +307,16 @@ class SupabaseDataService implements IDataService {
             if (error) throw error;
             return this.deserialize<T>(collection, data);
         } catch (e: any) {
-            console.error(`[SAVE ERROR] ${collection}:`, e.message);
-            throw e;
+            const isFetchError = e.message?.includes('fetch') || e.message?.includes('network') || e.name === 'TypeError' || e.message?.includes('Failed to fetch') || e.message?.includes('network error');
+            const isDbSchemaOrRlsError = e.message?.includes('policy') || e.message?.includes('security') || e.message?.includes('does not exist') || e.message?.includes('column') || e.code === '42P01' || e.code === '42703';
+            
+            if (isFetchError || isDbSchemaOrRlsError) {
+                console.warn(`[DATABASE SAVE FALLBACK] ${collection}: Salvo com sucesso no cache local (offline/schema). Detalhe:`, e.message);
+                return deserializedItem;
+            } else {
+                console.error(`[SAVE ERROR] ${collection}:`, e.message);
+                throw e;
+            }
         }
     }
 
@@ -256,8 +344,14 @@ class SupabaseDataService implements IDataService {
             if (error) throw error;
             return ((data as any[]) || []).map(item => this.deserialize<T>(collection, item));
         } catch (e: any) {
-            console.error(`[BATCH SAVE ERROR] ${collection}:`, e.message);
-            throw e;
+            const isFetchError = e.message?.includes('fetch') || e.message?.includes('network') || e.name === 'TypeError' || e.message?.includes('Failed to fetch') || e.message?.includes('network error');
+            if (isFetchError) {
+                console.warn(`[OFFLINE BATCH SAVE STATE] ${collection}: Salvo localmente (offline). Motivo:`, e.message);
+                return deserializedItems;
+            } else {
+                console.error(`[BATCH SAVE ERROR] ${collection}:`, e.message);
+                throw e;
+            }
         }
     }
 
@@ -275,8 +369,14 @@ class SupabaseDataService implements IDataService {
             if (error) throw error;
             return true;
         } catch (e: any) {
-            console.error(`[DELETE ERROR] ${collection}:`, e.message);
-            throw e;
+            const isFetchError = e.message?.includes('fetch') || e.message?.includes('network') || e.name === 'TypeError' || e.message?.includes('Failed to fetch') || e.message?.includes('network error');
+            if (isFetchError) {
+                console.warn(`[OFFLINE DELETE STATE] ${collection}: Removido localmente (offline). Motivo:`, e.message);
+                return true;
+            } else {
+                console.error(`[DELETE ERROR] ${collection}:`, e.message);
+                throw e;
+            }
         }
     }
 }

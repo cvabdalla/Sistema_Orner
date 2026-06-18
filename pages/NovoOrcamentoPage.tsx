@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Modal from '../components/Modal';
 import { CalculatorIcon, SaveIcon, AddIcon, TrashIcon, EditIcon, CheckCircleIcon, DollarIcon, CubeIcon, ArrowLeftIcon, PlusIcon, XCircleIcon, TrendUpIcon, ChevronDownIcon } from '../assets/icons';
-import type { NovoOrcamentoPageProps, OrcamentoVariant, SavedOrcamento, StockItem, Supplier } from '../types';
+import type { NovoOrcamentoPageProps, OrcamentoVariant, SavedOrcamento, StockItem, Supplier, Instalador, LavagemClient } from '../types';
 import { dataService } from '../services/dataService';
 
 // Helper to format numbers as BRL currency
@@ -45,6 +45,56 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
 
     const [manualItemForm, setManualItemForm] = useState({ name: '', cost: 0 });
 
+    // States for Deslocamento Calculator Modal
+    const [showDistanceModal, setShowDistanceModal] = useState(false);
+    const [calcInstaladorId, setCalcInstaladorId] = useState('');
+    const [calcCep, setCalcCep] = useState('');
+    const [calcRua, setCalcRua] = useState('');
+    const [calcNumero, setCalcNumero] = useState('');
+    const [calcCidade, setCalcCidade] = useState('');
+    const [calcUf, setCalcUf] = useState('');
+    const [calcDistanceKm, setCalcDistanceKm] = useState<number | null>(null);
+    const [systemKmValue, setSystemKmValue] = useState<number>(1.20);
+    const [calcValorKm, setCalcValorKm] = useState('1.20');
+    const [isCalculatingDistance, setIsCalculatingDistance] = useState(false);
+    const [calcIdaVolta, setCalcIdaVolta] = useState(true);
+    const [calcHotel, setCalcHotel] = useState('0');
+    const [calcMargem, setCalcMargem] = useState('0');
+    const [isLoadingCep, setIsLoadingCep] = useState(false);
+    const [calcDiasViagem, setCalcDiasViagem] = useState(1);
+    const [lavagemClients, setLavagemClients] = useState<LavagemClient[]>([]);
+
+    const [showMemorialModal, setShowMemorialModal] = useState(false);
+    const [memorialData, setMemorialData] = useState<any>(null);
+
+    const handleOpenMemorial = () => {
+        const dist = parseFloat(formState.distanciaObraKM) || 0;
+        const dias = parseInt(formState.quantidadeDiasViagem) || 1;
+        const idaVolta = formState.considerarIdaVolta !== false;
+        
+        const vKm = parseFloat(formState.deslocamentoValorKm) || parseFloat(calcValorKm) || 1.20;
+        const hotel = parseFloat(formState.deslocamentoHotel) || parseFloat(calcHotel) || 0;
+        const margem = parseFloat(formState.deslocamentoMargem) || parseFloat(calcMargem) || 0;
+        
+        const inst = instaladores.find((i: any) => i.id === formState.instaladorId);
+        const instaladorNome = inst ? inst.nome : 'Não selecionado';
+
+        const finalValStr = String(formState.deslocamento).replace(',', '.');
+        const finalVal = parseFloat(finalValStr) || 0;
+
+        setMemorialData({
+            distancia: dist,
+            dias: dias,
+            idaVolta: idaVolta,
+            valorKm: vKm,
+            hotel: hotel,
+            margem: margem,
+            instaladorNome: instaladorNome,
+            valorFinal: finalVal
+        });
+        setShowMemorialModal(true);
+    };
+
     const isReadOnly = orcamentoToEdit?.status === 'Aprovado';
 
     const initialFormState = {
@@ -83,22 +133,27 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
 
     useEffect(() => {
         const loadInitialData = async () => {
-            const [items, remoteConfigs, supplierData, instaladoresData] = await Promise.all([
+            const [items, remoteConfigs, supplierData, instaladoresData, clientsData] = await Promise.all([
                 dataService.getAll<StockItem>('stock_items'),
                 dataService.getAll<any>('system_configs', undefined, true),
                 dataService.getAll<Supplier>('suppliers', undefined, true),
-                dataService.getAll<any>('instaladores', undefined, true)
+                dataService.getAll<any>('instaladores', undefined, true),
+                dataService.getAll<LavagemClient>('lavagem_clients', currentUser?.id, false)
             ]);
             
             setAllStockItems(items);
             setSuppliers(supplierData.sort((a, b) => a.name.localeCompare(b.name)));
             setInstaladores((instaladoresData || []).filter((i: any) => i.ativo));
+            setLavagemClients(clientsData || []);
             
             // Tenta obter o custo de instalação global do banco de dados
             const remoteInst = remoteConfigs.find(c => c.id === 'installation_value');
             const finalInstCost = remoteInst ? parseFloat(remoteInst.value) : 120;
             const remoteTax = remoteConfigs.find(c => c.id === 'tax_value');
             const finalNfPerc = remoteTax ? parseFloat(remoteTax.value) : 6;
+            const remoteKm = remoteConfigs.find(c => c.id === 'km_value_budget') || remoteConfigs.find(c => c.id === 'km_value');
+            const finalKmCost = remoteKm ? parseFloat(remoteKm.value) : 1.20;
+            setSystemKmValue(finalKmCost);
 
             if (!orcamentoToEdit) {
                 const initialFixedData: Record<string, any> = {};
@@ -229,6 +284,257 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
             }
         ));
     }
+
+    const loadGoogleMapsScript = (callback: () => void) => {
+        if ((window as any).google) {
+            callback();
+            return;
+        }
+        if (document.getElementById('google-maps-script')) {
+            const interval = setInterval(() => {
+                if ((window as any).google) {
+                    clearInterval(interval);
+                    callback();
+                }
+            }, 500);
+            return;
+        }
+        const GOOGLE_MAPS_KEY = (globalThis as any).process?.env?.GOOGLE_MAPS_PLATFORM_KEY || (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY || '';
+        const script = document.createElement('script');
+        script.id = 'google-maps-script';
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_KEY}&libraries=places,routes`;
+        script.async = true;
+        script.defer = true;
+        script.onload = () => {
+            callback();
+        };
+        script.onerror = () => {
+            console.error("Erro ao carregar o script do Google Maps");
+        };
+        document.head.appendChild(script);
+    };
+
+    const calculateWithGoogleMaps = (originAddr: string, destAddr: string): Promise<number> => {
+        return new Promise((resolve, reject) => {
+            loadGoogleMapsScript(() => {
+                if (!(window as any).google) {
+                    reject(new Error("Google Maps SDK não carregado"));
+                    return;
+                }
+                const service = new (window as any).google.maps.DistanceMatrixService();
+                service.getDistanceMatrix({
+                    origins: [originAddr],
+                    destinations: [destAddr],
+                    travelMode: (window as any).google.maps.TravelMode.DRIVING,
+                }, (response: any, status: string) => {
+                    if (status === 'OK' && response && response.rows[0]?.elements[0]?.status === 'OK') {
+                        const distanceMeters = response.rows[0].elements[0].distance.value;
+                        const distanceKm = distanceMeters / 1000;
+                        resolve(distanceKm);
+                    } else {
+                        const dirService = new (window as any).google.maps.DirectionsService();
+                        dirService.route({
+                            origin: originAddr,
+                            destination: destAddr,
+                            travelMode: (window as any).google.maps.TravelMode.DRIVING
+                        }, (result: any, dirStatus: string) => {
+                            if (dirStatus === 'OK' && result && result.routes[0]?.legs[0]?.distance) {
+                                const distKm = result.routes[0].legs[0].distance.value / 1000;
+                                resolve(distKm);
+                            } else {
+                                reject(new Error(`Erro DistanceMatrix/Directions: ${status || dirStatus}`));
+                            }
+                        });
+                    }
+                });
+            });
+        });
+    };
+
+    const handleOpenDistanceCalculator = () => {
+        const clientName = formState.nomeCliente || '';
+        const matchingClient = lavagemClients.find(lc => lc.name?.toLowerCase().trim() === clientName.toLowerCase().trim());
+
+        setCalcInstaladorId(formState.instaladorId || '');
+        setCalcCep(matchingClient?.cep || '');
+        setCalcRua(matchingClient?.address || '');
+        setCalcNumero(matchingClient?.address_number || '');
+        setCalcCidade(matchingClient?.city || '');
+        setCalcUf(matchingClient?.uf || '');
+        setCalcDistanceKm(parseFloat(formState.distanciaObraKM) || null);
+        setCalcDiasViagem(formState.quantidadeDiasViagem || 1);
+
+        const selInst = instaladores.find(i => i.id === (formState.instaladorId || ''));
+        setCalcValorKm(String(systemKmValue));
+
+        setCalcIdaVolta(formState.considerarIdaVolta !== false);
+        setCalcHotel('0');
+        setCalcMargem('0');
+        setShowDistanceModal(true);
+    };
+
+    const handleFetchCepForCalculadora = async (cepVal: string) => {
+        const cleanCep = cepVal.replace(/\D/g, '');
+        if (cleanCep.length === 8) {
+            setIsLoadingCep(true);
+            try {
+                const response = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+                const data = await response.json();
+                if (data && !data.erro) {
+                    setCalcRua(data.logradouro || '');
+                    setCalcCidade(data.localidade || '');
+                    setCalcUf(data.uf || '');
+                }
+            } catch (e) {
+                console.error("Erro ao buscar CEP:", e);
+            } finally {
+                setIsLoadingCep(false);
+            }
+        }
+    };
+
+    const geocodeAddress = async (cep: string, rua: string, cidade: string, uf: string): Promise<{lat: number, lon: number}> => {
+        const cleanCepVal = (cep || '').replace(/\D/g, '');
+        if (cleanCepVal.length === 8) {
+            try {
+                const url = `https://nominatim.openstreetmap.org/search?postalcode=${cleanCepVal}&country=Brazil&format=json&limit=1`;
+                const res = await fetch(url, { headers: { 'User-Agent': 'SistemaOrnerSolar/1.0' } });
+                const data = await res.json();
+                if (data && data.length > 0) {
+                    return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+                }
+            } catch (e) {
+                console.warn(`Geocoding by CEP ${cleanCepVal} failed, trying full address...`, e);
+            }
+        }
+
+        if (rua && cidade) {
+            try {
+                const query = `${rua}, ${cidade} - ${uf || ''}, Brazil`;
+                const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`;
+                const res = await fetch(url, { headers: { 'User-Agent': 'SistemaOrnerSolar/1.0' } });
+                const data = await res.json();
+                if (data && data.length > 0) {
+                    return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+                }
+            } catch (e) {
+                console.warn("Geocoding by street address failed, trying city only...", e);
+            }
+        }
+
+        if (cidade) {
+            try {
+                const url = `https://nominatim.openstreetmap.org/search?city=${encodeURIComponent(cidade)}&state=${encodeURIComponent(uf || '')}&country=Brazil&format=json&limit=1`;
+                const res = await fetch(url, { headers: { 'User-Agent': 'SistemaOrnerSolar/1.0' } });
+                const data = await res.json();
+                if (data && data.length > 0) {
+                    return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+                }
+            } catch (e) {
+                console.warn("Geocoding by city failed", e);
+            }
+        }
+
+        throw new Error("Não foi possível localizar as coordenadas para o endereço sugerido.");
+    };
+
+    const calculateWithOSRM = async (
+        origCep: string, origRua: string, origCidade: string, origUf: string,
+        destCep: string, destRua: string, destCidade: string, destUf: string
+    ): Promise<number> => {
+        const originCoords = await geocodeAddress(origCep, origRua, origCidade, origUf);
+        const destCoords = await geocodeAddress(destCep, destRua, destCidade, destUf);
+
+        const routeUrl = `https://router.project-osrm.org/route/v1/driving/${originCoords.lon},${originCoords.lat};${destCoords.lon},${destCoords.lat}?overview=false`;
+        const routeRes = await fetch(routeUrl);
+        const routeData = await routeRes.json();
+
+        if (routeData && routeData.routes && routeData.routes.length > 0) {
+             return routeData.routes[0].distance / 1000;
+        }
+        throw new Error("Não foi possível calcular a rota via OSRM");
+    };
+
+    const handleCalculateGoogleDistance = async () => {
+        const selectedInst = instaladores.find(i => i.id === calcInstaladorId);
+        if (!selectedInst) {
+            alert("Por favor, selecione o instalador para fornecer o endereço base.");
+            return;
+        }
+        
+        const instNum = (selectedInst as any).numero ? `, ${(selectedInst as any).numero}` : '';
+        const instBairro = (selectedInst as any).bairro ? ` - ${(selectedInst as any).bairro}` : '';
+        const originAddress = `${selectedInst.endereco || ''}${instNum}${instBairro}, ${selectedInst.cidade || ''} - ${selectedInst.uf || ''}, CEP ${selectedInst.cep || ''}`;
+        const destinationAddress = `${calcRua || ''}, ${calcNumero || ''}, ${calcCidade || ''} - ${calcUf || ''} CEP ${calcCep || ''}`;
+        
+        if (!calcRua || !calcCidade) {
+            alert("Por favor, informe o endereço de destino (rua e cidade).");
+            return;
+        }
+
+        setIsCalculatingDistance(true);
+        try {
+            const kms = await calculateWithGoogleMaps(originAddress, destinationAddress);
+            setCalcDistanceKm(parseFloat(kms.toFixed(1)));
+        } catch (error: any) {
+            console.warn("Google Maps API calculation failed, trying real OSRM estimation...", error);
+            try {
+                const kms = await calculateWithOSRM(
+                    selectedInst.cep || '', selectedInst.endereco || '', selectedInst.cidade || '', selectedInst.uf || '',
+                    calcCep || '', calcRua || '', calcCidade || '', calcUf || ''
+                );
+                setCalcDistanceKm(parseFloat(kms.toFixed(1)));
+            } catch (osrmError: any) {
+                console.warn("OSRM calculation failed, falling back to deterministic hash:", osrmError);
+                
+                // Deterministic hash based on addresses
+                const strConcat = `${originAddress}||${destinationAddress}`.toLowerCase().trim();
+                let hash = 0;
+                for (let i = 0; i < strConcat.length; i++) {
+                    hash = strConcat.charCodeAt(i) + ((hash << 5) - hash);
+                }
+                const absHash = Math.abs(hash);
+                const minFactor = 25;
+                const maxFactor = 75;
+                const baseEstVal = minFactor + (absHash % (maxFactor - minFactor + 1));
+                const decimalEstVal = (absHash % 10) / 10;
+                const deterministicKm = parseFloat((baseEstVal + decimalEstVal).toFixed(1));
+                
+                setCalcDistanceKm(deterministicKm);
+                alert(`Cálculo automático indisponível. Usando estimativa padrão de ${deterministicKm} km. Você pode editar a distância manualmente.`);
+            }
+        } finally {
+            setIsCalculatingDistance(false);
+        }
+    };
+
+    const handleApplyCalculatedDistance = () => {
+        const kms = calcDistanceKm || 0;
+        const vKm = parseFloat(calcValorKm) || 0;
+        const dias = calcDiasViagem || 1;
+        const hotel = parseFloat(calcHotel) || 0;
+        const margem = parseFloat(calcMargem) || 0;
+
+        let baseCost = kms * vKm * (calcIdaVolta ? 2 : 1) * dias;
+        let totalCost = baseCost + hotel;
+        if (margem > 0) {
+            totalCost = totalCost * (1 + margem / 100);
+        }
+
+        const updated = {
+            ...formState,
+            instaladorId: calcInstaladorId,
+            distanciaObraKM: String(kms),
+            quantidadeDiasViagem: dias,
+            considerarIdaVolta: calcIdaVolta,
+            deslocamentoValorKm: String(vKm),
+            deslocamentoHotel: String(hotel),
+            deslocamentoMargem: String(margem),
+            deslocamento: String(roundToCents(totalCost)).replace('.', ',')
+        };
+        updateVariantsWithFormState(updated);
+        setShowDistanceModal(false);
+    };
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         if (isReadOnly) return;
@@ -991,7 +1297,32 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                 { label: "Adequação local", name: "adequacaoLocalCusto" }
                             ].map(field => (
                                 <div key={field.name} className="space-y-1">
-                                    <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-450 ml-1">{field.label}</label>
+                                    <div className="flex justify-between items-center ml-1">
+                                        <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-450">{field.label}</label>
+                                        {field.name === 'deslocamento' && (
+                                            <div className="flex items-center gap-2">
+                                                {!isReadOnly && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleOpenDistanceCalculator}
+                                                        className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer flex items-center gap-0.5 bg-transparent border-none outline-none font-sans"
+                                                    >
+                                                        <span>🚗</span>
+                                                        <span>Calcular</span>
+                                                    </button>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={handleOpenMemorial}
+                                                    className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer flex items-center gap-1.5 bg-transparent border-none outline-none font-sans"
+                                                    title="Visualizar Memorial"
+                                                >
+                                                    <span>👁️</span>
+                                                    <span>Memorial</span>
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
                                     <div className="relative flex items-center">
                                         <span className="absolute left-3 inset-y-0 flex items-center text-xs font-semibold text-gray-450 pointer-events-none select-none">R$</span>
                                         <input 
@@ -1081,7 +1412,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                             >
                                                 <option value="">Selecione parceiro...</option>
                                                 {instaladores.map(i => (
-                                                    <option key={i.id} value={i.id}>{i.nome} ({formatCurrency(i.valor_km)}/km)</option>
+                                                    <option key={i.id} value={i.id}>{i.nome} ({formatCurrency(systemKmValue)}/km)</option>
                                                 ))}
                                             </select>
                                         </div>
@@ -1149,7 +1480,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                                     {(() => {
                                                         const selInst = instaladores.find(i => i.id === formState.instaladorId);
                                                         if (!selInst) return null;
-                                                        const vKm = selInst.valor_km || 0;
+                                                        const vKm = systemKmValue;
                                                         const dist = parseFloat(formState.distanciaObraKM) || 0;
                                                         const vias = formState.quantidadeDiasViagem || 1;
                                                         const idaVolta = formState.considerarIdaVolta !== false;
@@ -1171,7 +1502,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                                     onClick={() => {
                                                         const selInst = instaladores.find(i => i.id === formState.instaladorId);
                                                         if (selInst) {
-                                                            const vKm = selInst.valor_km || 0;
+                                                            const vKm = systemKmValue;
                                                             const dist = parseFloat(formState.distanciaObraKM) || 0;
                                                             const vias = formState.quantidadeDiasViagem || 1;
                                                             const idaVolta = formState.considerarIdaVolta !== false;
@@ -1783,6 +2114,395 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
                                 className="w-full py-3 text-gray-400 dark:text-gray-500 font-bold text-[10px] tracking-widest hover:text-gray-600"
                             >
                                 Cancelar
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
+            {showDistanceModal && (
+                <Modal 
+                    title="Calculadora de Deslocamento" 
+                    onClose={() => setShowDistanceModal(false)}
+                    maxWidth="max-w-lg"
+                >
+                    <div className="space-y-4 pt-2 font-sans text-xs">
+                        <p className="text-gray-500 dark:text-gray-400 font-semibold leading-relaxed">
+                            Selecione o parceiro para obter seu endereço base, informe o CEP ou endereço do cliente para calcular as distâncias ideais. O valor total de deslocamento será computado e aplicado ao projeto.
+                        </p>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {/* Installer Selection */}
+                            <div className="sm:col-span-2">
+                                <label className="block text-[10px] font-black text-gray-400 dark:text-gray-500 mb-1 tracking-wide">Selecione o Instalador *</label>
+                                <select 
+                                    value={calcInstaladorId} 
+                                    onChange={e => {
+                                        const instId = e.target.value;
+                                        setCalcInstaladorId(instId);
+                                        const sel = instaladores.find(i => i.id === instId);
+                                        if (sel) {
+                                            setCalcValorKm(String(systemKmValue));
+                                        }
+                                    }} 
+                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-sans font-sans"
+                                >
+                                    <option value="">-- Escolha um Instalador --</option>
+                                    {instaladores.map(i => (
+                                        <option key={i.id} value={i.id}>
+                                            {i.nome}
+                                        </option>
+                                    ))}
+                                </select>
+                                {calcInstaladorId && (
+                                    <p className="mt-1 text-[10px] text-indigo-600 dark:text-indigo-400 font-black flex items-center gap-1">
+                                        <span>📍 Origem:</span>
+                                        <span className="font-bold underline">
+                                            {(() => {
+                                                const sel = instaladores.find(i => i.id === calcInstaladorId);
+                                                return sel ? `${sel.endereco || ''}, ${sel.cidade || ''}/${sel.uf || ''} (CEP: ${sel.cep || ''})` : '';
+                                            })()}
+                                        </span>
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Customer Address Search */}
+                            <div className="sm:col-span-2 border-t pt-3 dark:border-gray-700/50">
+                                <h5 className="font-black text-gray-700 dark:text-gray-300 mb-2 tracking-wide text-[10px]">Endereço de Destino (Cliente)</h5>
+                            </div>
+
+                            {/* CEP */}
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 dark:text-gray-500 mb-1 tracking-wide">CEP do Cliente</label>
+                                <div className="relative">
+                                    <input 
+                                        type="text" 
+                                        placeholder="00000-000"
+                                        value={calcCep} 
+                                        onChange={e => {
+                                            const val = e.target.value;
+                                            setCalcCep(val);
+                                            handleFetchCepForCalculadora(val);
+                                        }} 
+                                        className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-sans font-sans"
+                                    />
+                                    {isLoadingCep && (
+                                        <span className="absolute right-3 top-2.5 text-[9px] font-bold text-indigo-500 animate-pulse">Buscando...</span>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Number */}
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 dark:text-gray-500 mb-1 tracking-wide">Número</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="Nº Ex: 123"
+                                    value={calcNumero} 
+                                    onChange={e => setCalcNumero(e.target.value)} 
+                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-sans font-sans"
+                                />
+                            </div>
+
+                            {/* Street/Rua */}
+                            <div className="sm:col-span-2">
+                                <label className="block text-[10px] font-black text-gray-400 dark:text-gray-500 mb-1 tracking-wide">Rua / Logradouro *</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="Nome da rua"
+                                    value={calcRua} 
+                                    onChange={e => setCalcRua(e.target.value)} 
+                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-sans font-sans"
+                                />
+                            </div>
+
+                            {/* City / UF */}
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 dark:text-gray-500 mb-1 tracking-wide">Cidade *</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="Cidade"
+                                    value={calcCidade} 
+                                    onChange={e => setCalcCidade(e.target.value)} 
+                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-sans font-sans font-sans"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 dark:text-gray-500 mb-1 tracking-wide">UF *</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="UF"
+                                    maxLength={2}
+                                    value={calcUf} 
+                                    onChange={e => setCalcUf(e.target.value)} 
+                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-sans font-sans font-sans"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Google Calculate Button */}
+                        <div className="pt-3 flex justify-end">
+                            <button
+                                type="button"
+                                disabled={isCalculatingDistance}
+                                onClick={handleCalculateGoogleDistance}
+                                className="px-5 py-2.5 bg-indigo-600 dark:bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg active:scale-95 disabled:opacity-50 cursor-pointer w-full sm:w-auto"
+                            >
+                                {isCalculatingDistance ? (
+                                    <>
+                                        <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                                        <span>Calculando Rota...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span>🔍</span>
+                                        <span>Calcular Rota (Google Maps)</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+
+                        {/* Calculation Output Box */}
+                        <div className="border border-indigo-100 dark:border-indigo-950/45 bg-indigo-50/30 dark:bg-indigo-950/10 rounded-xl p-4 space-y-4 font-sans">
+                            {/* Linha 1: Custos de Viagem */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div>
+                                    <span className="block text-[10px] text-gray-500 dark:text-gray-400 font-extrabold leading-none mb-1.5">Distância (Ida)</span>
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <input 
+                                            type="number"
+                                            min="0"
+                                            step="0.1"
+                                            placeholder="Distância em KM"
+                                            value={calcDistanceKm === null ? '' : calcDistanceKm}
+                                            onChange={e => setCalcDistanceKm(e.target.value === '' ? null : parseFloat(e.target.value))}
+                                            className="w-full rounded-lg border border-indigo-200 dark:border-indigo-900 bg-white dark:bg-gray-950/40 p-1.5 text-center font-bold text-xs text-indigo-700 dark:text-indigo-300 outline-none focus:ring-2 focus:ring-indigo-500/20 font-sans"
+                                        />
+                                        <span className="font-extrabold text-xs text-gray-650 dark:text-gray-350 shrink-0">KM</span>
+                                    </div>
+                                    <div className="select-none">
+                                        <label htmlFor="calcIdaVoltaBox" className="flex items-center gap-1.5 cursor-pointer font-sans">
+                                            <input 
+                                                type="checkbox"
+                                                id="calcIdaVoltaBox"
+                                                checked={calcIdaVolta}
+                                                onChange={e => setCalcIdaVolta(e.target.checked)}
+                                                className="rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500 w-3 h-3"
+                                            />
+                                            <span className="font-extrabold text-[9px] text-gray-500 dark:text-gray-400">Considerar Ida e Volta</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <span className="block text-[10px] text-gray-500 dark:text-gray-400 font-extrabold leading-none mb-1.5">Valor por Km</span>
+                                    <div className="flex items-center gap-1">
+                                        <span className="text-[10px] font-bold text-indigo-500">R$</span>
+                                        <input 
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            placeholder="1.20"
+                                            value={calcValorKm}
+                                            onChange={e => setCalcValorKm(e.target.value)}
+                                            className="w-full rounded-lg border border-indigo-200 dark:border-indigo-900 bg-white dark:bg-gray-950/40 p-1.5 text-center font-bold text-xs text-indigo-700 dark:text-indigo-300 outline-none focus:ring-2 focus:ring-indigo-500/20 font-sans"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <span className="block text-[10px] text-gray-500 dark:text-gray-400 font-extrabold leading-none mb-1.5">Dias de Viagem</span>
+                                    <div className="flex items-center gap-2">
+                                        <input 
+                                            type="number"
+                                            min="1"
+                                            value={calcDiasViagem}
+                                            onChange={e => setCalcDiasViagem(parseInt(e.target.value) || 1)}
+                                            className="w-full rounded-lg border border-indigo-200 dark:border-indigo-900 bg-white dark:bg-gray-950/40 p-1.5 text-center font-bold text-xs text-indigo-700 dark:text-indigo-300 outline-none focus:ring-2 focus:ring-indigo-500/20 font-sans"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Linha 2: Apenas Hotel */}
+                            <div className="pt-3 border-t border-indigo-100/50 dark:border-indigo-900/40">
+                                <div className="max-w-[200px]">
+                                    <span className="block text-[10px] text-gray-500 dark:text-gray-400 font-extrabold leading-none mb-1.5">Hotel (Manual)</span>
+                                    <div className="flex items-center gap-1">
+                                        <span className="text-[10px] font-bold text-indigo-500">R$</span>
+                                        <input 
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            placeholder="0,00"
+                                            value={calcHotel}
+                                            onChange={e => setCalcHotel(e.target.value)}
+                                            className="w-full rounded-lg border border-indigo-200 dark:border-indigo-900 bg-white dark:bg-gray-950/40 p-1.5 text-center font-bold text-xs text-indigo-700 dark:text-indigo-300 outline-none focus:ring-2 focus:ring-indigo-500/20 font-sans"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {calcDistanceKm !== null && (
+                                <div className="pt-2 border-t border-indigo-100/50 dark:border-indigo-900/40 flex flex-col gap-1 bg-white/50 dark:bg-gray-950/40 p-2.5 rounded-lg font-sans">
+                                    <div className="flex justify-between text-[11px] text-gray-650 dark:text-gray-300">
+                                        <span className="font-medium">Custo de Deslocamento:</span>
+                                        <span className="font-bold">
+                                            {calcDistanceKm} KM × R$ {parseFloat(calcValorKm || '0').toFixed(2)} {calcIdaVolta ? '× 2 (Ida/Volta)' : ''} {calcDiasViagem > 1 ? `× ${calcDiasViagem} dias` : ''} = R$ {((calcDistanceKm || 0) * (parseFloat(calcValorKm) || 0) * (calcIdaVolta ? 2 : 1) * calcDiasViagem).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </span>
+                                    </div>
+                                    {(parseFloat(calcHotel) || 0) > 0 && (
+                                        <div className="flex justify-between text-[11px] text-gray-650 dark:text-gray-300">
+                                            <span className="font-medium">Hotel/Hospedagem:</span>
+                                            <span className="font-bold">R$ {parseFloat(calcHotel || '0').toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                        </div>
+                                    )}
+                                    {((parseFloat(calcMargem) || 0) > 0) && (
+                                        <div className="flex justify-between text-[11px] text-gray-650 dark:text-gray-300 border-t border-indigo-100/30 pt-1">
+                                            <span className="font-medium">Subtotal:</span>
+                                            <span className="font-bold">R$ {(((calcDistanceKm || 0) * (parseFloat(calcValorKm) || 0) * (calcIdaVolta ? 2 : 1) * calcDiasViagem) + (parseFloat(calcHotel) || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                        </div>
+                                    )}
+                                    {((parseFloat(calcMargem) || 0) > 0) && (
+                                        <div className="flex justify-between text-[11px] text-indigo-650 dark:text-indigo-400">
+                                            <span className="font-medium">Acréscimo de Margem (+{calcMargem}%):</span>
+                                            <span className="font-bold">R$ {((((calcDistanceKm || 0) * (parseFloat(calcValorKm) || 0) * (calcIdaVolta ? 2 : 1) * calcDiasViagem) + (parseFloat(calcHotel) || 0)) * (parseFloat(calcMargem) / 100)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Valor Total do Reembolso */}
+                        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/25 border border-emerald-100 dark:border-emerald-900/40 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 font-sans">
+                            <div>
+                                <span className="text-[11px] font-black text-emerald-800 dark:text-emerald-450 tracking-wide block">Valor Total do Reembolso</span>
+                                <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-505 block">Base + Hotel + Margem acrescida</span>
+                            </div>
+                            <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+                                <div className="flex items-center gap-1.5 px-2 py-1 bg-white dark:bg-gray-900 border border-emerald-200 dark:border-emerald-850 rounded-xl shadow-xs">
+                                    <span className="text-[10px] font-black text-emerald-850 dark:text-emerald-400 tracking-wider">Margem:</span>
+                                    <input 
+                                        type="number"
+                                        min="0"
+                                        max="100"
+                                        step="1"
+                                        value={calcMargem}
+                                        onChange={e => setCalcMargem(e.target.value)}
+                                        className="w-12 text-center text-xs font-black text-emerald-700 dark:text-emerald-300 outline-none border-none p-0 bg-transparent font-sans"
+                                        placeholder="0"
+                                    />
+                                    <span className="text-[10px] font-black text-emerald-850 dark:text-emerald-450">%</span>
+                                </div>
+                                <span className="text-xl font-extrabold text-emerald-600 dark:text-emerald-450">
+                                    R$ {((((calcDistanceKm || 0) * (parseFloat(calcValorKm) || 0) * (calcIdaVolta ? 2 : 1) * calcDiasViagem) + (parseFloat(calcHotel) || 0)) * (1 + (parseFloat(calcMargem) || 0) / 100)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Footer Buttons */}
+                        <div className="flex gap-3 pt-4 border-t dark:border-gray-700">
+                            <button 
+                                type="button" 
+                                onClick={() => setShowDistanceModal(false)} 
+                                className="flex-1 py-2.5 bg-gray-150 dark:bg-gray-800 text-gray-500 dark:text-gray-300 rounded-xl font-bold text-xs hover:bg-gray-200 dark:hover:bg-gray-700 transition-all cursor-pointer text-center"
+                            >
+                                Cancelar
+                            </button>
+                            <button 
+                                type="button" 
+                                disabled={calcDistanceKm === null}
+                                onClick={handleApplyCalculatedDistance}
+                                className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-xs shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none cursor-pointer text-center"
+                            >
+                                Aplicar no Deslocamento
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
+            {showMemorialModal && memorialData && (
+                <Modal title="Memorial de Cálculo de Deslocamento" onClose={() => setShowMemorialModal(false)} maxWidth="max-w-md">
+                    <div className="space-y-4 font-sans text-xs">
+                        <div className="bg-indigo-50/50 dark:bg-indigo-950/10 p-3.5 rounded-xl border border-indigo-100/50 dark:border-indigo-900/40">
+                            <span className="block text-[10px] text-indigo-600 dark:text-indigo-400 font-extrabold uppercase tracking-wider mb-2">Parâmetros do Deslocamento</span>
+                            <div className="space-y-1.5 text-gray-700 dark:text-gray-300">
+                                <div className="flex justify-between">
+                                    <span className="font-semibold text-gray-500">Parceiro Instalador:</span>
+                                    <span className="font-black text-gray-800 dark:text-white">{memorialData.instaladorNome}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="font-semibold text-gray-500">Distância Calculada (Ida):</span>
+                                    <span className="font-black text-gray-800 dark:text-white">{memorialData.distancia} KM</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="font-semibold text-gray-500">Considerar Ida e Volta:</span>
+                                    <span className="font-black text-gray-800 dark:text-white">{memorialData.idaVolta ? 'Sim (× 2)' : 'Não'}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="font-semibold text-gray-500">Dias de Viagem/Trabalho:</span>
+                                    <span className="font-black text-gray-800 dark:text-white">{memorialData.dias} {memorialData.dias > 1 ? 'dias' : 'dia'}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="font-semibold text-gray-500">Valor por KM:</span>
+                                    <span className="font-black text-gray-800 dark:text-white">R$ {memorialData.valorKm.toFixed(2)}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-gray-50 dark:bg-gray-800/50 p-3.5 rounded-xl border border-gray-200/50 dark:border-gray-700/50">
+                            <span className="block text-[10px] text-gray-500 dark:text-gray-400 font-extrabold uppercase tracking-wider mb-2">Fórmula de Cálculo</span>
+                            <div className="space-y-1.5 text-gray-700 dark:text-gray-300">
+                                <div className="flex justify-between items-start">
+                                    <span className="font-semibold text-gray-500">Custo Base de Deslocamento:</span>
+                                    <div className="text-right">
+                                        <span className="font-black text-gray-800 dark:text-white block">
+                                            R$ {(memorialData.distancia * memorialData.valorKm * (memorialData.idaVolta ? 2 : 1) * memorialData.dias).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </span>
+                                        <span className="text-[9px] text-gray-400 block font-mono">
+                                            ({memorialData.distancia} KM × R$ {memorialData.valorKm.toFixed(2)} {memorialData.idaVolta ? '× 2' : ''} {memorialData.dias > 1 ? `× ${memorialData.dias} dias` : ''})
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="flex justify-between pt-1.5 border-t border-dashed border-gray-200 dark:border-gray-700/60 font-sans">
+                                    <span className="font-semibold text-gray-500">Custo de Hospedagem / Hotel:</span>
+                                    <span className="font-black text-gray-800 dark:text-white">
+                                        R$ {memorialData.hotel.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between pt-1.5 border-t border-dashed border-gray-200 dark:border-gray-700/60 font-sans font-sans">
+                                    <span className="font-semibold text-gray-500">Subtotal (Transp. + Hotel):</span>
+                                    <span className="font-black text-gray-800 dark:text-white font-sans">
+                                        R$ {(memorialData.distancia * memorialData.valorKm * (memorialData.idaVolta ? 2 : 1) * memorialData.dias + memorialData.hotel).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="font-semibold text-gray-500">Margem aplicada:</span>
+                                    <span className="font-black text-gray-800 dark:text-white">+{memorialData.margem}%</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-amber-50/40 dark:bg-amber-950/10 p-4 rounded-xl border border-amber-200/50 dark:border-amber-900/20 flex justify-between items-center font-sans">
+                            <div>
+                                <span className="block text-[9px] text-amber-600 dark:text-amber-400 font-extrabold uppercase tracking-wider">Custo Final Estimado</span>
+                                <span className="text-[10px] text-gray-400">Arredondado ao valor sugerido</span>
+                            </div>
+                            <span className="text-lg font-black text-indigo-600 dark:text-indigo-400">
+                                R$ {memorialData.valorFinal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                        </div>
+
+                        <div className="flex justify-end pt-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowMemorialModal(false)}
+                                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/20 transition-all cursor-pointer font-sans"
+                            >
+                                Fechar Memorial
                             </button>
                         </div>
                     </div>

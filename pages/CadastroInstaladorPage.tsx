@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
-    PlusIcon, TrashIcon, EditIcon, UsersIcon, SaveIcon 
+    PlusIcon, TrashIcon, EditIcon, UsersIcon, SaveIcon, 
+    MapPinIcon, PhoneIcon, SearchIcon, XCircleIcon
 } from '../assets/icons';
 import Modal from '../components/Modal';
 import { dataService } from '../services/dataService';
@@ -12,16 +13,7 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
     const [isSaving, setIsSaving] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<Instalador | null>(null);
-
-    // Estado do simulador rápido
-    const [simulador, setSimulador] = useState({
-        instaladorId: '',
-        distanciaKm: 0,
-        pedagio: 0,
-        quantidadeDias: 1,
-        idaEVolta: true
-    });
-    const [simulacaoResultado, setSimulacaoResultado] = useState<number | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
 
     const [form, setForm] = useState({
         nome: '',
@@ -29,9 +21,10 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
         documento: '',
         cep: '',
         endereco: '',
+        bairro: '',
+        numero: '',
         cidade: '',
         uf: '',
-        valor_km: 1.50,
         ativo: true,
         observacoes: ''
     });
@@ -52,18 +45,34 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
         loadData();
     }, [currentUser.id]);
 
+    const formatWhatsApp = (value: string) => {
+        const clean = value.replace(/\D/g, '');
+        if (clean.length === 0) return '';
+        if (clean.length <= 2) {
+            return `(${clean}`;
+        }
+        if (clean.length <= 6) {
+            return `(${clean.slice(0, 2)}) ${clean.slice(2)}`;
+        }
+        if (clean.length <= 10) {
+            return `(${clean.slice(0, 2)}) ${clean.slice(2, 6)}-${clean.slice(6, 10)}`;
+        }
+        return `(${clean.slice(0, 2)}) ${clean.slice(2, 3)} ${clean.slice(3, 7)}-${clean.slice(7, 11)}`;
+    };
+
     const handleOpenModal = (item?: Instalador) => {
         if (item) {
             setEditingItem(item);
             setForm({
                 nome: item.nome,
-                whatsapp: item.whatsapp,
-                documento: item.documento,
-                cep: item.cep,
-                endereco: item.endereco,
-                cidade: item.cidade,
-                uf: item.uf,
-                valor_km: item.valor_km || 1.50,
+                whatsapp: item.whatsapp || '',
+                documento: item.documento || '',
+                cep: item.cep || '',
+                endereco: item.endereco || '',
+                bairro: item.bairro || '',
+                numero: item.numero || '',
+                cidade: item.cidade || '',
+                uf: item.uf || '',
                 ativo: item.ativo !== false,
                 observacoes: item.observacoes || ''
             });
@@ -75,9 +84,10 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
                 documento: '',
                 cep: '',
                 endereco: '',
+                bairro: '',
+                numero: '',
                 cidade: '',
                 uf: '',
-                valor_km: 1.50,
                 ativo: true,
                 observacoes: ''
             });
@@ -91,6 +101,9 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
         
         setIsSaving(true);
         try {
+            // Preserva o valor de KM se estiver editando, senão assume o padrão de 1.20 para compatibilidade interna
+            const valorKm = editingItem ? (editingItem.valor_km ?? 1.20) : 1.20;
+
             const data: Instalador = {
                 id: editingItem ? editingItem.id : `inst-${Date.now()}`,
                 owner_id: currentUser.id,
@@ -99,9 +112,11 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
                 documento: form.documento,
                 cep: form.cep,
                 endereco: form.endereco,
+                bairro: form.bairro,
+                numero: form.numero,
                 cidade: form.cidade,
                 uf: form.uf,
-                valor_km: Number(form.valor_km) || 0,
+                valor_km: valorKm,
                 ativo: form.ativo,
                 observacoes: form.observacoes
             };
@@ -110,47 +125,22 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
             await loadData();
         } catch (e) {
             console.error(e);
-            alert("Erro ao salvar instalador.");
+            alert("Erro ao salvar parceiro instalador.");
         } finally {
             setIsSaving(false);
         }
     };
 
     const handleDelete = async (id: string) => {
-        if (window.confirm('Deseja realmente excluir este instalador?')) {
+        if (window.confirm('Deseja realmente excluir este parceiro?')) {
             try {
                 await dataService.delete('instaladores', id);
                 await loadData();
             } catch (e) {
-                alert("Erro ao excluir o instalador de placas.");
+                alert("Erro ao excluir parceiro instalador.");
             }
         }
     };
-
-    const formatCurrency = (val: number) => {
-        return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    };
-
-    const handleSimular = () => {
-        const selected = instaladores.find(i => i.id === simulador.instaladorId);
-        if (!selected) {
-            setSimulacaoResultado(null);
-            return;
-        }
-        const vKm = selected.valor_km || 0;
-        const fatorIdaVolta = simulador.idaEVolta ? 2 : 1;
-        const totalTravel = simulador.distanciaKm * fatorIdaVolta * vKm * simulador.quantidadeDias;
-        const finalCost = totalTravel + Number(simulador.pedagio || 0);
-        setSimulacaoResultado(finalCost);
-    };
-
-    useEffect(() => {
-        if (simulador.instaladorId) {
-            handleSimular();
-        } else {
-            setSimulacaoResultado(null);
-        }
-    }, [simulador]);
 
     const handleFetchCEP = async () => {
         const cleanCEP = form.cep.replace(/\D/g, '');
@@ -162,15 +152,25 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
             if (!data.erro) {
                 setForm(prev => ({
                     ...prev,
-                    endereco: `${data.logradouro}${data.bairro ? `, ${data.bairro}` : ''}`,
-                    cidade: data.localidade,
-                    uf: data.uf
+                    endereco: data.logradouro || '',
+                    bairro: data.bairro || '',
+                    cidade: data.localidade || '',
+                    uf: data.uf || ''
                 }));
             }
         } catch (e) {
-            console.warn("Erro ao carregar dados do CEP:", e);
+            console.warn("Erro ao carregar dados do cep:", e);
         }
     };
+
+    const filteredInstaladores = instaladores.filter(inst => {
+        const term = searchTerm.toLowerCase();
+        return (
+            inst.nome.toLowerCase().includes(term) ||
+            (inst.cidade || '').toLowerCase().includes(term) ||
+            (inst.documento || '').toLowerCase().includes(term)
+        );
+    });
 
     if (isLoading) {
         return (
@@ -178,320 +178,438 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
                 <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
             </div>
         );
-    }
+    }    const totalParceiros = instaladores.length;
+    const ativosCount = instaladores.filter(i => i.ativo).length;
+    const inativosCount = totalParceiros - ativosCount;
+
+    const getInitials = (nome: string) => {
+        if (!nome) return '??';
+        const parts = nome.trim().split(/\s+/);
+        if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    };
 
     return (
-        <div className="space-y-6 animate-fade-in pb-20">
-            <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 gap-4">
-                <div>
-                    <h2 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                        <UsersIcon className="w-6 h-6 text-indigo-500" /> Cadastro de Instaladores
-                    </h2>
-                    <p className="text-xs text-gray-500 font-medium">Cadastre os parceiros de instalação para permitir a estimativa de distância e custos de viagem automaticamente em novos orçamentos.</p>
+        <div className="space-y-6 animate-fade-in pb-20 font-sans text-gray-800 dark:text-gray-100">
+            {/* Header com Design Premium e Moderno */}
+            <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 gap-6 transition-all">
+                <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/40 rounded-2xl text-indigo-600 dark:text-indigo-400">
+                            <UsersIcon className="w-8 h-8" />
+                        </div>
+                        <div>
+                            <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight leading-none">
+                                Parceiros Instaladores
+                            </h2>
+                            <p className="text-xs text-gray-550 dark:text-gray-400 font-medium mt-1">
+                                Gerencie contatos, bases operacionais e tarifas mínimas de profissionais credenciados.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Stats Highlights em formato de badges premium */}
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-gray-50 dark:bg-gray-900/50 text-gray-600 dark:text-gray-400 border border-gray-100 dark:border-gray-800/80">
+                            📁 <strong className="text-gray-900 dark:text-white">{totalParceiros}</strong> Total
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border border-emerald-100/30 dark:border-emerald-900/10">
+                            <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-405 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-550"></span>
+                            </span>
+                            <strong className="text-emerald-800 dark:text-emerald-300">{ativosCount}</strong> Ativos
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-gray-100/60 dark:bg-gray-900/70 text-gray-500 dark:text-gray-400 border border-transparent">
+                            ⚪ <strong className="text-gray-700 dark:text-gray-300">{inativosCount}</strong> Inativos
+                        </span>
+                    </div>
                 </div>
+
                 <button 
                     onClick={() => handleOpenModal()}
-                    className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-xs shadow-lg hover:bg-indigo-700 transition-all active:scale-95"
+                    className="flex items-center gap-2 px-6 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-xs shadow-lg shadow-indigo-600/10 hover:shadow-indigo-600/20 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all cursor-pointer w-full xl:w-auto justify-center"
                 >
-                    <PlusIcon className="w-4 h-4" /> Novo Instalador
+                    <PlusIcon className="w-4.5 h-4.5" /> Novo Instalador
                 </button>
             </header>
 
-            {/* Grid Principal - Esquerda: Lista de Instaladores | Direita: Simulador Rápido de Custos */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                
-                {/* Lista de Instaladores */}
-                <div className="lg:col-span-2 space-y-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
-                        <div className="p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50">
-                            <h3 className="text-xs font-bold text-gray-700 dark:text-gray-300">Instaladores cadastrados</h3>
-                        </div>
-                        
-                        {instaladores.length === 0 ? (
-                            <div className="p-8 text-center text-gray-500 dark:text-gray-400 text-xs">
-                                Nenhum instalador cadastrado no momento. Clique em "Novo Instalador" para começar!
-                            </div>
-                        ) : (
-                            <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                                {instaladores.map(item => (
-                                    <div key={item.id} className="p-5 flex flex-col sm:flex-row justify-between sm:items-center gap-4 hover:bg-gray-50/50 dark:hover:bg-gray-900/10 transition-colors group">
-                                        <div className="space-y-1">
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-sm font-bold text-gray-800 dark:text-white">{item.nome}</span>
-                                                <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${item.ativo ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30' : 'bg-red-50 text-red-600 dark:bg-red-950/30'}`}>
-                                                    {item.ativo ? 'ATIVO' : 'INATIVO'}
-                                                </span>
-                                            </div>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-500">
-                                                <p><span className="font-semibold text-gray-600 dark:text-gray-400">Doc:</span> {item.documento || 'Não informado'}</p>
-                                                <p><span className="font-semibold text-gray-600 dark:text-gray-400">WhatsApp:</span> {item.whatsapp || 'Não informado'}</p>
-                                                <p className="sm:col-span-2"><span className="font-semibold text-gray-600 dark:text-gray-400">Origem:</span> {item.endereco ? `${item.endereco}, ` : ''}{item.cidade ? `${item.cidade}-${item.uf}` : 'Não informado'}</p>
-                                                <p className="sm:col-span-2 font-bold text-indigo-650 dark:text-indigo-450">Valor/KM Rodado: {formatCurrency(item.valor_km || 0)}</p>
-                                            </div>
-                                            {item.observacoes && (
-                                                <p className="text-[11px] text-gray-400 dark:text-gray-500 italic mt-1 bg-gray-50/50 dark:bg-gray-950/20 p-2 rounded-lg border border-gray-100/50 dark:border-gray-800/10">" {item.observacoes} "</p>
-                                            )}
-                                        </div>
-                                        
-                                        <div className="flex items-center gap-1 sm:opacity-0 group-hover:opacity-100 transition-opacity self-end sm:self-center">
-                                            <button 
-                                                onClick={() => handleOpenModal(item)} 
-                                                className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded-lg transition-all"
-                                                title="Editar instalador"
-                                                id={`btn-edit-inst-${item.id}`}
-                                            >
-                                                <EditIcon className="w-4 h-4" />
-                                            </button>
-                                            <button 
-                                                onClick={() => handleDelete(item.id)} 
-                                                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-all"
-                                                title="Excluir instalador"
-                                                id={`btn-del-inst-${item.id}`}
-                                            >
-                                                <TrashIcon className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
+            {/* Barra de Filtros e Busca */}
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row gap-3 items-center justify-between">
+                <div className="relative w-full sm:max-w-md">
+                    <SearchIcon className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                        type="text"
+                        placeholder="Buscar por nome, cidade ou documento..."
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        className="w-full text-xs font-semibold rounded-xl border border-gray-150 dark:border-gray-750 bg-gray-50/50 dark:bg-gray-900/50 p-3 pl-10 pr-8 outline-none text-gray-800 dark:text-white focus:bg-white dark:focus:bg-gray-900 focus:ring-2 focus:ring-indigo-500/15 focus:border-indigo-500 transition-all"
+                    />
+                    {searchTerm && (
+                        <button 
+                            onClick={() => setSearchTerm('')}
+                            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                            <XCircleIcon className="w-4.5 h-4.5" />
+                        </button>
+                    )}
                 </div>
-
-                {/* Simulador Rápido de Custos */}
-                <div className="space-y-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5 space-y-4">
-                        <div className="border-b border-gray-100 dark:border-gray-700 pb-3">
-                            <h3 className="text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                                <span className="p-1 rounded bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 block">🚗</span> Calculadora de Deslocamento
-                            </h3>
-                            <p className="text-[10px] text-gray-450 mt-0.5">Veja instantaneamente uma estimativa de gastos de viagem e transporte do instalador.</p>
-                        </div>
-
-                        {instaladores.length === 0 ? (
-                            <p className="text-xs text-center p-4 text-gray-500">Cadastre instaladores primeiro para usar o simulador.</p>
-                        ) : (
-                            <div className="space-y-3.5">
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-black text-gray-500 dark:text-gray-400">Instalador</label>
-                                    <select
-                                        value={simulador.instaladorId}
-                                        onChange={e => setSimulador(prev => ({ ...prev, instaladorId: e.target.value }))}
-                                        className="w-full text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-2 outline-none dark:text-white"
-                                    >
-                                        <option value="">Selecione um instalador...</option>
-                                        {instaladores.filter(i => i.ativo).map(i => (
-                                            <option key={i.id} value={i.id}>{i.nome} ({formatCurrency(i.valor_km)}/km)</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-gray-500 dark:text-gray-400">Distância (km)</label>
-                                        <input
-                                            type="number"
-                                            value={simulador.distanciaKm || ''}
-                                            onChange={e => setSimulador(prev => ({ ...prev, distanciaKm: parseFloat(e.target.value) || 0 }))}
-                                            className="w-full text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-2 outline-none dark:text-white"
-                                            placeholder="Ex: 45"
-                                        />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-gray-500 dark:text-gray-400 font-bold">Pedágio (R$)</label>
-                                        <input
-                                            type="number"
-                                            value={simulador.pedagio || ''}
-                                            onChange={e => setSimulador(prev => ({ ...prev, pedagio: parseFloat(e.target.value) || 0 }))}
-                                            className="w-full text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-2 outline-none dark:text-white"
-                                            placeholder="Ex: 12.50"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-3 items-center pt-1.5">
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-gray-500 dark:text-gray-400">Qtd de Dias / Viagens</label>
-                                        <input
-                                            type="number"
-                                            min="1"
-                                            value={simulador.quantidadeDias}
-                                            onChange={e => setSimulador(prev => ({ ...prev, quantidadeDias: parseInt(e.target.value) || 1 }))}
-                                            className="w-full text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-2 outline-none dark:text-white"
-                                        />
-                                    </div>
-                                    <label className="flex items-center gap-2 mt-4 cursor-pointer text-xs">
-                                        <input
-                                            type="checkbox"
-                                            checked={simulador.idaEVolta}
-                                            onChange={e => setSimulador(prev => ({ ...prev, idaEVolta: e.target.checked }))}
-                                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
-                                        />
-                                        <span className="font-semibold text-gray-600 dark:text-gray-400">Considerar Ida e Volta</span>
-                                    </label>
-                                </div>
-
-                                {simulacaoResultado !== null && (
-                                    <div className="bg-indigo-50/50 dark:bg-indigo-950/20 p-4 rounded-xl border border-indigo-100/30 dark:border-indigo-850/20 text-center mt-4">
-                                        <p className="text-[10px] text-gray-500 dark:text-indigo-300 font-bold tracking-wider">Custo viagem estimado</p>
-                                        <p className="text-2xl font-black text-indigo-600 dark:text-indigo-400 mt-1">{formatCurrency(simulacaoResultado)}</p>
-                                        
-                                        <div className="mt-2 pt-2 border-t border-indigo-100/50 dark:border-indigo-900/40 text-[10px] text-gray-450 flex justify-between">
-                                            <span>KM Total: {simulador.distanciaKm * (simulador.idaEVolta ? 2 : 1) * simulador.quantidadeDias} km</span>
-                                            <span>KM Custo: {formatCurrency((instaladores.find(i => i.id === simulador.instaladorId)?.valor_km || 0))}</span>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
+                <div className="text-[11px] font-bold text-gray-400 dark:text-gray-500 tracking-wide bg-gray-50 dark:bg-gray-900/30 px-3 py-1.5 rounded-xl border border-gray-100/40 dark:border-gray-800/20">
+                    Filtro básico: {filteredInstaladores.length} encontrados
                 </div>
-
             </div>
 
-            {/* Modal de Cadastro / Edição */}
+            {/* Lista Grid Bento Premium de Parceiros */}
+            {filteredInstaladores.length === 0 ? (
+                <div className="bg-white dark:bg-gray-800 rounded-3xl p-16 text-center border border-gray-100 dark:border-gray-700/80 flex flex-col items-center justify-center gap-4 transition-all">
+                    <div className="w-16 h-16 bg-gray-50 dark:bg-gray-900 rounded-2xl flex items-center justify-center text-gray-400 text-2xl shadow-sm">
+                        📭
+                    </div>
+                    <div className="space-y-1">
+                        <h4 className="text-sm font-bold text-gray-800 dark:text-gray-200">Nenhum parceiro encontrado</h4>
+                        <p className="text-xs text-gray-500 dark:text-gray-450 max-w-sm mx-auto">
+                            Experimente ajustar os termos da busca ou adicione um novo instalador para iniciar.
+                        </p>
+                    </div>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filteredInstaladores.map(item => {
+                        const initials = getInitials(item.nome);
+                        return (
+                            <div 
+                                key={item.id} 
+                                className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 p-6 shadow-sm hover:shadow-lg hover:border-indigo-150 dark:hover:border-gray-650 hover:-translate-y-0.5 transition-all flex flex-col justify-between group relative overflow-hidden"
+                            >
+                                <div className="space-y-5">
+                                    {/* Topo do Card - Avatar, Nome e Pulsating Status */}
+                                    <div className="flex items-start gap-4">
+                                        <div className={`w-12 h-12 rounded-2xl font-bold text-sm tracking-widest flex items-center justify-center shrink-0 shadow-inner ${
+                                            item.ativo 
+                                                ? 'bg-gradient-to-tr from-indigo-500 to-violet-600 text-white shadow-indigo-500/10' 
+                                                : 'bg-gray-100 text-gray-400 dark:bg-gray-700/85 dark:text-gray-300'
+                                        }`}>
+                                            {initials}
+                                        </div>
+                                        <div className="space-y-1 min-w-0 flex-1">
+                                            <div className="flex justify-between items-start gap-2">
+                                                <h3 className="text-base font-extrabold text-gray-900 dark:text-white tracking-tight leading-snug group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">
+                                                    {item.nome}
+                                                </h3>
+                                                <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1 ${
+                                                    item.ativo 
+                                                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 border border-emerald-100/50 dark:border-emerald-900/10' 
+                                                        : 'bg-gray-50 text-gray-400 dark:bg-gray-900/30 border border-transparent'
+                                                }`}>
+                                                    {item.ativo && (
+                                                        <span className="relative flex h-1.5 w-1.5">
+                                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                                                        </span>
+                                                    )}
+                                                    {item.ativo ? 'Ativo' : 'Inativo'}
+                                                </span>
+                                            </div>
+                                            <p className="text-[10px] text-gray-450 dark:text-gray-500 font-bold tracking-wider uppercase">
+                                                ID: {item.id}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Linha Divisória */}
+                                    <div className="h-px bg-gray-50 dark:bg-gray-750" />
+
+                                    {/* Informações de contato organizadas */}
+                                    <div className="space-y-3 text-xs">
+                                        
+                                        {/* CPF/CNPJ */}
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-905 px-2 py-1 rounded border border-gray-100 dark:border-gray-800">
+                                                Doc
+                                            </span>
+                                            <span className="font-semibold text-gray-700 dark:text-gray-300">
+                                                {item.documento || 'Vazio / Não informado'}
+                                            </span>
+                                        </div>
+
+                                        {/* Telefone / WhatsApp */}
+                                        {item.whatsapp && (
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-1 px-1.5 bg-indigo-50/50 dark:bg-indigo-950/30 rounded text-indigo-600 dark:text-indigo-400">
+                                                    <PhoneIcon className="w-4 h-4 shrink-0" />
+                                                </div>
+                                                <a 
+                                                    href={`https://wa.me/${item.whatsapp.replace(/\D/g, '')}`} 
+                                                    target="_blank" 
+                                                    referrerPolicy="no-referrer"
+                                                    className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer truncate"
+                                                    title="Clique para conversar"
+                                                >
+                                                    {item.whatsapp}
+                                                    <span className="text-[10px] font-semibold text-indigo-455 opacity-70">💬 (WhatsApp)</span>
+                                                </a>
+                                            </div>
+                                        )}
+
+                                        {/* Endereço Base */}
+                                        <div className="flex items-start gap-3">
+                                            <div className="p-1 px-1.5 bg-emerald-50/50 dark:bg-emerald-950/30 rounded text-emerald-600 dark:text-emerald-400 mt-0.5">
+                                                <MapPinIcon className="w-4 h-4 shrink-0" />
+                                            </div>
+                                            <div className="font-medium text-gray-650 dark:text-gray-300 leading-relaxed min-w-0 flex-1">
+                                                <span className="block truncate">
+                                                    {item.endereco ? `${item.endereco}${item.numero ? `, nº ${item.numero}` : ''}${item.bairro ? ` - ${item.bairro}` : ''}` : 'Endereço sem cadastro'}
+                                                </span>
+                                                {(item.cidade || item.uf) && (
+                                                    <span className="block text-[11px] font-bold text-gray-500 dark:text-gray-450 mt-1">
+                                                        📍 {item.cidade || ''} - {item.uf || ''} {item.cep ? `• CEP: ${item.cep}` : ''}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Observações */}
+                                    {item.observacoes && (
+                                        <div className="bg-gray-50/60 dark:bg-gray-900/40 p-3 rounded-2xl border border-gray-100/50 dark:border-gray-800/40 text-[11px] text-gray-550 dark:text-gray-400 leading-relaxed italic relative">
+                                            <span className="font-bold pr-1 not-italic">Ref:</span> "{item.observacoes}"
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Ações do Card */}
+                                <div className="mt-6 pt-4 border-t border-gray-50 dark:border-gray-750 flex items-center justify-end gap-2">
+                                    <button 
+                                        onClick={() => handleOpenModal(item)} 
+                                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-gray-500 hover:text-indigo-650 dark:text-gray-400 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 rounded-xl transition-all cursor-pointer"
+                                        title="Editar parceiro"
+                                        id={`btn-edit-${item.id}`}
+                                    >
+                                        <EditIcon className="w-4 h-4" /> <span>Editar</span>
+                                    </button>
+                                    <button 
+                                        onClick={() => handleDelete(item.id)} 
+                                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-xl transition-all cursor-pointer"
+                                        title="Excluir parceiro"
+                                        id={`btn-del-${item.id}`}
+                                    >
+                                        <TrashIcon className="w-4 h-4" /> <span>Excluir</span>
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            {/* Modal de Cadastro / Edição Modernizado e Elegante */}
             {isModalOpen && (
                 <Modal 
-                    title={editingItem ? "Editar Instalador" : "Cadastrar Novo Instalador"} 
+                    title={editingItem ? "Editar parceiro" : "Cadastrar novo parceiro"} 
                     onClose={() => setIsModalOpen(false)}
+                    maxWidth="max-w-2xl"
                 >
-                    <form onSubmit={handleSave} className="space-y-4 text-xs font-sans">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <form onSubmit={handleSave} className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             
-                            <div className="space-y-1 sm:col-span-2">
-                                <label className="block text-[10px] font-black text-gray-500">Nome Completo *</label>
+                            {/* Nome Completo */}
+                            <div className="md:col-span-2">
+                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">
+                                    Nome completo / Razão social *
+                                </label>
                                 <input
                                     type="text"
                                     required
                                     value={form.nome}
                                     onChange={e => setForm(prev => ({ ...prev, nome: e.target.value }))}
-                                    className="w-full rounded-xl bg-white dark:bg-gray-900 p-2.5 border border-gray-200 dark:border-gray-700 outline-none focus:ring-2 focus:ring-indigo-500/20 text-xs text-gray-800 dark:text-white font-semibold"
+                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
                                     placeholder="Ex: Ricardo Silva Martins"
                                 />
                             </div>
 
-                            <div className="space-y-1">
-                                <label className="block text-[10px] font-black text-gray-500">CPF / CNPJ</label>
+                            {/* Documento */}
+                            <div>
+                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">
+                                    Documento (CPF / CNPJ)
+                                </label>
                                 <input
                                     type="text"
                                     value={form.documento}
                                     onChange={e => setForm(prev => ({ ...prev, documento: e.target.value }))}
-                                    className="w-full rounded-xl bg-white dark:bg-gray-900 p-2.5 border border-gray-200 dark:border-gray-700 outline-none focus:ring-2 focus:ring-indigo-500/20 text-xs text-gray-800 dark:text-white font-semibold"
-                                    placeholder="000.000.000-00 ou 00.000.000/0001-00"
+                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
+                                    placeholder="Ex: 000.000.000-00 ou CNPJ"
                                 />
                             </div>
 
-                            <div className="space-y-1">
-                                <label className="block text-[10px] font-black text-gray-500">WhatsApp / Telefone</label>
-                                <input
-                                    type="text"
-                                    value={form.whatsapp}
-                                    onChange={e => setForm(prev => ({ ...prev, whatsapp: e.target.value }))}
-                                    className="w-full rounded-xl bg-white dark:bg-gray-900 p-2.5 border border-gray-200 dark:border-gray-700 outline-none focus:ring-2 focus:ring-indigo-500/20 text-xs text-gray-800 dark:text-white font-semibold"
-                                    placeholder="(11) 99999-9999"
-                                />
+                            {/* WhatsApp */}
+                            <div>
+                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">
+                                    WhatsApp / Telefone de contato *
+                                </label>
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        required
+                                        value={form.whatsapp}
+                                        onChange={e => {
+                                            const formatted = formatWhatsApp(e.target.value);
+                                            setForm(prev => ({ ...prev, whatsapp: formatted }));
+                                        }}
+                                        className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-indigo-600 dark:text-indigo-400 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400 pr-10"
+                                        placeholder="Ex: (11) 99999-9999"
+                                    />
+                                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-sm select-none pointer-events-none opacity-80">📱</span>
+                                </div>
                             </div>
 
-                            <div className="space-y-1">
-                                <label className="block text-[10px] font-black text-gray-500">CEP</label>
+                            {/* Divisor Visível */}
+                            <div className="md:col-span-2 py-1">
+                                <div className="h-px bg-gray-100 dark:bg-gray-750" />
+                            </div>
+
+                            {/* CEP Buscar */}
+                            <div>
+                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">
+                                    CEP base
+                                </label>
                                 <div className="flex gap-2">
                                     <input
                                         type="text"
                                         value={form.cep}
                                         onChange={e => setForm(prev => ({ ...prev, cep: e.target.value }))}
                                         onBlur={handleFetchCEP}
-                                        className="w-full rounded-xl bg-white dark:bg-gray-900 p-2.5 border border-gray-200 dark:border-gray-700 outline-none focus:ring-2 focus:ring-indigo-500/20 text-xs text-gray-800 dark:text-white font-semibold"
+                                        className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400 text-center"
                                         placeholder="00000-000"
                                     />
                                     <button
                                         type="button"
                                         onClick={handleFetchCEP}
-                                        className="px-3 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-xl font-bold transition-all text-[11px]"
+                                        className="px-4 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 text-gray-600 dark:text-gray-300 rounded-xl font-bold transition-all text-xs border border-gray-200 dark:border-gray-700 cursor-pointer shrink-0 active:scale-95 flex items-center justify-center gap-1.5 shadow-sm"
                                     >
-                                        Buscar
+                                        <SearchIcon className="w-3.5 h-3.5" /> Buscar
                                     </button>
                                 </div>
                             </div>
 
-                            <div className="space-y-1">
-                                <label className="block text-[10px] font-black text-gray-500">Valor Cobrado / KM rodado (R$) *</label>
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    required
-                                    value={form.valor_km}
-                                    onChange={e => setForm(prev => ({ ...prev, valor_km: parseFloat(e.target.value) || 0 }))}
-                                    className="w-full rounded-xl bg-white dark:bg-gray-900 p-2.5 border border-gray-200 dark:border-gray-700 outline-none focus:ring-2 focus:ring-indigo-500/20 text-xs text-indigo-650 dark:text-indigo-400 font-bold"
-                                    placeholder="Ex: 1.50"
-                                />
-                            </div>
-
-                            <div className="space-y-1 sm:col-span-2">
-                                <label className="block text-[10px] font-black text-gray-500">Endereço (Rua, Número, Bairro)</label>
+                            {/* Logradouro / Rua */}
+                            <div>
+                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">
+                                    Rua / Endereço completo
+                                </label>
                                 <input
                                     type="text"
                                     value={form.endereco}
                                     onChange={e => setForm(prev => ({ ...prev, endereco: e.target.value }))}
-                                    className="w-full rounded-xl bg-white dark:bg-gray-900 p-2.5 border border-gray-200 dark:border-gray-700 outline-none focus:ring-2 focus:ring-indigo-500/20 text-xs text-gray-800 dark:text-white font-semibold"
-                                    placeholder="Av. Paulista, 1000 - Bela Vista"
+                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
+                                    placeholder="Av. Paulista, etc"
                                 />
                             </div>
 
-                            <div className="space-y-1">
-                                <label className="block text-[10px] font-black text-gray-500">Cidade</label>
+                            {/* Número */}
+                            <div>
+                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">
+                                    Número
+                                </label>
+                                <input
+                                    type="text"
+                                    value={form.numero}
+                                    onChange={e => setForm(prev => ({ ...prev, numero: e.target.value }))}
+                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
+                                    placeholder="Ex: 1045"
+                                />
+                            </div>
+
+                            {/* Bairro */}
+                            <div>
+                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">
+                                    Bairro
+                                </label>
+                                <input
+                                    type="text"
+                                    value={form.bairro}
+                                    onChange={e => setForm(prev => ({ ...prev, bairro: e.target.value }))}
+                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
+                                    placeholder="Ex: Bela Vista"
+                                />
+                            </div>
+
+                            {/* Cidade */}
+                            <div>
+                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">
+                                    Cidade
+                                </label>
                                 <input
                                     type="text"
                                     value={form.cidade}
                                     onChange={e => setForm(prev => ({ ...prev, cidade: e.target.value }))}
-                                    className="w-full rounded-xl bg-white dark:bg-gray-900 p-2.5 border border-gray-200 dark:border-gray-700 outline-none focus:ring-2 focus:ring-indigo-500/20 text-xs text-gray-800 dark:text-white font-semibold"
-                                    placeholder="São Paulo"
+                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
+                                    placeholder="Ex: São Paulo"
                                 />
                             </div>
 
-                            <div className="space-y-1">
-                                <label className="block text-[10px] font-black text-gray-500">Estado (UF)</label>
+                            {/* UF */}
+                            <div>
+                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">
+                                    Estado (UF)
+                                </label>
                                 <input
                                     type="text"
                                     maxLength={2}
                                     value={form.uf}
                                     onChange={e => setForm(prev => ({ ...prev, uf: e.target.value.toUpperCase() }))}
-                                    className="w-full rounded-xl bg-white dark:bg-gray-900 p-2.5 border border-gray-200 dark:border-gray-700 outline-none focus:ring-2 focus:ring-indigo-500/20 text-xs text-gray-800 dark:text-white font-semibold"
-                                    placeholder="SP"
+                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
+                                    placeholder="Ex: SP"
                                 />
                             </div>
 
-                            <div className="space-y-1">
-                                <label className="block text-[10px] font-black text-gray-500">Status</label>
+                            {/* Status Ativo */}
+                            <div className="md:col-span-2">
+                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">
+                                    Status do cadastro (Disponibilidade)
+                                </label>
                                 <select
                                     value={form.ativo ? 'true' : 'false'}
                                     onChange={e => setForm(prev => ({ ...prev, ativo: e.target.value === 'true' }))}
-                                    className="w-full rounded-xl bg-white dark:bg-gray-900 p-2.5 border border-gray-200 dark:border-gray-700 outline-none focus:ring-2 focus:ring-indigo-500/20 text-xs text-gray-800 dark:text-white font-semibold"
+                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 cursor-pointer"
                                 >
-                                    <option value="true">Ativo</option>
-                                    <option value="false">Inativo</option>
+                                    <option value="true">🟢 Ativo (Habilitar para orçamentos e fretes)</option>
+                                    <option value="false">🔴 Inativo (Desabilitar de orçamentos e fretes)</option>
                                 </select>
                             </div>
 
-                            <div className="space-y-1 sm:col-span-2">
-                                <label className="block text-[10px] font-black text-gray-500">Observações</label>
+                            {/* Observações / Notas */}
+                            <div className="md:col-span-2">
+                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5 font-sans">
+                                    Observações / especificações técnicas
+                                </label>
                                 <textarea
                                     value={form.observacoes}
+                                    rows={2}
                                     onChange={e => setForm(prev => ({ ...prev, observacoes: e.target.value }))}
-                                    className="w-full rounded-xl bg-white dark:bg-gray-900 p-2.5 border border-gray-200 dark:border-gray-700 outline-none focus:ring-2 focus:ring-indigo-500/20 text-xs text-gray-800 dark:text-white font-semibold min-h-[60px]"
-                                    placeholder="Qualquer detalhe, experiência, ferramentas ou custos fixos adicionados por viagem."
+                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-medium shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 resize-none min-h-[70px]"
+                                    placeholder="Detalhes sobre ferramentas especiais, distâncias máximas de atendimento ou taxas específicas..."
                                 />
                             </div>
 
                         </div>
 
-                        <button
-                            type="submit"
-                            disabled={isSaving}
-                            className={`w-full flex items-center justify-center gap-1.5 py-3 ${isSaving ? 'bg-gray-400 grayscale cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'} text-white rounded-xl font-bold text-xs transition-all active:scale-95 shadow-md shadow-emerald-500/10`}
-                        >
-                            <SaveIcon className="w-4 h-4" /> 
-                            <span>{isSaving ? 'Salvando...' : 'Gravar parceiro instalador'}</span>
-                        </button>
+                        {/* Ações do Formulário de acordo com o Cadastro de Produtos */}
+                        <div className="flex gap-3 pt-4 border-t border-gray-100 dark:border-gray-750">
+                            <button 
+                                type="button" 
+                                onClick={() => setIsModalOpen(false)} 
+                                className="px-5 py-2.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 text-gray-500 dark:text-gray-400 rounded-xl font-bold text-xs transition-all border border-gray-200 dark:border-gray-700 shadow-sm"
+                            >
+                                Cancelar
+                            </button>
+                            <button 
+                                type="submit" 
+                                disabled={isSaving}
+                                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/15 hover:shadow-indigo-600/25 transition-all active:scale-[0.98] disabled:opacity-50"
+                            >
+                                {isSaving ? 'Salvando...' : (editingItem ? 'Salvar alterações' : 'Salvar novo parceiro')}
+                            </button>
+                        </div>
                     </form>
                 </Modal>
             )}

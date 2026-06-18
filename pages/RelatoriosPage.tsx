@@ -53,6 +53,7 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
   
   const [statusFilterValue, setStatusFilterValue] = useState<ExpenseReportStatus | 'Todos'>('Todos');
   const [configKmValue, setConfigKmValue] = useState(1.20);
+  const [configKmBudget, setConfigKmBudget] = useState(1.20);
   const [configInstValue, setConfigInstValue] = useState(120.00);
   const [configTaxValue, setConfigTaxValue] = useState(6.00);
   const [companyLogoValue, setCompanyLogoValue] = useState<string | null>(null);
@@ -63,6 +64,7 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
   const [editSupplierNameValue, setEditSupplierNameValue] = useState('');
 
   const [isEditingKm, setIsEditingKm] = useState(false);
+  const [isEditingKmBudget, setIsEditingKmBudget] = useState(false);
   const [isEditingInst, setIsEditingInst] = useState(false);
   const [isEditingTax, setIsEditingTax] = useState(false);
   const [isEditingLogo, setIsEditingLogo] = useState(false);
@@ -155,6 +157,7 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
       try {
           const remoteConfigs = await dataService.getAll<any>('system_configs', undefined, true);
           const remoteKm = remoteConfigs.find(c => c.id === 'km_value');
+          const remoteKmBudget = remoteConfigs.find(c => c.id === 'km_value_budget');
           const remoteInst = remoteConfigs.find(c => c.id === 'installation_value');
           const remoteTax = remoteConfigs.find(c => c.id === 'tax_value');
           const remoteLogo = remoteConfigs.find(c => c.id === 'company_logo');
@@ -162,6 +165,9 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
           if (remoteKm) {
               const val = parseFloat(remoteKm.value);
               setConfigKmValue(val); setValorPorKm(val);
+          }
+          if (remoteKmBudget) {
+              setConfigKmBudget(parseFloat(remoteKmBudget.value));
           }
           if (remoteInst) setConfigInstValue(parseFloat(remoteInst.value));
           if (remoteTax) setConfigTaxValue(parseFloat(remoteTax.value));
@@ -489,6 +495,14 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
       } catch (e) { alert('Erro.'); } finally { setIsLoading(false); }
   };
 
+  const handleSaveKmBudgetConfig = async () => {
+      setIsLoading(true);
+      try {
+          await dataService.save('system_configs', { id: 'km_value_budget', value: configKmBudget.toString() });
+          setIsEditingKmBudget(false); alert('Salvo!');
+      } catch (e) { alert('Erro.'); } finally { setIsLoading(false); }
+  };
+
   const handleSaveInstConfig = async () => {
       setIsLoading(true);
       try {
@@ -564,6 +578,20 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
                                             <button onClick={handleSaveKmConfig} className="p-2 bg-green-600 text-white rounded-lg shadow-sm hover:bg-green-700"><SaveIcon className="w-4 h-4" /></button>
                                         ) : (
                                             <button onClick={() => setIsEditingKm(true)} className="p-2 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-300"><EditIcon className="w-4 h-4" /></button>
+                                        )}
+                                    </div>
+                                </div>
+                                <div>
+                                    <FormLabel>Valor do KM (Orçamento)</FormLabel>
+                                    <div className="flex gap-2">
+                                        <div className="relative flex-1">
+                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">R$</span>
+                                            <input type="number" step="0.01" value={configKmBudget} onChange={e => setConfigKmBudget(parseFloat(e.target.value))} disabled={!isEditingKmBudget} className="w-full pl-9 rounded-lg border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 text-xs font-bold text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-70" />
+                                        </div>
+                                        {isEditingKmBudget ? (
+                                            <button onClick={handleSaveKmBudgetConfig} className="p-2 bg-green-600 text-white rounded-lg shadow-sm hover:bg-green-700"><SaveIcon className="w-4 h-4" /></button>
+                                        ) : (
+                                            <button onClick={() => setIsEditingKmBudget(true)} className="p-2 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-300"><EditIcon className="w-4 h-4" /></button>
                                         )}
                                     </div>
                                 </div>

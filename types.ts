@@ -44,6 +44,8 @@ export interface Instalador {
     valor_km: number;
     ativo: boolean;
     observacoes?: string;
+    bairro?: string;
+    numero?: string;
 }
 
 export interface User {
@@ -113,6 +115,41 @@ export interface SavedOrcamento {
     calculated?: any;
     variants?: OrcamentoVariant[];
     lavagem_cadastrada?: boolean;
+    venda_etapas?: {
+        compra_equipamento?: boolean;
+        contrato_procuracao?: boolean;
+        homologacao?: boolean;
+        agendamento_instalacao?: boolean;
+        pag_instalacao?: boolean;
+        pag_reembolso?: boolean;
+        instalacao_finalizada?: boolean;
+        instalacao_finalizada_data?: string;
+        faturado?: boolean;
+    };
+    custos_estimados?: {
+        homologacao?: number;
+        deslocamento?: number;
+        pedagio?: number;
+        adequacao?: number;
+        instalacao?: number;
+        materiais?: number;
+        imposto?: number;
+    };
+    custos_reais?: {
+        homologacao?: number;
+        deslocamento?: number;
+        pedagio?: number;
+        adequacao?: number;
+        instalacao?: number;
+        materiais?: number;
+        imposto?: number;
+        deslocamentoDistanceKm?: number;
+        deslocamentoValorKm?: number;
+        deslocamentoIdaVolta?: boolean;
+        deslocamentoHotel?: number;
+        deslocamentoMargem?: number;
+        linked_checkout_id?: string;
+    };
 }
 
 export interface SalesSummaryItem {
@@ -149,6 +186,7 @@ export interface LavagemClient {
     address_number: string;
     complement: string;
     city: string;
+    uf?: string;
     plates_count: number;
     observations?: string;
     installation_end_date?: string;

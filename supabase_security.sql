@@ -32,6 +32,7 @@ ALTER TABLE IF EXISTS activity_catalog ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS activity_appointments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS activity_appointments_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS system_configs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS instaladores ENABLE ROW LEVEL SECURITY;
 
 -- 2. Criar Políticas de Acesso (Exemplo para as tabelas principais)
 -- Nota: Como o sistema usa uma chave pública para autenticação manual, 
@@ -57,6 +58,7 @@ BEGIN
     PERFORM create_public_policy('purchase_requests');
     PERFORM create_public_policy('lavagem_clients');
     PERFORM create_public_policy('checklist_checkin');
+    PERFORM create_public_policy('instaladores');
 END $$;
 
 -- Função auxiliar para criar políticas rapidamente se não existirem

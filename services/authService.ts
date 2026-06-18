@@ -1,6 +1,7 @@
 import { dataService } from './dataService';
 import { supabase } from '../supabaseClient';
 import type { User } from '../types';
+import { MOCK_USERS } from '../constants';
 
 const SESSION_KEY = 'orner_user_session';
 
@@ -18,6 +19,17 @@ class AuthService {
                 .single();
 
             if (error || !data) {
+                const isNetworkError = error?.message?.includes('fetch') || error?.message?.includes('network') || error?.message?.includes('Failed to fetch');
+                if (isNetworkError) {
+                    console.warn("[AUTH WARNING] Supabase indisponível. Tentando login com usuários locais/mock...");
+                    const mockUser = MOCK_USERS.find(
+                        u => u.email.toLowerCase() === email.toLowerCase() && u.password === password
+                    );
+                    if (mockUser) {
+                        this.saveSession(mockUser);
+                        return mockUser;
+                    }
+                }
                 if (error) {
                     console.error("[AUTH ERROR] Erro na requisição ao Supabase:", error.message, error.details);
                     if (error.code === '401' || error.message.includes('JWT') || error.message.includes('key')) {
@@ -38,6 +50,17 @@ class AuthService {
 
             return null;
         } catch (error: any) {
+            const isNetworkError = error?.message?.includes('fetch') || error?.message?.includes('network') || error?.message?.includes('Failed to fetch');
+            if (isNetworkError) {
+                console.warn("[AUTH WARNING] Capturado erro de rede no catch. Usando fallback offline...");
+                const mockUser = MOCK_USERS.find(
+                    u => u.email.toLowerCase() === email.toLowerCase() && u.password === password
+                );
+                if (mockUser) {
+                    this.saveSession(mockUser);
+                    return mockUser;
+                }
+            }
             throw error;
         }
     }

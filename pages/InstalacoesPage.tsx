@@ -246,6 +246,37 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
         setIsSaving(true);
         try {
             await dataService.save('activity_appointments', data);
+
+            // Se for agendamento de atividade de instalação para cliente com orçamento aprovado, flagar "Agendamento Instalação"
+            if (!isPersonal && selectedActivity?.title?.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes("instalacao")) {
+                const matchingOrcamento = orcamentos.find(o => {
+                    if (o.status !== 'Aprovado') return false;
+                    const v = o.variants?.find(x => x.isPrincipal) || o.variants?.[0] || { formState: o.formState };
+                    const nome = v.formState?.nomeCliente || '';
+                    return nome.toLowerCase().trim() === data.clientName?.toLowerCase().trim();
+                });
+
+                if (matchingOrcamento) {
+                    const etapas = { 
+                        compra_equipamento: false,
+                        contrato_procuracao: false,
+                        homologacao: false,
+                        agendamento_instalacao: false,
+                        pag_instalacao: false,
+                        pag_reembolso: false,
+                        instalacao_finalizada: false,
+                        faturado: false,
+                        ...(matchingOrcamento.venda_etapas || {}) 
+                    };
+                    etapas.agendamento_instalacao = true;
+                    const updatedOrcamento = {
+                        ...matchingOrcamento,
+                        venda_etapas: etapas
+                    };
+                    await dataService.save('orcamentos', updatedOrcamento);
+                }
+            }
+
             setIsApptModalOpen(false);
             setEditingAppt(null);
             setApptForm({ activityId: '', clientName: '', startDate: new Date().toISOString().split('T')[0], endDate: new Date().toISOString().split('T')[0], startTime: '08:00', endTime: '12:00', isAllDay: false, cep: '', address: '', number: '', complement: '', city: '', platesCount: 0, arrangement: '', observations: '', panelsConfig: [], participantIds: [], notifyByEmail: false });

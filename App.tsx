@@ -164,7 +164,7 @@ const App: React.FC = () => {
         console.log("[INIT] Testando conexão com Supabase...");
         const conn = await testSupabaseConnection();
         if (!conn.ok) {
-            setDbError(`Falha na conexão com o Supabase. Verifique se o projeto está ativo e se as chaves em supabaseClient.ts estão corretas.`);
+            console.warn("Falha na conexão inicial com o Supabase. O sistema iniciará no modo offline local.");
         }
 
         const session = authService.getSession();

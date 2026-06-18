@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import type { ChecklistEntry, StockItem, StockMovement, PurchaseRequest, CheckListPageProps, SavedOrcamento, UserProfile } from '../types';
+import type { ChecklistEntry, StockItem, StockMovement, PurchaseRequest, CheckListPageProps, SavedOrcamento, UserProfile, LavagemClient } from '../types';
 import { 
     ClipboardCheckIcon, CheckCircleIcon, TrashIcon, 
     PlusIcon, PhotographIcon, EyeIcon, WrenchIcon,
@@ -216,6 +216,12 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
     const [showNameSuggestions, setShowNameSuggestions] = useState(false);
     const suggestionRef = useRef<HTMLDivElement>(null);
 
+    const [lavagemClients, setLavagemClients] = useState<LavagemClient[]>([]);
+    const [showCheckoutSuggestions, setShowCheckoutSuggestions] = useState(false);
+    const checkoutSuggestionRef = useRef<HTMLDivElement>(null);
+    const [showManutencaoSuggestions, setShowManutencaoSuggestions] = useState(false);
+    const manutencaoSuggestionRef = useRef<HTMLDivElement>(null);
+
     // Lógica de Admin/Acesso Global: Liberado para IDs Admin, perfil com flag 'hasGlobalView' ou permissão ALL
     const isAdmin = useMemo(() => {
         const email = (currentUser.email || '').toLowerCase();
@@ -268,13 +274,15 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
                 dataService.getPartial<any>(currentTable, listFields, currentUser.id, isAdmin),
                 dataService.getAll<StockItem>('stock_items', currentUser.id, true),
                 dataService.getAll<SavedOrcamento>('orcamentos', currentUser.id, isAdmin),
-                dataService.getPartial<any>('checklist_checkin', listFields, currentUser.id, isAdmin)
+                dataService.getPartial<any>('checklist_checkin', listFields, currentUser.id, isAdmin),
+                dataService.getAll<LavagemClient>('lavagem_clients', currentUser.id, isAdmin)
             ]);
             
             const rawCurrent = results[0].status === 'fulfilled' ? (results[0].value as any[]) : [];
             const rawStock = results[1].status === 'fulfilled' ? (results[1].value as any[]) : [];
             const rawOrcamentos = results[2].status === 'fulfilled' ? (results[2].value as any[]) : [];
             const rawAllCheckins = results[3].status === 'fulfilled' ? (results[3].value as any[]) : [];
+            const rawLavagemClients = results[4].status === 'fulfilled' ? (results[4].value as any[]) : [];
             
             const processedCurrent = rawCurrent.map(item => ({ ...item, type: view }));
             const processedAllCheckins = rawAllCheckins.map(item => ({ ...item, type: 'checkin' }));
@@ -283,6 +291,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
             setStockItems(rawStock.sort((a:any, b:any) => a.name.localeCompare(b.name)));
             setOrcamentos(rawOrcamentos);
             setAllCheckins(processedAllCheckins);
+            setLavagemClients(rawLavagemClients || []);
         } catch (e) { console.error(e); } finally { setIsLoading(false); }
     }, [view, currentUser.id, isAdmin]);
 
@@ -298,38 +307,76 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
             if (suggestionRef.current && !suggestionRef.current.contains(event.target as Node)) {
                 setShowNameSuggestions(false);
             }
+            if (checkoutSuggestionRef.current && !checkoutSuggestionRef.current.contains(event.target as Node)) {
+                setShowCheckoutSuggestions(false);
+            }
+            if (manutencaoSuggestionRef.current && !manutencaoSuggestionRef.current.contains(event.target as Node)) {
+                setShowManutencaoSuggestions(false);
+            }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const approvedClientsData = useMemo(() => {
-        const clientsWithExistingCheckin = new Set(
-            allCheckins
-                .filter(c => c.status !== 'Perdido')
-                .map(c => c.project)
-        );
+    const unifiedClientsList = useMemo(() => {
+        // 1. Get clients from lavagem_clients table
+        const listFromLavagem = (lavagemClients || []).map(c => ({
+            id: c.id,
+            name: c.name,
+            phone: c.phone || '',
+            email: '',
+            cep: c.cep || '',
+            address: c.address || '',
+            address_number: c.address_number || '',
+            complement: c.complement || '',
+            city: c.city || '',
+            source: 'Lavagem' as const
+        }));
 
-        return orcamentos
+        // 2. Get approved budgets (not yet in listFromLavagem or with existing checkin)
+        const existingNames = new Set(listFromLavagem.map(c => c.name.toLowerCase().trim()));
+        
+        const listFromOrcamentos = (orcamentos || [])
             .filter(orc => orc.status === 'Aprovado')
             .map(orc => {
                 const variant = orc.variants?.find(v => v.isPrincipal) || orc.variants?.[0] || { formState: orc.formState };
                 const fs = variant.formState || {};
                 return {
+                    id: `orc-${orc.id}`,
                     name: fs.nomeCliente || 'Sem nome',
                     email: fs.emailTitular || '',
-                    phone: fs.telefoneTitular || ''
+                    phone: fs.telefoneTitular || '',
+                    cep: fs.cep || '',
+                    address: fs.enderecoCompleto || '',
+                    address_number: '',
+                    complement: '',
+                    city: fs.cidade || '',
+                    source: 'Orcamento' as const
                 };
             })
-            .filter(c => c.name !== 'Sem nome' && !clientsWithExistingCheckin.has(c.name))
-            .sort((a, b) => a.name.localeCompare(b.name));
-    }, [orcamentos, allCheckins]);
+            .filter(c => c.name !== 'Sem nome' && !existingNames.has(c.name.toLowerCase().trim()));
 
-    const filteredApprovedClients = useMemo(() => {
+        const merged = [...listFromLavagem, ...listFromOrcamentos];
+        return merged.sort((a, b) => a.name.localeCompare(b.name));
+    }, [lavagemClients, orcamentos]);
+
+    const filteredCheckinClients = useMemo(() => {
         const search = (form.nomeTitular || '').toLowerCase();
-        if (!search) return approvedClientsData;
-        return approvedClientsData.filter(c => c.name.toLowerCase().includes(search));
-    }, [approvedClientsData, form.nomeTitular]);
+        if (!search) return unifiedClientsList;
+        return unifiedClientsList.filter(c => c.name.toLowerCase().includes(search));
+    }, [unifiedClientsList, form.nomeTitular]);
+
+    const filteredCheckoutClients = useMemo(() => {
+        const search = (form.nomeCliente || '').toLowerCase();
+        if (!search) return unifiedClientsList;
+        return unifiedClientsList.filter(c => c.name.toLowerCase().includes(search));
+    }, [unifiedClientsList, form.nomeCliente]);
+
+    const filteredManutencaoClients = useMemo(() => {
+        const search = (form.nomeCliente || '').toLowerCase();
+        if (!search) return unifiedClientsList;
+        return unifiedClientsList.filter(c => c.name.toLowerCase().includes(search));
+    }, [unifiedClientsList, form.nomeCliente]);
 
     const filteredEntries = useMemo(() => {
         return entries.filter(e => {
@@ -673,13 +720,37 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
     };
 
     const selectClientFromSuggestions = (client: any) => {
+        const fullAddress = client.address 
+            ? `${client.address}${client.address_number ? ', ' + client.address_number : ''}${client.complement ? ' - ' + client.complement : ''}` 
+            : form.enderecoCompleto || '';
         setForm({
             ...form,
             nomeTitular: client.name,
-            emailTitular: client.email || form.emailTitular,
-            telefoneTitular: client.phone || form.telefoneTitular
+            emailTitular: client.email || form.emailTitular || '',
+            telefoneTitular: client.phone || form.telefoneTitular || '',
+            cep: client.cep || form.cep || '',
+            enderecoCompleto: fullAddress,
+            cidade: client.city || form.cidade || ''
         });
         setShowNameSuggestions(false);
+    };
+
+    const selectClientForCheckout = (client: any) => {
+        const checkin = allCheckins.find(c => c.project?.toLowerCase().trim() === client.name.toLowerCase().trim());
+        setForm((prev: any) => ({
+            ...prev,
+            nomeCliente: client.name,
+            originalCheckinId: checkin ? checkin.id : prev.originalCheckinId || ''
+        }));
+        setShowCheckoutSuggestions(false);
+    };
+
+    const selectClientForManutencao = (client: any) => {
+        setForm((prev: any) => ({
+            ...prev,
+            nomeCliente: client.name
+        }));
+        setShowManutencaoSuggestions(false);
     };
 
     const renderGalleryItem = (field: string, label: string, max: number = 10) => {
@@ -1025,10 +1096,10 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
                                                             )}
                                                         </div>
 
-                                                        {showNameSuggestions && !isViewOnly && filteredApprovedClients.length > 0 && (
+                                                        {showNameSuggestions && !isViewOnly && filteredCheckinClients.length > 0 && (
                                                             <div className="absolute top-full left-0 z-50 w-full bg-white dark:bg-gray-800 mt-1 rounded-xl shadow-2xl border border-indigo-50 dark:border-gray-700 py-2 max-h-52 overflow-y-auto custom-scrollbar animate-fade-in">
-                                                                <p className="px-4 py-1.5 text-[9px] font-black text-indigo-500 uppercase tracking-widest border-b border-gray-50 dark:border-gray-700 mb-1">Clientes aptos para vistoria técnica</p>
-                                                                {filteredApprovedClients.map((client, idx) => (
+                                                                <p className="px-4 py-1.5 text-[9px] font-black text-indigo-500 uppercase tracking-widest border-b border-gray-50 dark:border-gray-700 mb-1">Selecionar Cliente (Cadastrado / Orçamento)</p>
+                                                                {filteredCheckinClients.map((client, idx) => (
                                                                     <button
                                                                         key={idx}
                                                                         type="button"
@@ -1036,7 +1107,12 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
                                                                         className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all group border-l-2 border-transparent hover:border-indigo-600"
                                                                     >
                                                                         <div>
-                                                                            <p className="text-[11px] font-bold text-gray-800 dark:text-white group-hover:text-indigo-700 transition-colors">{client.name}</p>
+                                                                            <p className="text-[11px] font-bold text-gray-800 dark:text-white group-hover:text-indigo-700 transition-colors">
+                                                                                {client.name} 
+                                                                                <span className={`ml-2 text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide inline-block ${client.source === 'Lavagem' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'}`}>
+                                                                                    {client.source === 'Lavagem' ? 'Cadastrado' : 'Orçamento'}
+                                                                                </span>
+                                                                            </p>
                                                                             <p className="text-[9px] text-gray-400 font-medium">{client.email || 'Sem e-mail'} • {client.phone || 'Sem telefone'}</p>
                                                                         </div>
                                                                         <CheckCircleIcon className="w-3.5 h-3.5 text-indigo-200 group-hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-all" />
@@ -1192,7 +1268,58 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
                                 <div className="animate-fade-in space-y-6">
                                     {activeStep === 1 && (
                                         <div className="space-y-4">
-                                            <div><FormLabel>Nome do cliente *</FormLabel><StandardInput value={form.nomeCliente} onChange={(e:any)=>setForm({...form, nomeCliente: e.target.value})} disabled={isViewOnly} /></div>
+                                            <div className="relative" ref={checkoutSuggestionRef}>
+                                                <FormLabel>Nome do cliente *</FormLabel>
+                                                <div className="relative">
+                                                    <input 
+                                                        type="text"
+                                                        autoComplete="off"
+                                                        placeholder="Digite o nome do cliente"
+                                                        value={form.nomeCliente || ''}
+                                                        onFocus={() => !isViewOnly && setShowCheckoutSuggestions(true)}
+                                                        onChange={(e) => {
+                                                            setForm({...form, nomeCliente: e.target.value});
+                                                            if (!isViewOnly) setShowCheckoutSuggestions(true);
+                                                        }}
+                                                        disabled={isViewOnly}
+                                                        className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700/50 p-2.5 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all pr-10"
+                                                    />
+                                                    {!isViewOnly && (
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => setShowCheckoutSuggestions(!showCheckoutSuggestions)}
+                                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-indigo-600"
+                                                        >
+                                                            <ChevronDownIcon className={`w-4 h-4 transition-transform ${showCheckoutSuggestions ? 'rotate-180' : ''}`} />
+                                                        </button>
+                                                    )}
+                                                </div>
+
+                                                {showCheckoutSuggestions && !isViewOnly && filteredCheckoutClients.length > 0 && (
+                                                    <div className="absolute top-full left-0 z-50 w-full bg-white dark:bg-gray-800 mt-1 rounded-xl shadow-2xl border border-indigo-50 dark:border-gray-700 py-2 max-h-52 overflow-y-auto custom-scrollbar animate-fade-in col-span-12">
+                                                        <p className="px-4 py-1.5 text-[9px] font-black text-indigo-500 uppercase tracking-widest border-b border-gray-50 dark:border-gray-700 mb-1">Selecionar Cliente</p>
+                                                        {filteredCheckoutClients.map((client, idx) => (
+                                                            <button
+                                                                key={idx}
+                                                                type="button"
+                                                                onClick={() => selectClientForCheckout(client)}
+                                                                className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all group border-l-2 border-transparent hover:border-indigo-600"
+                                                            >
+                                                                <div>
+                                                                    <p className="text-[11px] font-bold text-gray-800 dark:text-white group-hover:text-indigo-700 transition-colors">
+                                                                        {client.name}
+                                                                        <span className={`ml-2 text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide inline-block ${client.source === 'Lavagem' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'}`}>
+                                                                            {client.source === 'Lavagem' ? 'Cadastrado' : 'Orçamento'}
+                                                                        </span>
+                                                                    </p>
+                                                                    <p className="text-[9px] text-gray-400 font-medium">{client.email || 'Sem e-mail'} • {client.phone || 'Sem telefone'}</p>
+                                                                </div>
+                                                                <CheckCircleIcon className="w-3.5 h-3.5 text-indigo-200 group-hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-all" />
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
                                             <div><FormLabel>Data término instalação *</FormLabel><StandardInput type="date" value={form.dataTermino} onChange={(e:any)=>setForm({...form, dataTermino: e.target.value})} disabled={isViewOnly} /></div>
                                         </div>
                                     )}
@@ -1228,7 +1355,58 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
                                 <div className="animate-fade-in space-y-6">
                                     {activeStep === 1 && (
                                         <div className="space-y-4">
-                                            <div><FormLabel>Nome do cliente / projeto</FormLabel><StandardInput value={form.nomeCliente} onChange={(e:any)=>setForm({...form, nomeCliente: e.target.value})} disabled={isViewOnly} /></div>
+                                            <div className="relative" ref={manutencaoSuggestionRef}>
+                                                <FormLabel>Nome do cliente / projeto *</FormLabel>
+                                                <div className="relative">
+                                                    <input 
+                                                        type="text"
+                                                        autoComplete="off"
+                                                        placeholder="Digite o nome do cliente / projeto"
+                                                        value={form.nomeCliente || ''}
+                                                        onFocus={() => !isViewOnly && setShowManutencaoSuggestions(true)}
+                                                        onChange={(e) => {
+                                                            setForm({...form, nomeCliente: e.target.value});
+                                                            if (!isViewOnly) setShowManutencaoSuggestions(true);
+                                                        }}
+                                                        disabled={isViewOnly}
+                                                        className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700/50 p-2.5 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all pr-10"
+                                                    />
+                                                    {!isViewOnly && (
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => setShowManutencaoSuggestions(!showManutencaoSuggestions)}
+                                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-indigo-600"
+                                                        >
+                                                            <ChevronDownIcon className={`w-4 h-4 transition-transform ${showManutencaoSuggestions ? 'rotate-180' : ''}`} />
+                                                        </button>
+                                                    )}
+                                                </div>
+
+                                                {showManutencaoSuggestions && !isViewOnly && filteredManutencaoClients.length > 0 && (
+                                                    <div className="absolute top-full left-0 z-50 w-full bg-white dark:bg-gray-800 mt-1 rounded-xl shadow-2xl border border-indigo-50 dark:border-gray-700 py-2 max-h-52 overflow-y-auto custom-scrollbar animate-fade-in col-span-12">
+                                                        <p className="px-4 py-1.5 text-[9px] font-black text-indigo-500 uppercase tracking-widest border-b border-gray-50 dark:border-gray-700 mb-1">Selecionar Cliente</p>
+                                                        {filteredManutencaoClients.map((client, idx) => (
+                                                            <button
+                                                                key={idx}
+                                                                type="button"
+                                                                onClick={() => selectClientForManutencao(client)}
+                                                                className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all group border-l-2 border-transparent hover:border-indigo-600"
+                                                            >
+                                                                <div>
+                                                                    <p className="text-[11px] font-bold text-gray-800 dark:text-white group-hover:text-indigo-700 transition-colors">
+                                                                        {client.name}
+                                                                        <span className={`ml-2 text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide inline-block ${client.source === 'Lavagem' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'}`}>
+                                                                            {client.source === 'Lavagem' ? 'Cadastrado' : 'Orçamento'}
+                                                                        </span>
+                                                                    </p>
+                                                                    <p className="text-[9px] text-gray-400 font-medium">{client.email || 'Sem e-mail'} • {client.phone || 'Sem telefone'}</p>
+                                                                </div>
+                                                                <CheckCircleIcon className="w-3.5 h-3.5 text-indigo-200 group-hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-all" />
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
                                             <div className="grid grid-cols-2 gap-3">
                                                 <div><FormLabel>Técnico responsável</FormLabel><StandardInput value={form.tecnicoResponsavel} onChange={(e:any)=>setForm({...form, tecnicoResponsavel: e.target.value})} disabled={isViewOnly} /></div>
                                                 <div><FormLabel>Data da manutenção</FormLabel><StandardInput type="date" value={form.dataManutencao} onChange={(e:any)=>setForm({...form, dataManutencao: e.target.value})} disabled={isViewOnly} /></div>

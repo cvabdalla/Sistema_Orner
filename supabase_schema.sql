@@ -59,3 +59,13 @@ CREATE TABLE IF NOT EXISTS "instaladores" (
 
 COMMENT ON TABLE "instaladores" IS 'Cadastro completo de parceiros instaladores para cálculo de deslocamentos e custos de frete/viagem';
 
+-- 9. Acompanhamento de etapas e custos estimados para orçamentos aprovados
+ALTER TABLE "orcamentos" ADD COLUMN IF NOT EXISTS "venda_etapas" jsonb DEFAULT '{}'::jsonb;
+ALTER TABLE "orcamentos" ADD COLUMN IF NOT EXISTS "custos_estimados" jsonb DEFAULT '{}'::jsonb;
+ALTER TABLE "orcamentos" ADD COLUMN IF NOT EXISTS "custos_reais" jsonb DEFAULT '{}'::jsonb;
+
+COMMENT ON COLUMN "orcamentos"."venda_etapas" IS 'Armazena as etapas de acompanhamento da venda flegáveis (Compra Equipamento, Homologação, etc)';
+COMMENT ON COLUMN "orcamentos"."custos_estimados" IS 'Armazena valores estimados no orçamento de Homologação, Deslocamento, Pedágio, Adequação, Instalação e Materiais';
+COMMENT ON COLUMN "orcamentos"."custos_reais" IS 'Armazena valores reais realizados de Homologação, Deslocamento, Pedágio, Adequação, Instalação, Materiais, Imposto e parâmetros de deslocamento real';
+
+

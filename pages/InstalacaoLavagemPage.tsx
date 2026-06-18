@@ -22,6 +22,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
     const [selectedTxIds, setSelectedTxIds] = useState<string[]>([]);
     const [attachments, setAttachments] = useState<ExpenseAttachment[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [configKmValue, setConfigKmValue] = useState(1.20);
     const [isSaving, setIsSaving] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [isSuccessModalOpen, setSuccessModalOpen] = useState(false);
@@ -37,11 +38,17 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const [txs, cats, allReports] = await Promise.all([
+            const [txs, cats, allReports, remoteConfigs] = await Promise.all([
                 dataService.getAll<FinancialTransaction>('financial_transactions', currentUser.id, true),
                 dataService.getAll<FinancialCategory>('financial_categories'),
-                dataService.getAll<ExpenseReport>('expense_reports', undefined, true)
+                dataService.getAll<ExpenseReport>('expense_reports', undefined, true),
+                dataService.getAll<any>('system_configs', undefined, true)
             ]);
+
+            const remoteKm = (remoteConfigs || []).find((c: any) => c.id === 'km_value');
+            if (remoteKm) {
+                setConfigKmValue(parseFloat(remoteKm.value) || 1.20);
+            }
 
             const usedTxIdsInOtherReports = new Set(
                 allReports
@@ -205,7 +212,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                     others: t.amount
                 })),
                 attachments: attachments,
-                kmValueUsed: 0,
+                kmValueUsed: configKmValue,
                 status: status,
                 createdAt: reportToEdit ? reportToEdit.createdAt : new Date().toISOString(),
                 totalValue: selectedTotal,

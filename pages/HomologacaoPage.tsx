@@ -13,7 +13,7 @@ import {
 } from '../assets/icons';
 import Modal from '../components/Modal';
 import { dataService } from '../services/dataService';
-import type { HomologacaoEntry, ChecklistEntry, User, ExpenseAttachment, PainelConfig, UserProfile } from '../types';
+import type { HomologacaoEntry, ChecklistEntry, User, ExpenseAttachment, PainelConfig, UserProfile, LavagemClient } from '../types';
 
 const ADMIN_PROFILE_IDS = ['001', '00000000-0000-0000-0000-000000000001'];
 
@@ -118,6 +118,10 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
     const [loadedFiles, setLoadedFiles] = useState<Record<string, HomologacaoEntry['files']>>({});
     const loadedKeysRef = useRef<Set<string>>(new Set());
 
+    const [lavagemClients, setLavagemClients] = useState<LavagemClient[]>([]);
+    const [showClientSuggestions, setShowClientSuggestions] = useState(false);
+    const clientSuggestionRef = useRef<HTMLDivElement>(null);
+
     const [form, setForm] = useState<Partial<HomologacaoEntry>>({
         checkinId: '',
         clientName: '',
@@ -148,17 +152,19 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
             // Buscamos apenas os campos necessários para a listagem principal, excluindo 'files' que causa timeout
             const homoFields = 'id, owner_id, responsible_user_id, clientName, date, status, checkinId, observations';
             
-            const [homoData, checkinData, userData, profileData] = await Promise.all([
+            const [homoData, checkinData, userData, profileData, lavagemData] = await Promise.all([
                 dataService.getPartial<HomologacaoEntry>('homologacao_entries', homoFields, currentUser.id, isMasterAdmin),
                 dataService.getPartial<ChecklistEntry>('checklist_checkin', 'id, project, status', undefined, true), 
                 dataService.getPartial<User>('system_users', 'id, name, avatar, profileId', undefined, true),
-                dataService.getAll<UserProfile>('system_profiles', undefined, true)
+                dataService.getAll<UserProfile>('system_profiles', undefined, true),
+                dataService.getAll<LavagemClient>('lavagem_clients', currentUser.id, isMasterAdmin)
             ]);
 
             const loaded = (homoData || []).filter(e => e && e.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
             setEntries(loaded);
             setCheckins(checkinData || []);
             setSystemUsers(userData || []);
+            setLavagemClients(lavagemData || []);
 
             const homologationProfiles = (profileData || []).filter(p => 
                 p.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('homologacao')
@@ -183,6 +189,16 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
         }
     }, [currentUser.id, isMasterAdmin]);
 
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (clientSuggestionRef.current && !clientSuggestionRef.current.contains(event.target as Node)) {
+                setShowClientSuggestions(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
     const filteredEntries = useMemo(() => {
         return (entries || []).filter(e => {
             if (!e) return false;
@@ -199,6 +215,36 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
             return matchesSearch && matchesTab && canSee;
         });
     }, [entries, searchTerm, activeMainTab, isMasterAdmin, currentUser.id]);
+
+    const homologacaoClientSuggestions = useMemo(() => {
+        // 1. Get clients from lavagem_clients
+        const listFromLavagem = (lavagemClients || []).map(c => ({
+            id: c.id,
+            name: c.name,
+            phone: c.phone || '',
+            source: 'Lavagem' as const
+        }));
+
+        // 2. Get projects/clients from checklist_checkin
+        const existingNames = new Set(listFromLavagem.map(c => c.name.toLowerCase().trim()));
+        const listFromCheckins = (checkins || [])
+            .map(c => ({
+                id: `checkin-${c.id}`,
+                name: c.project || 'Sem nome',
+                phone: '',
+                source: 'Checkin' as const
+            }))
+            .filter(c => c.name !== 'Sem nome' && !existingNames.has(c.name.toLowerCase().trim()));
+
+        const merged = [...listFromLavagem, ...listFromCheckins];
+        return merged.sort((a, b) => a.name.localeCompare(b.name));
+    }, [lavagemClients, checkins]);
+
+    const filteredHomologacaoSuggestions = useMemo(() => {
+        const search = (form.clientName || '').toLowerCase();
+        if (!search) return homologacaoClientSuggestions;
+        return homologacaoClientSuggestions.filter(c => c.name.toLowerCase().includes(search));
+    }, [homologacaoClientSuggestions, form.clientName]);
 
     // Carrega arquivos em segundo plano de forma sequencial APENAS para os itens que estão visíveis na aba ativa e no filtro
     useEffect(() => {
@@ -841,16 +887,66 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                                     ))}
                                 </select>
                             </div>
-                            <div>
-                                <FormLabel>Nome do Titular (Concessionária)</FormLabel>
-                                <input 
-                                    required
-                                    type="text"
-                                    disabled={isViewOnly}
-                                    value={form.clientName}
-                                    onChange={e => setForm({...form, clientName: e.target.value})}
-                                    className="w-full rounded-xl border-2 border-indigo-50 bg-gray-50 dark:bg-gray-900 p-2 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm transition-all disabled:opacity-70"
-                                />
+                            <div className="relative" ref={clientSuggestionRef}>
+                                <FormLabel>Nome do Titular (Concessionária) *</FormLabel>
+                                <div className="relative">
+                                    <input 
+                                        required
+                                        type="text"
+                                        autoComplete="off"
+                                        disabled={isViewOnly}
+                                        value={form.clientName || ''}
+                                        onFocus={() => !isViewOnly && setShowClientSuggestions(true)}
+                                        onChange={e => {
+                                            setForm({...form, clientName: e.target.value});
+                                            if (!isViewOnly) setShowClientSuggestions(true);
+                                        }}
+                                        className="w-full rounded-xl border-2 border-indigo-50 bg-gray-50 dark:bg-gray-900 p-2 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm transition-all disabled:opacity-70 pr-10"
+                                    />
+                                    {!isViewOnly && (
+                                        <button 
+                                            type="button"
+                                            onClick={() => setShowClientSuggestions(!showClientSuggestions)}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-indigo-600"
+                                        >
+                                            <ChevronDownIcon className={`w-4 h-4 transition-transform ${showClientSuggestions ? 'rotate-180' : ''}`} />
+                                        </button>
+                                    )}
+                                </div>
+
+                                {showClientSuggestions && !isViewOnly && filteredHomologacaoSuggestions.length > 0 && (
+                                    <div className="absolute top-full left-0 z-50 w-full bg-white dark:bg-gray-800 mt-1 rounded-xl shadow-2xl border border-indigo-50 dark:border-gray-700 py-2 max-h-52 overflow-y-auto custom-scrollbar animate-fade-in">
+                                        <p className="px-4 py-1.5 text-[9px] font-black text-indigo-500 uppercase tracking-widest border-b border-gray-50 dark:border-gray-700 mb-1">Selecionar Cliente</p>
+                                        {filteredHomologacaoSuggestions.map((client, idx) => (
+                                            <button
+                                                key={idx}
+                                                type="button"
+                                                onClick={() => {
+                                                    setForm(prev => ({
+                                                        ...prev,
+                                                        clientName: client.name,
+                                                        checkinId: client.source === 'Checkin' ? client.id.replace('checkin-', '') : prev.checkinId
+                                                    }));
+                                                    setShowClientSuggestions(false);
+                                                }}
+                                                className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all group border-l-2 border-transparent hover:border-indigo-600"
+                                            >
+                                                <div>
+                                                    <p className="text-[11px] font-bold text-gray-800 dark:text-white group-hover:text-indigo-700 transition-colors">
+                                                        {client.name}
+                                                        <span className={`ml-2 text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide inline-block ${client.source === 'Lavagem' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'}`}>
+                                                            {client.source === 'Lavagem' ? 'Cadastrado' : 'Check-In'}
+                                                        </span>
+                                                    </p>
+                                                    <p className="text-[9px] text-gray-400 font-medium">
+                                                        {client.phone ? `Whats: ${client.phone}` : 'Sem telefone'}
+                                                    </p>
+                                                </div>
+                                                <CheckCircleIcon className="w-3.5 h-3.5 text-indigo-200 group-hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-all" />
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                             <div>
                                 <FormLabel>Responsável Homologação</FormLabel>
