@@ -192,7 +192,7 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
     return (
         <div className="space-y-6 animate-fade-in pb-20 font-sans text-gray-800 dark:text-gray-100">
             {/* Header com Design Premium e Moderno */}
-            <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 gap-6 transition-all">
+            <header className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 gap-6 transition-all">
                 <div className="space-y-3">
                     <div className="flex items-center gap-3">
                         <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/40 rounded-2xl text-indigo-600 dark:text-indigo-400">
@@ -210,27 +210,29 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
 
                     {/* Stats Highlights em formato de badges premium */}
                     <div className="flex flex-wrap items-center gap-2 pt-1">
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-gray-50 dark:bg-gray-900/50 text-gray-600 dark:text-gray-400 border border-gray-100 dark:border-gray-800/80">
-                            📁 <strong className="text-gray-900 dark:text-white">{totalParceiros}</strong> Total
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-gray-50/80 dark:bg-gray-900/50 text-gray-600 dark:text-gray-400 border border-gray-100 dark:border-gray-800/80">
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-400 dark:bg-gray-600"></span>
+                            <span>Total: <strong className="text-gray-900 dark:text-white">{totalParceiros}</strong></span>
                         </span>
                         <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border border-emerald-100/30 dark:border-emerald-900/10">
                             <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-405 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-550"></span>
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                             </span>
-                            <strong className="text-emerald-800 dark:text-emerald-300">{ativosCount}</strong> Ativos
+                            <span>Ativos: <strong className="text-emerald-800 dark:text-emerald-300">{ativosCount}</strong></span>
                         </span>
                         <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-gray-100/60 dark:bg-gray-900/70 text-gray-500 dark:text-gray-400 border border-transparent">
-                            ⚪ <strong className="text-gray-700 dark:text-gray-300">{inativosCount}</strong> Inativos
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600"></span>
+                            <span>Inativos: <strong className="text-gray-700 dark:text-gray-400">{inativosCount}</strong></span>
                         </span>
                     </div>
                 </div>
 
                 <button 
                     onClick={() => handleOpenModal()}
-                    className="flex items-center gap-2 px-6 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-xs shadow-lg shadow-indigo-600/10 hover:shadow-indigo-600/20 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all cursor-pointer w-full xl:w-auto justify-center"
+                    className="flex items-center justify-center gap-2 px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-xs shadow-lg shadow-indigo-600/10 hover:shadow-indigo-600/20 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all cursor-pointer w-full md:w-auto shrink-0 whitespace-nowrap"
                 >
-                    <PlusIcon className="w-4.5 h-4.5" /> Novo Instalador
+                    <PlusIcon className="w-4 h-4" /> Novo Instalador
                 </button>
             </header>
 
@@ -410,12 +412,12 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
                     maxWidth="max-w-2xl"
                 >
                     <form onSubmit={handleSave} className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5">
                             
                             {/* Nome Completo */}
-                            <div className="md:col-span-2">
-                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">
-                                    Nome completo / Razão social *
+                            <div className="md:col-span-8">
+                                <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1 ml-0.5">
+                                    Nome Completo / Razão Social *
                                 </label>
                                 <input
                                     type="text"
@@ -428,23 +430,23 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
                             </div>
 
                             {/* Documento */}
-                            <div>
-                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">
-                                    Documento (CPF / CNPJ)
+                            <div className="md:col-span-4">
+                                <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1 ml-0.5">
+                                    Cpf / Cnpj
                                 </label>
                                 <input
                                     type="text"
                                     value={form.documento}
                                     onChange={e => setForm(prev => ({ ...prev, documento: e.target.value }))}
                                     className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
-                                    placeholder="Ex: 000.000.000-00 ou CNPJ"
+                                    placeholder="Ex: 000.000.000-00"
                                 />
                             </div>
 
                             {/* WhatsApp */}
-                            <div>
-                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">
-                                    WhatsApp / Telefone de contato *
+                            <div className="md:col-span-6">
+                                <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1 ml-0.5">
+                                    WhatsApp / Contato *
                                 </label>
                                 <div className="relative">
                                     <input
@@ -458,56 +460,74 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
                                         className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-indigo-600 dark:text-indigo-400 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400 pr-10"
                                         placeholder="Ex: (11) 99999-9999"
                                     />
-                                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-sm select-none pointer-events-none opacity-80">📱</span>
+                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs select-none pointer-events-none opacity-80">📱</span>
                                 </div>
                             </div>
 
-                            {/* Divisor Visível */}
-                            <div className="md:col-span-2 py-1">
-                                <div className="h-px bg-gray-100 dark:bg-gray-750" />
+                            {/* Status Ativo */}
+                            <div className="md:col-span-6">
+                                <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1 ml-0.5">
+                                    Disponibilidade (Status)
+                                </label>
+                                <select
+                                    value={form.ativo ? 'true' : 'false'}
+                                    onChange={e => setForm(prev => ({ ...prev, ativo: e.target.value === 'true' }))}
+                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 cursor-pointer"
+                                >
+                                    <option value="true">🟢 Ativo (Habilitar para serviços)</option>
+                                    <option value="false">🔴 Inativo (Desabilitar temporariamente)</option>
+                                </select>
+                            </div>
+
+                            {/* Subseção Endereço */}
+                            <div className="md:col-span-12 pt-2 border-t border-gray-100 dark:border-gray-750">
+                                <div className="text-[10px] font-black tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
+                                    📍 Base Operacional e Endereço
+                                </div>
                             </div>
 
                             {/* CEP Buscar */}
-                            <div>
-                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">
-                                    CEP base
-                                </label>
-                                <div className="flex gap-2">
-                                    <input
-                                        type="text"
-                                        value={form.cep}
-                                        onChange={e => setForm(prev => ({ ...prev, cep: e.target.value }))}
-                                        onBlur={handleFetchCEP}
-                                        className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400 text-center"
-                                        placeholder="00000-000"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={handleFetchCEP}
-                                        className="px-4 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 text-gray-600 dark:text-gray-300 rounded-xl font-bold transition-all text-xs border border-gray-200 dark:border-gray-700 cursor-pointer shrink-0 active:scale-95 flex items-center justify-center gap-1.5 shadow-sm"
-                                    >
-                                        <SearchIcon className="w-3.5 h-3.5" /> Buscar
-                                    </button>
-                                </div>
+                            <div className="md:col-span-4">
+                                 <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1 ml-0.5">
+                                     Cep Base
+                                 </label>
+                                 <div className="flex gap-1.5">
+                                     <input
+                                         type="text"
+                                         value={form.cep}
+                                         onChange={e => setForm(prev => ({ ...prev, cep: e.target.value }))}
+                                         onBlur={handleFetchCEP}
+                                         className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400 text-center"
+                                         placeholder="00000-000"
+                                     />
+                                     <button
+                                         type="button"
+                                         onClick={handleFetchCEP}
+                                         className="px-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 text-gray-600 dark:text-gray-300 rounded-xl font-bold transition-all text-xs border border-gray-200 dark:border-gray-700 cursor-pointer shrink-0 active:scale-95 flex items-center justify-center gap-1 shadow-sm"
+                                         title="Buscar endereço pelo CEP"
+                                     >
+                                         <SearchIcon className="w-3.5 h-3.5" />
+                                     </button>
+                                 </div>
                             </div>
 
                             {/* Logradouro / Rua */}
-                            <div>
-                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">
-                                    Rua / Endereço completo
+                            <div className="md:col-span-8">
+                                <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1 ml-0.5">
+                                    Logradouro (Rua / Av)
                                 </label>
                                 <input
                                     type="text"
                                     value={form.endereco}
                                     onChange={e => setForm(prev => ({ ...prev, endereco: e.target.value }))}
                                     className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
-                                    placeholder="Av. Paulista, etc"
+                                    placeholder="Nome da rua/avenida..."
                                 />
                             </div>
 
                             {/* Número */}
-                            <div>
-                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">
+                            <div className="md:col-span-2">
+                                <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1 ml-0.5">
                                     Número
                                 </label>
                                 <input
@@ -515,13 +535,13 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
                                     value={form.numero}
                                     onChange={e => setForm(prev => ({ ...prev, numero: e.target.value }))}
                                     className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
-                                    placeholder="Ex: 1045"
+                                    placeholder="Nº"
                                 />
                             </div>
 
                             {/* Bairro */}
-                            <div>
-                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">
+                            <div className="md:col-span-4">
+                                <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1 ml-0.5">
                                     Bairro
                                 </label>
                                 <input
@@ -529,13 +549,13 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
                                     value={form.bairro}
                                     onChange={e => setForm(prev => ({ ...prev, bairro: e.target.value }))}
                                     className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
-                                    placeholder="Ex: Bela Vista"
+                                    placeholder="Bairro"
                                 />
                             </div>
 
                             {/* Cidade */}
-                            <div>
-                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">
+                            <div className="md:col-span-4">
+                                <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1 ml-0.5">
                                     Cidade
                                 </label>
                                 <input
@@ -543,71 +563,56 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
                                     value={form.cidade}
                                     onChange={e => setForm(prev => ({ ...prev, cidade: e.target.value }))}
                                     className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
-                                    placeholder="Ex: São Paulo"
+                                    placeholder="Cidade"
                                 />
                             </div>
 
                             {/* UF */}
-                            <div>
-                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">
-                                    Estado (UF)
+                            <div className="md:col-span-2">
+                                <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1 ml-0.5">
+                                    Uf
                                 </label>
                                 <input
                                     type="text"
                                     maxLength={2}
                                     value={form.uf}
                                     onChange={e => setForm(prev => ({ ...prev, uf: e.target.value.toUpperCase() }))}
-                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
-                                    placeholder="Ex: SP"
+                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400 text-center"
+                                    placeholder="UF"
                                 />
                             </div>
 
-                            {/* Status Ativo */}
-                            <div className="md:col-span-2">
-                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">
-                                    Status do cadastro (Disponibilidade)
-                                </label>
-                                <select
-                                    value={form.ativo ? 'true' : 'false'}
-                                    onChange={e => setForm(prev => ({ ...prev, ativo: e.target.value === 'true' }))}
-                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 cursor-pointer"
-                                >
-                                    <option value="true">🟢 Ativo (Habilitar para orçamentos e fretes)</option>
-                                    <option value="false">🔴 Inativo (Desabilitar de orçamentos e fretes)</option>
-                                </select>
-                            </div>
-
-                            {/* Observações / Notas */}
-                            <div className="md:col-span-2">
-                                <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5 font-sans">
-                                    Observações / especificações técnicas
+                            {/* Subseção Notas */}
+                            <div className="md:col-span-12 pt-1 border-t border-gray-100 dark:border-gray-750">
+                                <label className="block text-[10px] font-black tracking-wider text-indigo-600 dark:text-indigo-400 mb-1 ml-0.5">
+                                    📝 Observações e Notas Técnicas
                                 </label>
                                 <textarea
                                     value={form.observacoes}
                                     rows={2}
                                     onChange={e => setForm(prev => ({ ...prev, observacoes: e.target.value }))}
-                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-medium shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 resize-none min-h-[70px]"
-                                    placeholder="Detalhes sobre ferramentas especiais, distâncias máximas de atendimento ou taxas específicas..."
+                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-medium shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 resize-none min-h-[48px]"
+                                    placeholder="Ex: Distância máxima atendida, ferramentas especiais, etc..."
                                 />
                             </div>
 
                         </div>
 
-                        {/* Ações do Formulário de acordo com o Cadastro de Produtos */}
-                        <div className="flex gap-3 pt-4 border-t border-gray-100 dark:border-gray-750">
+                        {/* Ações do Formulário */}
+                        <div className="flex gap-3 pt-3 border-t border-gray-100 dark:border-gray-750">
                             <button 
                                 type="button" 
                                 onClick={() => setIsModalOpen(false)} 
-                                className="px-5 py-2.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 text-gray-500 dark:text-gray-400 rounded-xl font-bold text-xs transition-all border border-gray-200 dark:border-gray-700 shadow-sm"
+                                className="px-5 py-2.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 text-gray-500 dark:text-gray-400 rounded-xl font-bold text-xs transition-all border border-gray-200 dark:border-gray-700 shadow-sm cursor-pointer"
                             >
                                 Cancelar
                             </button>
                             <button 
                                 type="submit" 
                                 disabled={isSaving}
-                                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/15 hover:shadow-indigo-600/25 transition-all active:scale-[0.98] disabled:opacity-50"
+                                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/15 hover:shadow-indigo-600/25 transition-all active:scale-[0.98] disabled:opacity-50 cursor-pointer"
                             >
-                                {isSaving ? 'Salvando...' : (editingItem ? 'Salvar alterações' : 'Salvar novo parceiro')}
+                                {isSaving ? 'Salvando...' : (editingItem ? 'Salvar alterações' : 'Salvar do parceiro')}
                             </button>
                         </div>
                     </form>
