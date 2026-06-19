@@ -266,6 +266,7 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                         pag_reembolso: false,
                         instalacao_finalizada: false,
                         faturado: false,
+                        imposto_pago: false,
                         ...(matchingOrcamento.venda_etapas || {}) 
                     };
                     etapas.agendamento_instalacao = true;

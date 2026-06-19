@@ -333,6 +333,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
       pag_reembolso: false,
       instalacao_finalizada: false,
       faturado: false,
+      imposto_pago: false,
     };
 
     const originalCustos = {
@@ -1169,6 +1170,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
           pag_reembolso: false,
           instalacao_finalizada: false,
           faturado: false,
+          imposto_pago: false,
         };
       }
 
@@ -1334,6 +1336,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
           instalacao_finalizada: true,
           instalacao_finalizada_data: new Date().toISOString().split("T")[0],
           faturado: true,
+          imposto_pago: true,
         };
       } else {
         updatedOrcamento.venda_etapas = {
@@ -1349,6 +1352,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
             updatedOrcamento.venda_etapas.instalacao_finalizada_data ||
             new Date().toISOString().split("T")[0],
           faturado: true,
+          imposto_pago: true,
         };
       }
 
@@ -2338,6 +2342,12 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
                                           .faturado,
                                         key: "faturado",
                                       },
+                                      {
+                                        label: "Imposto Pago",
+                                        val: getRunningTracking(orc).etapas
+                                          .imposto_pago,
+                                        key: "imposto_pago",
+                                      },
                                     ].map((item, idx) => {
                                       const hasDate =
                                         item.key === "instalacao_finalizada" &&
@@ -2612,6 +2622,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
                                         key: "pag_reembolso",
                                       },
                                       { label: "Faturado", key: "faturado" },
+                                      { label: "Imposto Pago", key: "imposto_pago" },
                                     ].map((item, idx) => (
                                       <div
                                         key={idx}

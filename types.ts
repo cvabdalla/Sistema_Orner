@@ -125,6 +125,7 @@ export interface SavedOrcamento {
         instalacao_finalizada?: boolean;
         instalacao_finalizada_data?: string;
         faturado?: boolean;
+        imposto_pago?: boolean;
     };
     custos_estimados?: {
         homologacao?: number;
