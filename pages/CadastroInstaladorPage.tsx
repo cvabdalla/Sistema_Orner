@@ -163,6 +163,14 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
         }
     };
 
+    // Auto lookup when exact 8-digit CEP is typed
+    useEffect(() => {
+        const cleanCEP = (form.cep || '').replace(/\D/g, '');
+        if (cleanCEP.length === 8 && isModalOpen) {
+            handleFetchCEP();
+        }
+    }, [form.cep, isModalOpen]);
+
     const filteredInstaladores = instaladores.filter(inst => {
         const term = searchTerm.toLowerCase();
         return (
@@ -409,193 +417,203 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
                 <Modal 
                     title={editingItem ? "Editar parceiro" : "Cadastrar novo parceiro"} 
                     onClose={() => setIsModalOpen(false)}
-                    maxWidth="max-w-2xl"
+                    maxWidth="max-w-4xl"
                 >
                     <form onSubmit={handleSave} className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5">
-                            
-                            {/* Nome Completo */}
-                            <div className="md:col-span-8">
-                                <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1 ml-0.5">
-                                    Nome Completo / Razão Social *
-                                </label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={form.nome}
-                                    onChange={e => setForm(prev => ({ ...prev, nome: e.target.value }))}
-                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
-                                    placeholder="Ex: Ricardo Silva Martins"
-                                />
-                            </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-2">
+                            {/* Coluna Esquerda: Dados de Cadastro */}
+                            <div className="space-y-4">
+                                <div className="text-[11px] font-black tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1 border-b border-gray-100 dark:border-gray-700/80 pb-1.5 uppercase">
+                                    👤 Dados de Cadastro
+                                </div>
 
-                            {/* Documento */}
-                            <div className="md:col-span-4">
-                                <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1 ml-0.5">
-                                    Cpf / Cnpj
-                                </label>
-                                <input
-                                    type="text"
-                                    value={form.documento}
-                                    onChange={e => setForm(prev => ({ ...prev, documento: e.target.value }))}
-                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
-                                    placeholder="Ex: 000.000.000-00"
-                                />
-                            </div>
-
-                            {/* WhatsApp */}
-                            <div className="md:col-span-6">
-                                <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1 ml-0.5">
-                                    WhatsApp / Contato *
-                                </label>
-                                <div className="relative">
+                                {/* Nome Completo */}
+                                <div>
+                                    <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1.5 ml-0.5">
+                                        Nome Completo / Razão Social *
+                                    </label>
                                     <input
                                         type="text"
                                         required
-                                        value={form.whatsapp}
-                                        onChange={e => {
-                                            const formatted = formatWhatsApp(e.target.value);
-                                            setForm(prev => ({ ...prev, whatsapp: formatted }));
-                                        }}
-                                        className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-indigo-600 dark:text-indigo-400 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400 pr-10"
-                                        placeholder="Ex: (11) 99999-9999"
+                                        value={form.nome}
+                                        onChange={e => setForm(prev => ({ ...prev, nome: e.target.value }))}
+                                        className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
+                                        placeholder="Ex: Ricardo Silva Martins"
                                     />
-                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs select-none pointer-events-none opacity-80">📱</span>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3.5">
+                                    {/* Documento */}
+                                    <div>
+                                        <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1.5 ml-0.5">
+                                            Cpf / Cnpj
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={form.documento}
+                                            onChange={e => setForm(prev => ({ ...prev, documento: e.target.value }))}
+                                            className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
+                                            placeholder="Ex: 000.000.000-00"
+                                        />
+                                    </div>
+
+                                    {/* WhatsApp */}
+                                    <div>
+                                        <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1.5 ml-0.5">
+                                            WhatsApp / Contato *
+                                        </label>
+                                        <div className="relative">
+                                            <input
+                                                type="text"
+                                                required
+                                                value={form.whatsapp}
+                                                onChange={e => {
+                                                    const formatted = formatWhatsApp(e.target.value);
+                                                    setForm(prev => ({ ...prev, whatsapp: formatted }));
+                                                }}
+                                                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-indigo-600 dark:text-indigo-400 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400 pr-10"
+                                                placeholder="Ex: (11) 99999-9999"
+                                            />
+                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs select-none pointer-events-none opacity-80">📱</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Status Ativo */}
+                                <div>
+                                    <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1.5 ml-0.5">
+                                        Disponibilidade (Status)
+                                    </label>
+                                    <select
+                                        value={form.ativo ? 'true' : 'false'}
+                                        onChange={e => setForm(prev => ({ ...prev, ativo: e.target.value === 'true' }))}
+                                        className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2.5 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 cursor-pointer"
+                                    >
+                                        <option value="true">🟢 Ativo (Habilitar para serviços)</option>
+                                        <option value="false">🔴 Inativo (Desabilitar temporariamente)</option>
+                                    </select>
+                                </div>
+
+                                {/* Observações */}
+                                <div>
+                                    <label className="block text-[10px] font-black tracking-wider text-indigo-600 dark:text-indigo-400 mb-1.5 ml-0.5 uppercase">
+                                        📝 Observações / Notas do Parceiro
+                                    </label>
+                                    <textarea
+                                        value={form.observacoes}
+                                        rows={3}
+                                        onChange={e => setForm(prev => ({ ...prev, observacoes: e.target.value }))}
+                                        className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-medium shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 resize-none min-h-[70px]"
+                                        placeholder="Ex: Distância máxima atendida, ferramentas especiais, etc..."
+                                    />
                                 </div>
                             </div>
 
-                            {/* Status Ativo */}
-                            <div className="md:col-span-6">
-                                <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1 ml-0.5">
-                                    Disponibilidade (Status)
-                                </label>
-                                <select
-                                    value={form.ativo ? 'true' : 'false'}
-                                    onChange={e => setForm(prev => ({ ...prev, ativo: e.target.value === 'true' }))}
-                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 cursor-pointer"
-                                >
-                                    <option value="true">🟢 Ativo (Habilitar para serviços)</option>
-                                    <option value="false">🔴 Inativo (Desabilitar temporariamente)</option>
-                                </select>
-                            </div>
-
-                            {/* Subseção Endereço */}
-                            <div className="md:col-span-12 pt-2 border-t border-gray-100 dark:border-gray-750">
-                                <div className="text-[10px] font-black tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
+                            {/* Coluna Direita: Endereço & Base Operacional */}
+                            <div className="space-y-4">
+                                <div className="text-[11px] font-black tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1 border-b border-gray-100 dark:border-gray-700/80 pb-1.5 uppercase">
                                     📍 Base Operacional e Endereço
                                 </div>
-                            </div>
 
-                            {/* CEP Buscar */}
-                            <div className="md:col-span-4">
-                                 <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1 ml-0.5">
-                                     Cep Base
-                                 </label>
-                                 <div className="flex gap-1.5">
-                                     <input
-                                         type="text"
-                                         value={form.cep}
-                                         onChange={e => setForm(prev => ({ ...prev, cep: e.target.value }))}
-                                         onBlur={handleFetchCEP}
-                                         className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400 text-center"
-                                         placeholder="00000-000"
-                                     />
-                                     <button
-                                         type="button"
-                                         onClick={handleFetchCEP}
-                                         className="px-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 text-gray-600 dark:text-gray-300 rounded-xl font-bold transition-all text-xs border border-gray-200 dark:border-gray-700 cursor-pointer shrink-0 active:scale-95 flex items-center justify-center gap-1 shadow-sm"
-                                         title="Buscar endereço pelo CEP"
-                                     >
-                                         <SearchIcon className="w-3.5 h-3.5" />
-                                     </button>
-                                 </div>
-                            </div>
+                                <div className="grid grid-cols-12 gap-3.5">
+                                    {/* CEP Buscar */}
+                                    <div className="col-span-8">
+                                         <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1.5 ml-0.5">
+                                             Cep Base
+                                         </label>
+                                         <div className="flex gap-1.5">
+                                             <input
+                                                 type="text"
+                                                 value={form.cep}
+                                                 onChange={e => setForm(prev => ({ ...prev, cep: e.target.value }))}
+                                                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400 text-center"
+                                                 placeholder="00000-000"
+                                             />
+                                             <button
+                                                 type="button"
+                                                 onClick={handleFetchCEP}
+                                                 className="px-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 text-gray-600 dark:text-gray-300 rounded-xl font-bold transition-all text-xs border border-gray-200 dark:border-gray-700 cursor-pointer shrink-0 active:scale-95 flex items-center justify-center gap-1 shadow-sm"
+                                                 title="Buscar endereço pelo CEP"
+                                             >
+                                                 <SearchIcon className="w-3.5 h-3.5" />
+                                             </button>
+                                         </div>
+                                    </div>
 
-                            {/* Logradouro / Rua */}
-                            <div className="md:col-span-8">
-                                <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1 ml-0.5">
-                                    Logradouro (Rua / Av)
-                                </label>
-                                <input
-                                    type="text"
-                                    value={form.endereco}
-                                    onChange={e => setForm(prev => ({ ...prev, endereco: e.target.value }))}
-                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
-                                    placeholder="Nome da rua/avenida..."
-                                />
-                            </div>
+                                    {/* Número */}
+                                    <div className="col-span-4">
+                                        <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1.5 ml-0.5">
+                                            Número
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={form.numero}
+                                            onChange={e => setForm(prev => ({ ...prev, numero: e.target.value }))}
+                                            className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400 text-center"
+                                            placeholder="Nº"
+                                        />
+                                    </div>
+                                </div>
 
-                            {/* Número */}
-                            <div className="md:col-span-2">
-                                <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1 ml-0.5">
-                                    Número
-                                </label>
-                                <input
-                                    type="text"
-                                    value={form.numero}
-                                    onChange={e => setForm(prev => ({ ...prev, numero: e.target.value }))}
-                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
-                                    placeholder="Nº"
-                                />
-                            </div>
+                                {/* Logradouro / Rua */}
+                                <div>
+                                    <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1.5 ml-0.5">
+                                        Logradouro (Rua / Av)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={form.endereco}
+                                        onChange={e => setForm(prev => ({ ...prev, endereco: e.target.value }))}
+                                        className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
+                                        placeholder="Nome da rua/avenida..."
+                                    />
+                                </div>
 
-                            {/* Bairro */}
-                            <div className="md:col-span-4">
-                                <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1 ml-0.5">
-                                    Bairro
-                                </label>
-                                <input
-                                    type="text"
-                                    value={form.bairro}
-                                    onChange={e => setForm(prev => ({ ...prev, bairro: e.target.value }))}
-                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
-                                    placeholder="Bairro"
-                                />
-                            </div>
+                                {/* Bairro */}
+                                <div>
+                                    <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1.5 ml-0.5">
+                                        Bairro
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={form.bairro}
+                                        onChange={e => setForm(prev => ({ ...prev, bairro: e.target.value }))}
+                                        className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
+                                        placeholder="Bairro"
+                                    />
+                                </div>
 
-                            {/* Cidade */}
-                            <div className="md:col-span-4">
-                                <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1 ml-0.5">
-                                    Cidade
-                                </label>
-                                <input
-                                    type="text"
-                                    value={form.cidade}
-                                    onChange={e => setForm(prev => ({ ...prev, cidade: e.target.value }))}
-                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
-                                    placeholder="Cidade"
-                                />
-                            </div>
+                                <div className="grid grid-cols-12 gap-3.5">
+                                    {/* Cidade */}
+                                    <div className="col-span-9">
+                                        <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1.5 ml-0.5">
+                                            Cidade
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={form.cidade}
+                                            onChange={e => setForm(prev => ({ ...prev, cidade: e.target.value }))}
+                                            className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
+                                            placeholder="Cidade"
+                                        />
+                                    </div>
 
-                            {/* UF */}
-                            <div className="md:col-span-2">
-                                <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1 ml-0.5">
-                                    Uf
-                                </label>
-                                <input
-                                    type="text"
-                                    maxLength={2}
-                                    value={form.uf}
-                                    onChange={e => setForm(prev => ({ ...prev, uf: e.target.value.toUpperCase() }))}
-                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400 text-center"
-                                    placeholder="UF"
-                                />
+                                    {/* UF */}
+                                    <div className="col-span-3">
+                                        <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1.5 ml-0.5">
+                                            Uf
+                                        </label>
+                                        <input
+                                            type="text"
+                                            maxLength={2}
+                                            value={form.uf}
+                                            onChange={e => setForm(prev => ({ ...prev, uf: e.target.value.toUpperCase() }))}
+                                            className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400 text-center uppercase"
+                                            placeholder="UF"
+                                        />
+                                    </div>
+                                </div>
                             </div>
-
-                            {/* Subseção Notas */}
-                            <div className="md:col-span-12 pt-1 border-t border-gray-100 dark:border-gray-750">
-                                <label className="block text-[10px] font-black tracking-wider text-indigo-600 dark:text-indigo-400 mb-1 ml-0.5">
-                                    📝 Observações e Notas Técnicas
-                                </label>
-                                <textarea
-                                    value={form.observacoes}
-                                    rows={2}
-                                    onChange={e => setForm(prev => ({ ...prev, observacoes: e.target.value }))}
-                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-medium shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 resize-none min-h-[48px]"
-                                    placeholder="Ex: Distância máxima atendida, ferramentas especiais, etc..."
-                                />
-                            </div>
-
                         </div>
 
                         {/* Ações do Formulário */}
@@ -612,7 +630,7 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
                                 disabled={isSaving}
                                 className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/15 hover:shadow-indigo-600/25 transition-all active:scale-[0.98] disabled:opacity-50 cursor-pointer"
                             >
-                                {isSaving ? 'Salvando...' : (editingItem ? 'Salvar alterações' : 'Salvar do parceiro')}
+                                {isSaving ? 'Salvando...' : (editingItem ? 'Salvar alterações' : 'Salvar')}
                             </button>
                         </div>
                     </form>

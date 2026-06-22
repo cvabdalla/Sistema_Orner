@@ -479,20 +479,20 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
 
       // Update/Create matching lavagem_client and schedule lavagem_records if installation is finalized
       if (trackVendaEtapas.instalacao_finalizada) {
-        const v = orcamento.variants?.find((x) => x.isPrincipal) ||
-          orcamento.variants?.[0] || {
-            formState: orcamento.formState,
-            calculated: orcamento.calculated,
+        const v = updatedOrcamento.variants?.find((x) => x.isPrincipal) ||
+          updatedOrcamento.variants?.[0] || {
+            formState: updatedOrcamento.formState,
+            calculated: updatedOrcamento.calculated,
           };
         const fs = v.formState || {};
         const clientName = fs.nomeCliente || "";
         const finalDate =
           pendingInstallationEndDate ||
-          orcamento.venda_etapas?.instalacao_finalizada_data ||
+          updatedOrcamento.venda_etapas?.instalacao_finalizada_data ||
           new Date().toISOString().split("T")[0];
 
         if (clientName) {
-          const clientId = `wash-auto-${orcamento.id}`;
+          const clientId = `wash-auto-${updatedOrcamento.id}`;
           let existingClient =
             lavagemClients.find((lc) => lc.id === clientId) ||
             lavagemClients.find(
@@ -516,12 +516,12 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
           } else {
             const newWashClient: LavagemClient = {
               id: clientId,
-              owner_id: orcamento.owner_id,
+              owner_id: updatedOrcamento.owner_id,
               name: clientName,
               cep: fs.cep || "",
               address: fs.enderecoCompleto || "",
-              address_number: "",
-              complement: "",
+              address_number: fs.numero || "",
+              complement: fs.complemento || "",
               city: fs.cidade || "",
               plates_count:
                 Number(fs.terceiroInstalacaoQtd) ||
@@ -548,7 +548,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
             const newWashRecord: LavagemRecord = {
               id: `wash-rec-${Date.now()}`,
               client_id: finalClientId,
-              owner_id: orcamento.owner_id,
+              owner_id: updatedOrcamento.owner_id,
               date: washDateStr,
               status: "scheduled",
               created_at: new Date().toISOString(),
@@ -1119,42 +1119,55 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
     setIsSavingClient(true);
 
     try {
-      const clientId = `wash-auto-${selectedOrcamentoToApprove.id}`;
+      let variant = selectedOrcamentoToApprove.variants?.find(
+        (v) => v.isPrincipal,
+      ) ||
+        selectedOrcamentoToApprove.variants?.[0] || {
+          id: "default",
+          name: "Principal",
+          isPrincipal: true,
+          formState: selectedOrcamentoToApprove.formState || {},
+          calculated: selectedOrcamentoToApprove.calculated || {},
+        };
 
-      // Save wash client record
-      const clientData: LavagemClient = {
-        id: clientId,
-        owner_id: selectedOrcamentoToApprove.owner_id,
-        name: clientForm.name || "",
-        phone: clientForm.phone || "",
-        cep: clientForm.cep || "",
-        address: clientForm.address || "",
-        address_number: clientForm.address_number || "",
-        complement: clientForm.complement || "",
-        city: clientForm.city || "",
-        plates_count: clientForm.plates_count || 0,
-        installation_end_date:
-          clientForm.installation_end_date ||
-          new Date().toISOString().split("T")[0],
-        observations: clientForm.observations || "",
+      // Map edited modal inputs into the budget variant fields so they persist within the budget itself
+      const updatedFormState = {
+        ...(variant.formState || {}),
+        nomeCliente: clientForm.name,
+        telefoneTitular: clientForm.phone,
+        cep: clientForm.cep,
+        enderecoCompleto: clientForm.address,
+        cidade: clientForm.city,
+        numero: clientForm.address_number,
+        complemento: clientForm.complement,
+        terceiroInstalacaoQtd: clientForm.plates_count,
+        observacoesCliente: clientForm.observations,
+        installation_end_date: clientForm.installation_end_date, // track expected end date in formState
+        dataOrcamento: new Date().toISOString().split("T")[0], // assume today's date upon approval
       };
 
-      await dataService.save("lavagem_clients", clientData);
+      let updatedVariants = selectedOrcamentoToApprove.variants;
+      if (updatedVariants && updatedVariants.length > 0) {
+        updatedVariants = updatedVariants.map((v) => {
+          if (v.id === variant.id || (v.isPrincipal && variant.isPrincipal)) {
+            return {
+              ...v,
+              formState: updatedFormState,
+            };
+          }
+          return v;
+        });
+      }
 
       // Now proceed with saving the Orçamento to 'Aprovado'
       let updatedOrcamento = {
         ...selectedOrcamentoToApprove,
         status: "Aprovado" as OrcamentoStatus,
+        formState: updatedFormState,
+        variants: updatedVariants,
       };
 
-      let variant = selectedOrcamentoToApprove.variants?.find(
-        (v) => v.isPrincipal,
-      ) ||
-        selectedOrcamentoToApprove.variants?.[0] || {
-          formState: selectedOrcamentoToApprove.formState,
-          calculated: selectedOrcamentoToApprove.calculated,
-        };
-      const fs = variant.formState || {};
+      const fs = updatedFormState;
       const calc = variant.calculated || {};
       const thirdPartyInstallation =
         parseSafeNumber(fs.terceiroInstalacaoQtd) *
@@ -1203,9 +1216,9 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
           id: selectedOrcamentoToApprove.id,
           orcamentoId: selectedOrcamentoToApprove.id,
           owner_id: selectedOrcamentoToApprove.owner_id,
-          clientName: clientData.name, // Use the updated name from form
+          clientName: clientForm.name || "", // Use the updated name from form
           date:
-            clientData.installation_end_date ||
+            clientForm.installation_end_date ||
             fs.dataOrcamento ||
             selectedOrcamentoToApprove.savedAt.split("T")[0],
           closedValue: parseSafeNumber(calc.precoVendaFinal),
