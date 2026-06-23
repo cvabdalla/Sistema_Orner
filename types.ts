@@ -151,6 +151,7 @@ export interface SavedOrcamento {
         deslocamentoMargem?: number;
         linked_checkout_id?: string;
     };
+    motivo_perda?: string;
 }
 
 export interface SalesSummaryItem {

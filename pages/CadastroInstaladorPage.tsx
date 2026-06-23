@@ -423,7 +423,7 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-2">
                             {/* Coluna Esquerda: Dados de Cadastro */}
                             <div className="space-y-4">
-                                <div className="text-[11px] font-black tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1 border-b border-gray-100 dark:border-gray-700/80 pb-1.5 uppercase">
+                                <div className="text-[11px] font-black tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1 border-b border-gray-100 dark:border-gray-700/80 pb-1.5">
                                     👤 Dados de Cadastro
                                 </div>
 
@@ -496,7 +496,7 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
 
                                 {/* Observações */}
                                 <div>
-                                    <label className="block text-[10px] font-black tracking-wider text-indigo-600 dark:text-indigo-400 mb-1.5 ml-0.5 uppercase">
+                                    <label className="block text-[10px] font-black tracking-wider text-indigo-600 dark:text-indigo-400 mb-1.5 ml-0.5">
                                         📝 Observações / Notas do Parceiro
                                     </label>
                                     <textarea
@@ -511,48 +511,32 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
 
                             {/* Coluna Direita: Endereço & Base Operacional */}
                             <div className="space-y-4">
-                                <div className="text-[11px] font-black tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1 border-b border-gray-100 dark:border-gray-700/80 pb-1.5 uppercase">
+                                <div className="text-[11px] font-black tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1 border-b border-gray-100 dark:border-gray-700/80 pb-1.5">
                                     📍 Base Operacional e Endereço
                                 </div>
 
-                                <div className="grid grid-cols-12 gap-3.5">
-                                    {/* CEP Buscar */}
-                                    <div className="col-span-8">
-                                         <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1.5 ml-0.5">
-                                             Cep Base
-                                         </label>
-                                         <div className="flex gap-1.5">
-                                             <input
-                                                 type="text"
-                                                 value={form.cep}
-                                                 onChange={e => setForm(prev => ({ ...prev, cep: e.target.value }))}
-                                                 className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400 text-center"
-                                                 placeholder="00000-000"
-                                             />
-                                             <button
-                                                 type="button"
-                                                 onClick={handleFetchCEP}
-                                                 className="px-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 text-gray-600 dark:text-gray-300 rounded-xl font-bold transition-all text-xs border border-gray-200 dark:border-gray-700 cursor-pointer shrink-0 active:scale-95 flex items-center justify-center gap-1 shadow-sm"
-                                                 title="Buscar endereço pelo CEP"
-                                             >
-                                                 <SearchIcon className="w-3.5 h-3.5" />
-                                             </button>
-                                         </div>
-                                    </div>
-
-                                    {/* Número */}
-                                    <div className="col-span-4">
-                                        <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1.5 ml-0.5">
-                                            Número
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={form.numero}
-                                            onChange={e => setForm(prev => ({ ...prev, numero: e.target.value }))}
-                                            className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400 text-center"
-                                            placeholder="Nº"
-                                        />
-                                    </div>
+                                {/* CEP Buscar */}
+                                <div>
+                                     <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1.5 ml-0.5">
+                                         Cep Base
+                                     </label>
+                                     <div className="flex gap-1.5 max-w-[160px]">
+                                         <input
+                                             type="text"
+                                             value={form.cep}
+                                             onChange={e => setForm(prev => ({ ...prev, cep: e.target.value }))}
+                                             className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400 text-center"
+                                             placeholder="00000-000"
+                                         />
+                                         <button
+                                             type="button"
+                                             onClick={handleFetchCEP}
+                                             className="px-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 text-gray-600 dark:text-gray-300 rounded-xl font-bold transition-all text-xs border border-gray-200 dark:border-gray-700 cursor-pointer shrink-0 active:scale-95 flex items-center justify-center gap-1 shadow-sm"
+                                             title="Buscar endereço pelo CEP"
+                                         >
+                                             <SearchIcon className="w-3.5 h-3.5" />
+                                         </button>
+                                     </div>
                                 </div>
 
                                 {/* Logradouro / Rua */}
@@ -569,18 +553,34 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
                                     />
                                 </div>
 
-                                {/* Bairro */}
-                                <div>
-                                    <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1.5 ml-0.5">
-                                        Bairro
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={form.bairro}
-                                        onChange={e => setForm(prev => ({ ...prev, bairro: e.target.value }))}
-                                        className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
-                                        placeholder="Bairro"
-                                    />
+                                <div className="grid grid-cols-12 gap-3.5">
+                                    {/* Bairro */}
+                                    <div className="col-span-8">
+                                        <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1.5 ml-0.5">
+                                            Bairro
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={form.bairro}
+                                            onChange={e => setForm(prev => ({ ...prev, bairro: e.target.value }))}
+                                            className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400"
+                                            placeholder="Bairro"
+                                        />
+                                    </div>
+
+                                    {/* Número */}
+                                    <div className="col-span-4">
+                                        <label className="block text-[10px] font-black tracking-wider text-gray-400 dark:text-gray-500 mb-1.5 ml-0.5">
+                                            Número
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={form.numero}
+                                            onChange={e => setForm(prev => ({ ...prev, numero: e.target.value }))}
+                                            className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-bold shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 placeholder-gray-400 text-center"
+                                            placeholder="Nº"
+                                        />
+                                    </div>
                                 </div>
 
                                 <div className="grid grid-cols-12 gap-3.5">
@@ -621,14 +621,14 @@ const CadastroInstaladorPage: React.FC<{ currentUser: User }> = ({ currentUser }
                             <button 
                                 type="button" 
                                 onClick={() => setIsModalOpen(false)} 
-                                className="px-5 py-2.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 text-gray-500 dark:text-gray-400 rounded-xl font-bold text-xs transition-all border border-gray-200 dark:border-gray-700 shadow-sm cursor-pointer"
+                                className="flex-1 py-2.5 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 text-gray-500 dark:text-gray-400 rounded-xl font-bold text-xs transition-all border border-gray-200 dark:border-gray-700 shadow-sm cursor-pointer text-center"
                             >
                                 Cancelar
                             </button>
                             <button 
                                 type="submit" 
                                 disabled={isSaving}
-                                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/15 hover:shadow-indigo-600/25 transition-all active:scale-[0.98] disabled:opacity-50 cursor-pointer"
+                                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/15 hover:shadow-indigo-600/25 transition-all active:scale-[0.98] disabled:opacity-50 cursor-pointer text-center"
                             >
                                 {isSaving ? 'Salvando...' : (editingItem ? 'Salvar alterações' : 'Salvar')}
                             </button>

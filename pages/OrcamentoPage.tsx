@@ -214,6 +214,11 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
     number | null
   >(null);
 
+  // States for Lost Reason Modal
+  const [showLostReasonModal, setShowLostReasonModal] = useState(false);
+  const [lostReasonText, setLostReasonText] = useState("");
+  const [pendingLostOrcamentoId, setPendingLostOrcamentoId] = useState<number | null>(null);
+
   // States for Deslocamento Calculator Modal
   const [showDistanceModal, setShowDistanceModal] = useState(false);
   const [instaladores, setInstaladores] = useState<Instalador[]>([]);
@@ -1282,9 +1287,43 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
     }
   };
 
+  const handleSaveLostReason = async () => {
+    if (!pendingLostOrcamentoId) return;
+    const orcamento = orcamentos.find((o) => o.id === pendingLostOrcamentoId);
+    if (!orcamento) return;
+
+    const updatedOrcamento: SavedOrcamento = {
+      ...orcamento,
+      status: "Perdido",
+      motivo_perda: lostReasonText.trim(),
+    };
+
+    setOrcamentos((prev) =>
+      prev.map((o) => (o.id === pendingLostOrcamentoId ? updatedOrcamento : o))
+    );
+
+    try {
+      await dataService.save("orcamentos", updatedOrcamento);
+    } catch (err) {
+      console.error("Erro ao salvar motivo de perda:", err);
+      alert("Ocorreu um erro ao salvar o motivo da perda do orçamento.");
+    } finally {
+      setShowLostReasonModal(false);
+      setPendingLostOrcamentoId(null);
+      setLostReasonText("");
+    }
+  };
+
   const handleStatusChange = async (id: number, newStatus: OrcamentoStatus) => {
     const orcamento = orcamentos.find((o) => o.id === id);
     if (!orcamento) return;
+
+    if (newStatus === "Perdido") {
+      setPendingLostOrcamentoId(id);
+      setLostReasonText(orcamento.motivo_perda || "");
+      setShowLostReasonModal(true);
+      return;
+    }
 
     if (newStatus === "Aprovado") {
       let variant = orcamento.variants?.find((v) => v.isPrincipal) ||
@@ -2244,6 +2283,17 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
                         </div>
                       </div>
 
+                      {orc.status === "Perdido" && orc.motivo_perda && (
+                        <div className="mt-1 bg-rose-50/50 dark:bg-rose-950/15 border border-rose-100/65 dark:border-rose-900/35 rounded-xl p-3 text-xs">
+                          <span className="block text-[8px] font-black text-rose-500 dark:text-rose-400 tracking-wider mb-1 uppercase">
+                            Motivo da Perda
+                          </span>
+                          <p className="text-[10px] font-bold text-gray-700 dark:text-gray-300 italic leading-relaxed">
+                            "{orc.motivo_perda}"
+                          </p>
+                        </div>
+                      )}
+
                       {/* Acompanhamento das etapas da venda para orçamentos aprovados */}
                       {isApproved && (
                         <div className="mt-1 bg-gray-50/50 dark:bg-gray-900/30 p-3 rounded-xl border border-gray-150/60 dark:border-gray-700/60 text-xs space-y-3">
@@ -3120,6 +3170,56 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
                 className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-red-600/15 transition-all"
               >
                 Confirmar Exclusão
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {showLostReasonModal && (
+        <Modal
+          title="Justificativa de Perda de Orçamento"
+          onClose={() => {
+            setShowLostReasonModal(false);
+            setPendingLostOrcamentoId(null);
+            setLostReasonText("");
+          }}
+          maxWidth="max-w-md"
+        >
+          <div className="space-y-4 pt-2">
+            <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold leading-relaxed">
+              Por favor, informe a justificativa ou motivo pelo qual este orçamento foi marcado como Perdido.
+            </p>
+            <div>
+              <FormLabel>Motivo da Perda *</FormLabel>
+              <textarea
+                required
+                rows={4}
+                value={lostReasonText}
+                onChange={(e) => setLostReasonText(e.target.value)}
+                placeholder="Ex: Cliente achou o preço alto, fechou com concorrente, etc."
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-sans resize-none"
+              />
+            </div>
+            <div className="flex gap-3 pt-4 border-t dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLostReasonModal(false);
+                  setPendingLostOrcamentoId(null);
+                  setLostReasonText("");
+                }}
+                className="flex-1 py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-300 rounded-xl font-bold text-xs hover:bg-gray-200 transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveLostReason}
+                disabled={!lostReasonText.trim()}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-xl font-bold text-xs shadow-lg shadow-red-600/15 transition-all"
+              >
+                Salvar Motivo
               </button>
             </div>
           </div>
