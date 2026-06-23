@@ -280,10 +280,12 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
     const handleStatusChange = async (id: string, status: FinancialTransactionStatus) => {
         const tx = transactions.find(t => t.id === id);
         if (tx) {
+            const today = new Date().toISOString().split('T')[0];
             const updatedTx = { 
                 ...tx, 
                 status, 
-                paymentDate: status === 'pago' ? new Date().toISOString().split('T')[0] : undefined 
+                paymentDate: status === 'pago' ? today : undefined,
+                dueDate: status === 'pago' ? today : tx.dueDate
             };
             setTransactions(prev => prev.map(t => t.id === id ? updatedTx : t));
             try {
