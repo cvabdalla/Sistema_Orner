@@ -68,4 +68,38 @@ COMMENT ON COLUMN "orcamentos"."venda_etapas" IS 'Armazena as etapas de acompanh
 COMMENT ON COLUMN "orcamentos"."custos_estimados" IS 'Armazena valores estimados no orçamento de Homologação, Deslocamento, Pedágio, Adequação, Instalação e Materiais';
 COMMENT ON COLUMN "orcamentos"."custos_reais" IS 'Armazena valores reais realizados de Homologação, Deslocamento, Pedágio, Adequação, Instalação, Materiais, Imposto e parâmetros de deslocamento real';
 
+-- 10. Tabela de manutencoes para chamados de manutenção, reparos e orçamentos avulsos
+CREATE TABLE IF NOT EXISTS "manutencoes" (
+    "id" text PRIMARY KEY,
+    "owner_id" text NOT NULL,
+    "clientName" text NOT NULL,
+    "phone" text,
+    "cep" text,
+    "address" text,
+    "numero" text,
+    "bairro" text,
+    "complemento" text,
+    "city" text,
+    "estado" text,
+    "status" text NOT NULL DEFAULT 'Especulação',
+    "title" text NOT NULL,
+    "description" text,
+    "startDate" text,
+    "endDate" text,
+    "services" jsonb DEFAULT '[]'::jsonb,
+    "materials" jsonb DEFAULT '[]'::jsonb,
+    "categories" jsonb DEFAULT '[]'::jsonb,
+    "materialsSource" text DEFAULT 'manual',
+    "selectedChecklists" jsonb DEFAULT '[]'::jsonb,
+    "totalCost" numeric DEFAULT 0,
+    "totalPrice" numeric DEFAULT 0,
+    "notes" text,
+    "createdAt" timestamp with time zone DEFAULT timezone('utc'::text, now())
+);
+
+-- Desabilita RLS para gravação direta simplificada
+ALTER TABLE "manutencoes" DISABLE ROW LEVEL SECURITY;
+
+COMMENT ON TABLE "manutencoes" IS 'Tabela que armazena registros de orçamentos e chamados de manutenção e reparos avulsos.';
+
 

@@ -9,6 +9,7 @@ import FinanceiroPage from './pages/FinanceiroPage';
 import RelatoriosPage from './pages/RelatoriosPage';
 import NovoOrcamentoPage from './pages/NovoOrcamentoPage';
 import ResumoVendasPage from './pages/ResumoVendasPage';
+import ManutencaoPage from './pages/ManutencaoPage';
 import EstoquePage from './pages/EstoquePage';
 import CheckListPage from './pages/CheckListPage';
 import HomologacaoPage from './pages/HomologacaoPage';
@@ -275,6 +276,7 @@ const App: React.FC = () => {
       case 'ORCAMENTO': return <OrcamentoPage setCurrentPage={handleSetCurrentPage} onEdit={handleEditOrcamento} currentUser={currentUser} hasGlobalView={hasGlobalView} />;
       case 'NOVO_ORCAMENTO': return <NovoOrcamentoPage setCurrentPage={handleSetCurrentPage} orcamentoToEdit={editingOrcamento} clearEditingOrcamento={() => setEditingOrcamento(null)} currentUser={currentUser} />;
       case 'RESUMO_VENDAS': return <ResumoVendasPage currentUser={currentUser} />;
+      case 'MANUTENCAO': return <ManutencaoPage currentUser={currentUser} hasGlobalView={hasGlobalView} />;
       case 'FINANCEIRO_VISAO_GERAL': return <FinanceiroPage view="dashboard" currentUser={currentUser} hasGlobalView={hasGlobalView} />;
       case 'FINANCEIRO_DRE': return <FinanceiroPage view="dre" currentUser={currentUser} hasGlobalView={hasGlobalView} />;
       case 'FINANCEIRO_CATEGORIAS': return <FinanceiroPage view="categorias" currentUser={currentUser} />;

@@ -6,6 +6,7 @@ export type Page =
   | 'ORCAMENTO' 
   | 'NOVO_ORCAMENTO'
   | 'RESUMO_VENDAS'
+  | 'MANUTENCAO'
   | 'FINANCEIRO_VISAO_GERAL'
   | 'FINANCEIRO_DRE'
   | 'FINANCEIRO_CATEGORIAS'
@@ -527,3 +528,53 @@ export interface InstalacaoLavagemPageProps {
     onSave?: () => void;
     hasGlobalView?: boolean;
 }
+
+export interface ManutencaoServiceItem {
+    id: string;
+    date?: string;
+    description: string;
+    qty: number;
+    unitCost: number;
+    unitPrice: number;
+    isEditing?: boolean;
+}
+
+export interface ManutencaoMaterialItem {
+    id: string;
+    date?: string;
+    description: string;
+    qty: number;
+    unitCost: number;
+    unitPrice: number;
+    category?: string;
+    isEditing?: boolean;
+}
+
+export interface ManutencaoRecord {
+    id: string;
+    owner_id: string;
+    clientName: string;
+    phone?: string;
+    cep?: string;
+    address?: string;
+    numero?: string;
+    bairro?: string;
+    complemento?: string;
+    city?: string;
+    estado?: string;
+    status: 'Especulação' | 'Aprovado' | 'Finalizado';
+    title: string;
+    description?: string;
+    startDate?: string;
+    endDate?: string;
+    services: ManutencaoServiceItem[];
+    materials: ManutencaoMaterialItem[];
+    categories?: string[];
+    materialsSource?: 'manual' | 'checklist';
+    selectedChecklists?: string[];
+    totalCost: number;
+    totalPrice: number;
+    notes?: string;
+    createdAt: string;
+}
+

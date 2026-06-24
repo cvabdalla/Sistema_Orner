@@ -186,7 +186,8 @@ class SupabaseDataService implements IDataService {
                 'suppliers',
                 'homologacao_entries',
                 'login_access_logs',
-                'instaladores'
+                'instaladores',
+                'manutencoes'
             ];
 
             if (!isAdmin && userId && privateCollections.includes(collection)) {
@@ -230,7 +231,8 @@ class SupabaseDataService implements IDataService {
                 'suppliers',
                 'homologacao_entries',
                 'login_access_logs',
-                'instaladores'
+                'instaladores',
+                'manutencoes'
             ];
 
             // Se for admin, não filtra. Se não for admin e tiver userId em coleção privada, filtra.

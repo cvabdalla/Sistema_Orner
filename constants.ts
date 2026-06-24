@@ -38,6 +38,7 @@ export const MENU_ITEMS: MenuItem[] = [
         { id: 'NOVO_ORCAMENTO', label: 'Novo Orçamento', icon: AddIcon },
         { id: 'ORCAMENTO', label: 'Lista de Orçamento', icon: OrcamentoIcon },
         { id: 'RESUMO_VENDAS', label: 'Resumo de Vendas', icon: TableIcon }, 
+        { id: 'MANUTENCAO', label: 'Manutenção', icon: ClipboardListIcon },
     ]
   },
   {
@@ -118,7 +119,7 @@ export const MOCK_PROFILES: UserProfile[] = [
         name: 'Administrador', 
         permissions: [
             'ALL', 'DASHBOARD', 
-            'ORCAMENTO_MENU', 'NOVO_ORCAMENTO', 'ORCAMENTO', 'RESUMO_VENDAS',
+            'ORCAMENTO_MENU', 'NOVO_ORCAMENTO', 'ORCAMENTO', 'RESUMO_VENDAS', 'MANUTENCAO',
             'FINANCEIRO_MENU', 'FINANCEIRO_VISAO_GERAL', 'FINANCEIRO_DRE', 'FINANCEIRO_CATEGORIAS', 'FINANCEIRO_BANCOS',
             'ESTOQUE_MENU', 'ESTOQUE_VISAO_GERAL', 'ESTOQUE_COMPRAS', 'ESTOQUE_NOVO_PRODUTO',
             'CHECKLIST_MENU', 'CHECKLIST_CHECKIN', 'CHECKLIST_CHECKOUT', 'CHECKLIST_MANUTENCAO', 'CHECKLIST_HOMOLOGACAO',
