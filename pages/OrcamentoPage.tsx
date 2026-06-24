@@ -577,9 +577,18 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
     }
   };
 
-  const loadGoogleMapsScript = (callback: () => void) => {
+  const loadGoogleMapsScript = (callback: () => void, onError?: () => void) => {
     if ((window as any).google) {
       callback();
+      return;
+    }
+    const GOOGLE_MAPS_KEY =
+      (globalThis as any).process?.env?.GOOGLE_MAPS_PLATFORM_KEY ||
+      (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
+      "";
+    if (!GOOGLE_MAPS_KEY || GOOGLE_MAPS_KEY === "YOUR_GOOGLE_MAPS_KEY" || GOOGLE_MAPS_KEY.trim() === "") {
+      console.warn("Chave do Google Maps não configurada. Usando fallback.");
+      if (onError) onError();
       return;
     }
     if (document.getElementById("google-maps-script")) {
@@ -591,10 +600,6 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
       }, 500);
       return;
     }
-    const GOOGLE_MAPS_KEY =
-      (globalThis as any).process?.env?.GOOGLE_MAPS_PLATFORM_KEY ||
-      (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
-      "";
     const script = document.createElement("script");
     script.id = "google-maps-script";
     script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_KEY}&libraries=places,routes`;
@@ -605,6 +610,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
     };
     script.onerror = () => {
       console.error("Erro ao carregar o script do Google Maps");
+      if (onError) onError();
     };
     document.head.appendChild(script);
   };
@@ -614,6 +620,14 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
     destAddr: string,
   ): Promise<number> => {
     return new Promise((resolve, reject) => {
+      const GOOGLE_MAPS_KEY =
+        (globalThis as any).process?.env?.GOOGLE_MAPS_PLATFORM_KEY ||
+        (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
+        "";
+      if (!GOOGLE_MAPS_KEY || GOOGLE_MAPS_KEY === "YOUR_GOOGLE_MAPS_KEY" || GOOGLE_MAPS_KEY.trim() === "") {
+        reject(new Error("Chave do Google Maps não configurada. Usando OSRM fallback."));
+        return;
+      }
       loadGoogleMapsScript(() => {
         if (!(window as any).google) {
           reject(new Error("Google Maps SDK não carregado"));
@@ -667,6 +681,8 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
             }
           },
         );
+      }, () => {
+        reject(new Error("Erro ao carregar o SDK do Google Maps"));
       });
     });
   };
