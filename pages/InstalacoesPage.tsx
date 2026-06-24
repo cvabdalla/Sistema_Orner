@@ -6,7 +6,7 @@ import {
 } from '../assets/icons';
 import Modal from '../components/Modal';
 import { dataService } from '../services/dataService';
-import type { InstalacoesPageProps, ActivityCatalogEntry, ActivityAppointment, SavedOrcamento, PainelConfig, User, AppointmentLogEntry } from '../types';
+import type { InstalacoesPageProps, ActivityCatalogEntry, ActivityAppointment, SavedOrcamento, PainelConfig, User, AppointmentLogEntry, Instalador, LavagemClient } from '../types';
 
 const TIME_OPTIONS = Array.from({ length: 33 }, (_, i) => {
     const hour = Math.floor(i / 2) + 7; // Começa às 07:00
@@ -73,6 +73,8 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
     const [orcamentos, setOrcamentos] = useState<SavedOrcamento[]>([]);
     const [cancelLog, setCancelLog] = useState<AppointmentLogEntry[]>([]);
     const [users, setUsers] = useState<User[]>([]);
+    const [instaladores, setInstaladores] = useState<Instalador[]>([]);
+    const [lavagemClients, setLavagemClients] = useState<LavagemClient[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isLoadingCep, setIsLoadingCep] = useState(false);
@@ -112,18 +114,22 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
         setIsLoading(true);
         try {
             const isAdmin = String(currentUser.profileId) === '001';
-            const [catData, apptData, orcData, userData, logData] = await Promise.all([
+            const [catData, apptData, orcData, userData, logData, instaladoresData, lavagemClientsData] = await Promise.all([
                 dataService.getAll<ActivityCatalogEntry>('activity_catalog', currentUser.id, true),
                 dataService.getAll<ActivityAppointment>('activity_appointments', currentUser.id, isAdmin),
                 dataService.getAll<SavedOrcamento>('orcamentos', currentUser.id, true),
                 dataService.getAll<User>('system_users', undefined, true),
-                dataService.getAll<AppointmentLogEntry>('activity_appointments_log', currentUser.id, isAdmin)
+                dataService.getAll<AppointmentLogEntry>('activity_appointments_log', currentUser.id, isAdmin),
+                dataService.getAll<Instalador>('instaladores', undefined, true),
+                dataService.getAll<LavagemClient>('lavagem_clients', currentUser.id, true)
             ]);
             setCatalog(catData.sort((a,b) => a.title.localeCompare(b.title)));
             setAppointments(apptData);
             setOrcamentos(orcData.filter(o => o.status === 'Aprovado'));
             setUsers(userData.filter(u => u.active));
+            setInstaladores((instaladoresData || []).filter((i: any) => i.ativo));
             setCancelLog((logData || []).sort((a, b) => b.deletedAt.localeCompare(a.deletedAt)));
+            setLavagemClients(lavagemClientsData || []);
         } catch (e) { console.error(e); } finally { setIsLoading(false); }
     };
 
@@ -198,8 +204,13 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                 return (startT < aEnd && endT > aStart);
             });
             if (hasConflict) {
-                const user = users.find(u => u.id === pId);
-                if (user) conflicts.push(user);
+                const inst = instaladores.find(i => i.id === pId);
+                if (inst) {
+                    conflicts.push({ id: inst.id, name: inst.nome } as any);
+                } else {
+                    const user = users.find(u => u.id === pId);
+                    if (user) conflicts.push(user);
+                }
             }
         });
         return conflicts;
@@ -321,6 +332,66 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
         setIsApptModalOpen(true);
     };
 
+    const handleClientNameChange = (val: string) => {
+        let updatedForm = { ...apptForm, clientName: val };
+
+        if (!val) {
+            setApptForm(updatedForm);
+            return;
+        }
+
+        // Procura por um cliente correspondente em lavagemClients
+        const matchingClient = lavagemClients.find(lc => lc.name?.toLowerCase().trim() === val.toLowerCase().trim());
+        if (matchingClient) {
+            updatedForm = {
+                ...updatedForm,
+                cep: matchingClient.cep || '',
+                address: matchingClient.address || '',
+                number: matchingClient.address_number || '',
+                complement: matchingClient.complement || '',
+                city: matchingClient.city || '',
+                platesCount: matchingClient.plates_count || 0,
+                observations: matchingClient.observations || ''
+            };
+
+            // Também procura pelo arranjo no orçamento aprovado se houver um correspondente para este cliente
+            const matchingOrc = orcamentos.find(o => {
+                const v = o.variants?.find(x => x.isPrincipal) || o.variants?.[0] || { formState: o.formState };
+                const name = v.formState?.nomeCliente || '';
+                return name.toLowerCase().trim() === val.toLowerCase().trim();
+            });
+            if (matchingOrc) {
+                const v = matchingOrc.variants?.find(x => x.isPrincipal) || matchingOrc.variants?.[0] || { formState: matchingOrc.formState };
+                if (v.formState?.arranjo) {
+                    updatedForm.arrangement = v.formState.arranjo;
+                }
+            }
+        } else {
+            // Verifica se o cliente está presente diretamente nos orçamentos
+            const matchingOrc = orcamentos.find(o => {
+                const v = o.variants?.find(x => x.isPrincipal) || o.variants?.[0] || { formState: o.formState };
+                const name = v.formState?.nomeCliente || '';
+                return name.toLowerCase().trim() === val.toLowerCase().trim();
+            });
+            if (matchingOrc) {
+                const v = matchingOrc.variants?.find(x => x.isPrincipal) || matchingOrc.variants?.[0] || { formState: matchingOrc.formState };
+                const fs = v.formState || {};
+                updatedForm = {
+                    ...updatedForm,
+                    cep: fs.cepObra || fs.cep || '',
+                    address: fs.enderecoObra || fs.endereco || fs.rua || '',
+                    number: fs.numeroObra || fs.numero || '',
+                    complement: fs.complementoObra || fs.complemento || '',
+                    city: fs.cidadeObra || fs.cidade || '',
+                    platesCount: fs.plates_count || fs.quantidadePlacas || fs.qtdPlacas || 0,
+                    observations: fs.observacoes || fs.observacao || '',
+                    arrangement: fs.arranjo || ''
+                };
+            }
+        }
+        setApptForm(updatedForm);
+    };
+
     const toggleParticipant = (userId: string) => {
         const current = apptForm.participantIds || [];
         if (current.includes(userId)) setApptForm({ ...apptForm, participantIds: current.filter(id => id !== userId) });
@@ -384,10 +455,13 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
     }, [currentDate, calendarViewMode, appointments]);
 
     const approvedClients = useMemo(() => {
-        return orcamentos.map(o => {
+        const approvedOrcamentos = orcamentos.filter(o => o.status === 'Aprovado');
+        const fromOrcamentos = approvedOrcamentos.map(o => {
             const v = o.variants?.find(x => x.isPrincipal) || o.variants?.[0] || { formState: o.formState };
             return v.formState?.nomeCliente;
-        }).filter(Boolean);
+        });
+        const allClients = [...fromOrcamentos].filter(Boolean);
+        return Array.from(new Set(allClients));
     }, [orcamentos]);
 
     const isPersonalForm = useMemo(() => {
@@ -395,6 +469,27 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
         const selectedActivity = catalog.find(c => c.id === apptForm.activityId);
         return !!selectedActivity?.personalSchedule;
     }, [apptForm.activityId, catalog]);
+
+    const isInstallationOrWashing = useMemo(() => {
+        if (!apptForm.activityId) return false;
+        const selectedActivity = catalog.find(c => c.id === apptForm.activityId);
+        if (!selectedActivity) return false;
+        const title = (selectedActivity.title || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        return title.includes('instalac') || title.includes('instalar') || title.includes('lavagem');
+    }, [apptForm.activityId, catalog]);
+
+    const selectableParticipants = useMemo(() => {
+        if (isInstallationOrWashing) {
+            return instaladores.map(inst => ({
+                id: inst.id,
+                name: inst.nome
+            }));
+        }
+        return users.map(user => ({
+            id: user.id,
+            name: user.name
+        }));
+    }, [users, isInstallationOrWashing, instaladores]);
 
     const renderCancelados = () => (
         <div className="space-y-4 animate-fade-in">
@@ -535,7 +630,11 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                                             <div className="space-y-1 overflow-y-auto max-h-[100px] custom-scrollbar">
                                                 {dayObj.appts.map(appt => {
                                                     const catItem = catalog.find(c => c.id === appt.activityId);
-                                                    const teamNames = appt.participantIds?.map(id => users.find(u => u.id === id)?.name.split(' ')[0]).filter(Boolean).join(', ');
+                                                    const teamNames = appt.participantIds?.map(id => {
+                                                        const inst = instaladores.find(i => i.id === id);
+                                                        if (inst) return inst.nome.split(' ')[0];
+                                                        return users.find(u => u.id === id)?.name.split(' ')[0];
+                                                    }).filter(Boolean).join(', ');
                                                     return (
                                                         <div key={appt.id} style={{ borderLeft: `3px solid ${catItem?.color || '#ccc'}`, backgroundColor: `${catItem?.color || '#ccc'}15` }} className="p-1.5 rounded-lg border border-transparent transition-all hover:shadow-md cursor-pointer group" onClick={() => handleOpenApptSummary(appt)}>
                                                             <p className="text-[9px] font-black truncate leading-none mb-1" style={{ color: catItem?.color }}>{appt.clientName}</p>
@@ -577,7 +676,11 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                                             ))}
                                             {dayObj?.appts.map(appt => {
                                                 const catItem = catalog.find(c => c.id === appt.activityId);
-                                                const teamNames = appt.participantIds?.map(id => users.find(u => u.id === id)?.name).filter(Boolean).join(', ');
+                                                const teamNames = appt.participantIds?.map(id => {
+                                                    const inst = instaladores.find(i => i.id === id);
+                                                    if (inst) return inst.nome;
+                                                    return users.find(u => u.id === id)?.name;
+                                                }).filter(Boolean).join(', ');
                                                 let top = 0; let height = 80;
                                                 if (!appt.isAllDay && appt.startTime && appt.endTime) {
                                                     const [startH, startM] = appt.startTime.split(':').map(Number);
@@ -596,6 +699,14 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                                                         {appt.participantIds && appt.participantIds.length > 0 && (
                                                             <div className="flex -space-x-2 overflow-hidden">
                                                                 {appt.participantIds.slice(0, 3).map(pId => {
+                                                                    const inst = instaladores.find(i => i.id === pId);
+                                                                    if (inst) {
+                                                                        return (
+                                                                            <div key={pId} className="inline-block h-5 w-5 rounded-full ring-2 ring-white dark:ring-gray-800 bg-gray-200 flex items-center justify-center overflow-hidden" title={inst.nome}>
+                                                                                <span className="text-[8px] font-black">{inst.nome.substring(0, 2).toUpperCase()}</span>
+                                                                            </div>
+                                                                        );
+                                                                    }
                                                                     const user = users.find(u => u.id === pId);
                                                                     return (<div key={pId} className="inline-block h-5 w-5 rounded-full ring-2 ring-white dark:ring-gray-800 bg-gray-200 flex items-center justify-center overflow-hidden" title={user?.name}>{user?.avatar ? <img src={user.avatar} className="w-full h-full object-cover rounded-full" /> : <span className="text-[8px] font-black">{user?.name.substring(0, 2).toUpperCase()}</span>}</div>);
                                                                 })}
@@ -697,8 +808,13 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                                 <span className="text-[9px] font-bold text-red-500">* Obrigatório</span>
                             </div>
                             <div className="flex flex-wrap gap-1.5">
-                                {users.map(user => (<button key={user.id} type="button" onClick={() => toggleParticipant(user.id)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all text-[10px] font-bold ${apptForm.participantIds?.includes(user.id) ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-gray-50 dark:bg-gray-700 text-gray-500 border-transparent hover:border-indigo-100'}`}>{user.name}</button>))}
+                                {selectableParticipants.map(participant => (<button key={participant.id} type="button" onClick={() => toggleParticipant(participant.id)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-all text-[10px] font-bold ${apptForm.participantIds?.includes(participant.id) ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-gray-50 dark:bg-gray-700 text-gray-500 border-transparent hover:border-indigo-100'}`}>{participant.name}</button>))}
                             </div>
+                            {isInstallationOrWashing && selectableParticipants.length === 0 && (
+                                <p className="text-[10px] text-amber-600 font-semibold mt-2 bg-amber-50 dark:bg-amber-950/20 p-2 rounded-lg border border-amber-100 dark:border-amber-900/30">
+                                    ⚠️ Nenhum instalador ativo cadastrado em "Cadastro de Instaladores".
+                                </p>
+                            )}
                             {(!apptForm.participantIds || apptForm.participantIds.length === 0) && (
                                 <p className="text-[9px] text-amber-600 font-bold mt-2 italic">⚠️ Selecione pelo menos uma pessoa para habilitar o salvamento.</p>
                             )}
@@ -737,7 +853,7 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                         {!isPersonalForm && (
                             <div className="bg-white dark:bg-gray-800 p-3.5 rounded-2xl border border-gray-100 dark:border-gray-700 space-y-3 shadow-sm">
                                 <SectionHeader icon={<MapIcon />} title="Localização do serviço" color="bg-teal-600" />
-                                <div><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Cliente</label><input required list="client-list" type="text" value={apptForm.clientName} onChange={e => setApptForm({...apptForm, clientName: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2.5 text-xs font-bold shadow-sm" placeholder="Nome do cliente..." /><datalist id="client-list">{approvedClients.map(c => <option key={c} value={c} />)}</datalist></div>
+                                <div><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Cliente</label><input required list="client-list" type="text" value={apptForm.clientName} onChange={e => handleClientNameChange(e.target.value)} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2.5 text-xs font-bold shadow-sm" placeholder="Nome do cliente..." /><datalist id="client-list">{approvedClients.map(c => <option key={c} value={c} />)}</datalist></div>
                                 <div className="grid grid-cols-12 gap-2">
                                     <div className="col-span-4"><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">CEP</label><input type="text" value={apptForm.cep} onChange={e => setApptForm({...apptForm, cep: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2 text-xs font-bold shadow-sm" /></div>
                                     <div className="col-span-8"><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Endereço</label><input type="text" value={apptForm.address} onChange={e => setApptForm({...apptForm, address: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2 text-xs font-bold shadow-sm" /></div>
@@ -828,6 +944,17 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                                             <p className="text-[10px] font-bold text-gray-400 mb-2 tracking-tight">Equipe de trabalho</p>
                                             <div className="flex flex-wrap gap-2">
                                                 {editingAppt.participantIds?.map(pId => {
+                                                    const inst = instaladores.find(i => i.id === pId);
+                                                    if (inst) {
+                                                        return (
+                                                            <div key={pId} className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/30 px-2.5 py-1.5 rounded-xl border border-indigo-100 dark:border-indigo-800">
+                                                                <div className="w-5 h-5 rounded-full bg-indigo-600 flex items-center justify-center text-white text-[8px] font-bold ring-1 ring-indigo-200">
+                                                                    {inst.nome.substring(0, 2).toUpperCase()}
+                                                                </div>
+                                                                <span className="text-[11px] font-bold text-gray-700 dark:text-gray-200">{inst.nome}</span>
+                                                            </div>
+                                                        );
+                                                    }
                                                     const user = users.find(u => u.id === pId);
                                                     return (
                                                         <div key={pId} className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/30 px-2.5 py-1.5 rounded-xl border border-indigo-100 dark:border-indigo-800">
