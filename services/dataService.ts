@@ -310,11 +310,29 @@ class SupabaseDataService implements IDataService {
             return this.deserialize<T>(collection, data);
         } catch (e: any) {
             const isFetchError = e.message?.includes('fetch') || e.message?.includes('network') || e.name === 'TypeError' || e.message?.includes('Failed to fetch') || e.message?.includes('network error');
-            const isDbSchemaOrRlsError = e.message?.includes('policy') || e.message?.includes('security') || e.message?.includes('does not exist') || e.message?.includes('column') || e.code === '42P01' || e.code === '42703';
+            const isDbSchemaOrRlsError = 
+                e.message?.includes('policy') || 
+                e.message?.includes('security') || 
+                e.message?.includes('does not exist') || 
+                e.message?.includes('column') || 
+                e.message?.includes('coluna') || 
+                e.message?.includes('não existe') || 
+                e.message?.includes('relação') || 
+                e.message?.includes('violates') || 
+                e.message?.includes('viola') || 
+                e.message?.includes('constraint') || 
+                e.message?.includes('null') || 
+                e.code === '42P01' || 
+                e.code === '42703' || 
+                e.code === '23502' || 
+                e.code === '23505';
             
-            if (isFetchError || isDbSchemaOrRlsError) {
+            if (isFetchError) {
                 console.warn(`[DATABASE SAVE FALLBACK] ${collection}: Salvo com sucesso no cache local (offline/schema). Detalhe:`, e.message);
                 return deserializedItem;
+            } else if (isDbSchemaOrRlsError) {
+                console.error(`[DATABASE SCHEMA/SECURITY ERROR] ${collection}:`, e.message);
+                throw new Error(`Erro de Banco de Dados / RLS: ${e.message || 'Acesso negado ou tabela incorreta'}`);
             } else {
                 console.error(`[SAVE ERROR] ${collection}:`, e.message);
                 throw e;

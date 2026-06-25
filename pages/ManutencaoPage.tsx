@@ -15,6 +15,7 @@ import {
   ArrowLeftIcon,
   UsersIcon,
   CubeIcon,
+  EyeIcon,
 } from "../assets/icons";
 import { dataService } from "../services/dataService";
 import type {
@@ -50,21 +51,72 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("Todos");
 
+  // Estado do Modal de Motivo de Perda
+  const [showLossReasonModal, setShowLossReasonModal] = useState(false);
+  const [lossReasonRecord, setLossReasonRecord] = useState<{ record: any; source: 'modal' | 'kanban' } | null>(null);
+  const [tempLossReason, setTempLossReason] = useState("");
+
   // Estado do Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [editingRecord, setEditingRecord] =
     useState<Partial<ManutencaoRecord> | null>(null);
+  const [viewingCategoryMaterials, setViewingCategoryMaterials] = useState<{
+    category: string;
+    items: ManutencaoMaterialItem[];
+  } | null>(null);
   const [activeTab, setActiveTab] = useState<
     "dados" | "servicos" | "materiais" | "resumo"
   >("dados");
+
+  // Toast notifications state
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+
+  const showToast = (message: string, type: "success" | "error" | "info" = "info") => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast(null);
+    }, 4500);
+  };
+
+  const safeAlert = (message: string) => {
+    showToast(message, "error");
+  };
+
+  const safeConfirm = (message: string): boolean => {
+    try {
+      return window.confirm(message);
+    } catch (e) {
+      console.warn("window.confirm blocked by sandbox, defaulting to true.");
+      return true;
+    }
+  };
+
+  const safePrompt = (message: string, defaultValue: string = ""): string | null => {
+    try {
+      return window.prompt(message, defaultValue);
+    } catch (e) {
+      console.warn("window.prompt blocked by sandbox, using default.");
+      return defaultValue;
+    }
+  };
 
   const lastFetchedCep = useRef<string>("");
 
   // Busca de CEP automatica
   useEffect(() => {
-    if (!editingRecord?.cep || !isModalOpen) return;
+    if (!editingRecord?.cep || !isModalOpen) {
+      lastFetchedCep.current = "";
+      return;
+    }
     const cleanCep = editingRecord.cep.replace(/\D/g, "");
+    
+    // Se o usuário está digitando ou apagou o CEP, resetamos o ref para permitir nova busca
+    if (cleanCep.length < 8) {
+      lastFetchedCep.current = "";
+      return;
+    }
+
     if (cleanCep.length === 8 && cleanCep !== lastFetchedCep.current) {
       const fetchCep = async () => {
         setIsLoadingCep(true);
@@ -79,15 +131,19 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
               if (!prev) return null;
               return {
                 ...prev,
-                address: data.logradouro || prev.address || "",
-                bairro: data.bairro || prev.bairro || "",
-                city: data.localidade || prev.city || "",
-                estado: data.uf || prev.estado || "",
+                address: data.logradouro || "",
+                bairro: data.bairro || "",
+                city: data.localidade || "",
+                estado: data.uf || "",
               };
             });
+          } else {
+            // Se o CEP for inválido/não encontrado, limpa o ref para permitir tentar de novo se corrigido
+            lastFetchedCep.current = "";
           }
         } catch (e) {
           console.error("Erro ao buscar CEP:", e);
+          lastFetchedCep.current = "";
         } finally {
           setIsLoadingCep(false);
         }
@@ -117,7 +173,7 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
 
     const currentCategories = editingRecord.categories || [];
     if (currentCategories.some((c) => c.toLowerCase() === name.toLowerCase())) {
-      alert("Esta categoria já existe neste orçamento.");
+      safeAlert("Esta categoria já existe neste orçamento.");
       return;
     }
 
@@ -133,7 +189,7 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
 
   const handleRemoveCategory = (catName: string) => {
     if (!editingRecord) return;
-    const confirmDelete = window.confirm(
+    const confirmDelete = safeConfirm(
       `Tem certeza que deseja excluir a categoria "${catName}"? Os materiais vinculados a ela ficarão sem categoria.`
     );
     if (!confirmDelete) return;
@@ -149,14 +205,14 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
 
   const handleEditCategory = (oldName: string) => {
     if (!editingRecord) return;
-    const newName = window.prompt(
+    const newName = safePrompt(
       `Digite o novo nome para a categoria "${oldName}":`,
       oldName
     );
     if (newName === null) return; // cancelado
     const trimmedNewName = newName.trim();
     if (!trimmedNewName) {
-      alert("O nome da categoria não pode ser vazio.");
+      safeAlert("O nome da categoria não pode ser vazio.");
       return;
     }
     if (trimmedNewName === oldName) return;
@@ -167,7 +223,7 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
         (c) => c.toLowerCase() === trimmedNewName.toLowerCase() && c !== oldName
       )
     ) {
-      alert("Já existe outra categoria com este nome.");
+      safeAlert("Já existe outra categoria com este nome.");
       return;
     }
 
@@ -309,6 +365,7 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
   // Abertura do Modal de Novo Registro
   const handleOpenCreateModal = () => {
     setModalMode("create");
+    lastFetchedCep.current = "";
     setEditingRecord({
       id: "maint_" + Math.random().toString(36).substr(2, 9),
       owner_id: currentUser.id,
@@ -328,6 +385,7 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
       endDate: "",
       services: [],
       materials: [],
+      categories: [],
       materialsSource: "manual",
       selectedChecklists: [],
       totalCost: 0,
@@ -341,6 +399,7 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
   // Abertura do Modal de Edição
   const handleOpenEditModal = (record: ManutencaoRecord) => {
     setModalMode("edit");
+    lastFetchedCep.current = (record.cep || "").replace(/\D/g, "");
     setEditingRecord({
       materialsSource: "manual",
       selectedChecklists: [],
@@ -353,22 +412,23 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
   // Exclusão de Registro
   const handleDeleteRecord = async (id: string) => {
     if (
-      !window.confirm("Deseja realmente excluir este registro de manutenção?")
+      !safeConfirm("Deseja realmente excluir este registro de manutenção?")
     )
       return;
     try {
       await dataService.delete("manutencoes", id);
       setMaintenances((prev) => prev.filter((m) => m.id !== id));
+      showToast("Registro excluído com sucesso!", "success");
     } catch (e) {
       console.error("Erro ao deletar manutenção:", e);
-      alert("Não foi possível excluir o registro.");
+      safeAlert("Não foi possível excluir o registro.");
     }
   };
 
-  // Mudança rápida de Status (Aprovar / Finalizar)
+  // Mudança rápida de Status (Aprovar / Finalizar / Perdido)
   const handleQuickStatusChange = async (
     record: ManutencaoRecord,
-    newStatus: "Especulação" | "Aprovado" | "Finalizado",
+    newStatus: "Especulação" | "Aprovado" | "Finalizado" | "Perdido",
   ) => {
     const updated = { ...record, status: newStatus };
     try {
@@ -384,6 +444,16 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
   // Adicionar Linha de Serviço no modal
   const handleAddServiceItem = () => {
     if (!editingRecord) return;
+
+    // Não deixar abrir um novo registro caso tenha um já aberto
+    const hasActiveEdit = (editingRecord.services || []).some(
+      (s) => s.isEditing !== false
+    );
+    if (hasActiveEdit) {
+      safeAlert("Por favor, salve ou cancele a linha de serviço que já está aberta antes de criar uma nova.");
+      return;
+    }
+
     const today = new Date().toISOString().split("T")[0];
     const newService: ManutencaoServiceItem = {
       id: "srv_" + Math.random().toString(36).substr(2, 9),
@@ -398,6 +468,14 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
       const services = [...(prev?.services || []), newService];
       return { ...prev, services };
     });
+
+    // Deslocar a tela para a linha aberta no fim da página
+    setTimeout(() => {
+      const formEl = document.getElementById("maint-modal-form");
+      if (formEl) {
+        formEl.scrollTo({ top: formEl.scrollHeight, behavior: "smooth" });
+      }
+    }, 100);
   };
 
   // Modificar Linha de Serviço
@@ -485,6 +563,16 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
   // Adicionar Linha de Material no modal
   const handleAddMaterialItem = () => {
     if (!editingRecord) return;
+
+    // Não deixar abrir um novo registro caso tenha um já aberto
+    const hasActiveEdit = (editingRecord.materials || []).some(
+      (m) => m.isEditing !== false
+    );
+    if (hasActiveEdit) {
+      safeAlert("Por favor, salve ou cancele a linha de peça/material que já está aberta antes de criar uma nova.");
+      return;
+    }
+
     const today = new Date().toISOString().split("T")[0];
     const newMaterial: ManutencaoMaterialItem = {
       id: "mat_" + Math.random().toString(36).substr(2, 9),
@@ -500,6 +588,14 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
       const materials = [...(prev?.materials || []), newMaterial];
       return { ...prev, materials };
     });
+
+    // Deslocar a tela para a linha aberta no fim da página
+    setTimeout(() => {
+      const formEl = document.getElementById("maint-modal-form");
+      if (formEl) {
+        formEl.scrollTo({ top: formEl.scrollHeight, behavior: "smooth" });
+      }
+    }, 100);
   };
 
   // Modificar Linha de Material
@@ -531,26 +627,20 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
   const computedTotals = useMemo(() => {
     if (!editingRecord) return { cost: 0, price: 0, profit: 0, margin: 0 };
 
-    const servicesCost = (editingRecord.services || []).reduce(
-      (acc, s) => acc + s.unitCost * s.qty,
-      0,
-    );
+    // "Serviço e Mão de Obra" são valores de receita (ou seja, entrada)
     const servicesPrice = (editingRecord.services || []).reduce(
       (acc, s) => acc + s.unitPrice * s.qty,
       0,
     );
 
+    // "Peças e Materiais" são valores de despesas (ou seja, saída)
     const materialsCost = (editingRecord.materials || []).reduce(
       (acc, m) => acc + m.unitCost * m.qty,
       0,
     );
-    const materialsPrice = (editingRecord.materials || []).reduce(
-      (acc, m) => acc + m.unitPrice * m.qty,
-      0,
-    );
 
-    const totalCost = servicesCost + materialsCost;
-    const totalPrice = servicesPrice + materialsPrice;
+    const totalCost = materialsCost; // Despesa (Saída)
+    const totalPrice = servicesPrice; // Receita (Entrada)
     const profit = totalPrice - totalCost;
     const margin = totalPrice > 0 ? (profit / totalPrice) * 100 : 0;
 
@@ -565,13 +655,14 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
   // Agrupamento de materiais por categoria para o resumo financeiro
   const materialsByCategory = useMemo(() => {
     if (!editingRecord) return [];
-    const categoriesList = editingRecord.categories || [];
+    const categoriesList = [...(editingRecord.categories || [])].sort((a, b) => a.localeCompare(b, "pt-BR"));
     const allKeys = [...categoriesList, "Sem Categoria"];
     const result: {
       category: string;
       totalCost: number;
       totalPrice: number;
       count: number;
+      items: ManutencaoMaterialItem[];
     }[] = [];
 
     allKeys.forEach((cat) => {
@@ -593,6 +684,7 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
           totalCost,
           totalPrice,
           count: items.length,
+          items,
         });
       }
     });
@@ -603,7 +695,7 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
   const handleSaveRecord = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRecord?.clientName || !editingRecord?.title) {
-      alert("Por favor, preencha o Nome do Cliente e o Título.");
+      safeAlert("Por favor, preencha o Nome do Cliente e o Título.");
       return;
     }
 
@@ -628,11 +720,13 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
         endDate: editingRecord.endDate || "",
         services: editingRecord.services || [],
         materials: editingRecord.materials || [],
+        categories: editingRecord.categories || [],
         materialsSource: editingRecord.materialsSource || "manual",
         selectedChecklists: editingRecord.selectedChecklists || [],
         totalCost: computedTotals.cost,
         totalPrice: computedTotals.price,
         notes: editingRecord.notes || "",
+        motivoPerdido: editingRecord.motivoPerdido || "",
         createdAt: editingRecord.createdAt || new Date().toISOString(),
       };
 
@@ -649,11 +743,12 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
         return [...prev, finalRecord];
       });
 
+      showToast("Manutenção salva com sucesso!", "success");
       setIsModalOpen(false);
       setEditingRecord(null);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro ao salvar manutenção:", err);
-      alert("Não foi possível salvar os dados.");
+      safeAlert(`Não foi possível salvar os dados: ${err?.message || "Erro desconhecido"}`);
     } finally {
       setIsSaving(false);
     }
@@ -661,13 +756,14 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
 
   // Estatísticas Gerais para o Top Dashboard
   const stats = useMemo(() => {
-    const active = maintenances.filter((m) => m.status !== "Finalizado");
+    const active = maintenances.filter((m) => m.status !== "Finalizado" && m.status !== "Perdido");
     const speculation = maintenances.filter((m) => m.status === "Especulação");
     const approved = maintenances.filter((m) => m.status === "Aprovado");
     const finalized = maintenances.filter((m) => m.status === "Finalizado");
+    const lost = maintenances.filter((m) => m.status === "Perdido");
 
-    const totalRevenue = maintenances.reduce((acc, m) => acc + m.totalPrice, 0);
-    const totalCost = maintenances.reduce((acc, m) => acc + m.totalCost, 0);
+    const totalRevenue = maintenances.filter((m) => m.status !== "Perdido").reduce((acc, m) => acc + m.totalPrice, 0);
+    const totalCost = maintenances.filter((m) => m.status !== "Perdido").reduce((acc, m) => acc + m.totalCost, 0);
     const approvedRevenue = approved.reduce((acc, m) => acc + m.totalPrice, 0);
 
     return {
@@ -675,6 +771,7 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
       countSpeculation: speculation.length,
       countApproved: approved.length,
       countFinalized: finalized.length,
+      countLost: lost.length,
       activeCount: active.length,
       totalRevenue,
       totalCost,
@@ -687,8 +784,8 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
     };
   }, [maintenances]);
 
-  // Filtragem e busca dos cards
-  const filteredRecords = useMemo(() => {
+  // Filtragem e busca dos cards (apenas por texto de busca)
+  const searchedRecords = useMemo(() => {
     return maintenances.filter((m) => {
       const matchesSearch =
         m.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -697,21 +794,19 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
         (m.description &&
           m.description.toLowerCase().includes(searchTerm.toLowerCase()));
 
-      const matchesStatus =
-        statusFilter === "Todos" || m.status === statusFilter;
-
-      return matchesSearch && matchesStatus;
+      return matchesSearch;
     });
-  }, [maintenances, searchTerm, statusFilter]);
+  }, [maintenances, searchTerm]);
 
-  // Grupos por coluna do Kanban
+  // Grupos por coluna do Kanban (separados após a busca por texto)
   const kanbanColumns = useMemo(() => {
     return {
-      Especulação: filteredRecords.filter((m) => m.status === "Especulação"),
-      Aprovado: filteredRecords.filter((m) => m.status === "Aprovado"),
-      Finalizado: filteredRecords.filter((m) => m.status === "Finalizado"),
+      Especulação: searchedRecords.filter((m) => m.status === "Especulação"),
+      Aprovado: searchedRecords.filter((m) => m.status === "Aprovado"),
+      Finalizado: searchedRecords.filter((m) => m.status === "Finalizado"),
+      Perdido: searchedRecords.filter((m) => m.status === "Perdido"),
     };
-  }, [filteredRecords]);
+  }, [searchedRecords]);
 
   // Visualizar detalhes do Orçamento / Ordem de Serviço de Manutenção
   if (printRecord) {
@@ -975,8 +1070,27 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
     );
   }
 
+  const isReadOnly = editingRecord?.status === "Finalizado";
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed top-4 right-4 z-[9999]">
+          <div className={`flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl border text-xs font-bold transition-all animate-in fade-in slide-in-from-top-4 duration-300 ${
+            toast.type === "success" 
+              ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300"
+              : toast.type === "error"
+              ? "bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300"
+              : "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800 text-indigo-800 dark:text-indigo-300"
+          }`}>
+            {toast.type === "success" && <CheckCircleIcon className="w-4 h-4 shrink-0" />}
+            {toast.type === "error" && <XCircleIcon className="w-4 h-4 shrink-0" />}
+            <span>{toast.message}</span>
+          </div>
+        </div>
+      )}
+
       {/* Header da Página */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-gray-100 dark:border-gray-800 pb-5">
         <div>
@@ -1071,7 +1185,7 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
           <SearchIcon className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
         </div>
         <div className="flex gap-2 w-full md:w-auto">
-          {["Todos", "Especulação", "Aprovado", "Finalizado"].map((status) => (
+          {["Todos", "Especulação", "Aprovado", "Finalizado", "Perdido"].map((status) => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
@@ -1096,93 +1210,134 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className={`grid grid-cols-1 ${
+          statusFilter === "Todos"
+            ? "md:grid-cols-2 lg:grid-cols-4"
+            : "max-w-2xl mx-auto"
+        } gap-6`}>
           {/* Coluna 1: Especulação */}
-          <div className="bg-gray-50 dark:bg-gray-800/20 p-4 rounded-2xl border border-gray-100 dark:border-gray-800/80 flex flex-col min-h-[500px]">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xs font-black text-amber-600 flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-                Especulação ({kanbanColumns["Especulação"].length})
-              </h3>
-              <span className="text-[10px] font-black text-amber-600/80 bg-amber-50 dark:bg-amber-950/20 px-2 py-0.5 rounded-md">
-                {formatCurrency(
-                  kanbanColumns["Especulação"].reduce(
-                    (acc, m) => acc + m.totalPrice,
-                    0,
-                  ),
+          {(statusFilter === "Todos" || statusFilter === "Especulação") && (
+            <div className="bg-gray-50 dark:bg-gray-800/20 p-4 rounded-2xl border border-gray-100 dark:border-gray-800/80 flex flex-col min-h-[500px]">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xs font-black text-amber-600 flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+                  Especulação ({kanbanColumns["Especulação"].length})
+                </h3>
+                <span className="text-[10px] font-black text-amber-600/80 bg-amber-50 dark:bg-amber-950/20 px-2 py-0.5 rounded-md">
+                  {formatCurrency(
+                    kanbanColumns["Especulação"].reduce(
+                      (acc, m) => acc + m.totalPrice,
+                      0,
+                    ),
+                  )}
+                </span>
+              </div>
+              <div className="space-y-3.5 overflow-y-auto flex-1 custom-scrollbar max-h-[600px] pr-1">
+                {kanbanColumns["Especulação"].length === 0 ? (
+                  <div className="text-center py-10 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
+                    <p className="text-[10px] font-medium text-gray-400">
+                      Nenhum orçamento / lead
+                    </p>
+                  </div>
+                ) : (
+                  kanbanColumns["Especulação"].map((m) => renderKanbanCard(m))
                 )}
-              </span>
+              </div>
             </div>
-            <div className="space-y-3.5 overflow-y-auto flex-1 custom-scrollbar max-h-[600px] pr-1">
-              {kanbanColumns["Especulação"].length === 0 ? (
-                <div className="text-center py-10 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
-                  <p className="text-[10px] font-medium text-gray-400">
-                    Nenhum orçamento / lead
-                  </p>
-                </div>
-              ) : (
-                kanbanColumns["Especulação"].map((m) => renderKanbanCard(m))
-              )}
-            </div>
-          </div>
+          )}
 
           {/* Coluna 2: Aprovados */}
-          <div className="bg-gray-50 dark:bg-gray-800/20 p-4 rounded-2xl border border-gray-100 dark:border-gray-800/80 flex flex-col min-h-[500px]">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xs font-black text-indigo-500 flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
-                Aprovados / Em Execução ({kanbanColumns["Aprovado"].length})
-              </h3>
-              <span className="text-[10px] font-black text-indigo-500 bg-indigo-50 dark:bg-indigo-950/20 px-2 py-0.5 rounded-md">
-                {formatCurrency(
-                  kanbanColumns["Aprovado"].reduce(
-                    (acc, m) => acc + m.totalPrice,
-                    0,
-                  ),
+          {(statusFilter === "Todos" || statusFilter === "Aprovado") && (
+            <div className="bg-gray-50 dark:bg-gray-800/20 p-4 rounded-2xl border border-gray-100 dark:border-gray-800/80 flex flex-col min-h-[500px]">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xs font-black text-indigo-500 flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+                  Aprovados / Em Execução ({kanbanColumns["Aprovado"].length})
+                </h3>
+                <span className="text-[10px] font-black text-indigo-500 bg-indigo-50 dark:bg-indigo-950/20 px-2 py-0.5 rounded-md">
+                  {formatCurrency(
+                    kanbanColumns["Aprovado"].reduce(
+                      (acc, m) => acc + m.totalPrice,
+                      0,
+                    ),
+                  )}
+                </span>
+              </div>
+              <div className="space-y-3.5 overflow-y-auto flex-1 custom-scrollbar max-h-[600px] pr-1">
+                {kanbanColumns["Aprovado"].length === 0 ? (
+                  <div className="text-center py-10 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
+                    <p className="text-[10px] font-medium text-gray-400">
+                      Nenhum serviço aprovado em aberto
+                    </p>
+                  </div>
+                ) : (
+                  kanbanColumns["Aprovado"].map((m) => renderKanbanCard(m))
                 )}
-              </span>
+              </div>
             </div>
-            <div className="space-y-3.5 overflow-y-auto flex-1 custom-scrollbar max-h-[600px] pr-1">
-              {kanbanColumns["Aprovado"].length === 0 ? (
-                <div className="text-center py-10 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
-                  <p className="text-[10px] font-medium text-gray-400">
-                    Nenhum serviço aprovado em aberto
-                  </p>
-                </div>
-              ) : (
-                kanbanColumns["Aprovado"].map((m) => renderKanbanCard(m))
-              )}
-            </div>
-          </div>
+          )}
 
           {/* Coluna 3: Finalizados */}
-          <div className="bg-gray-50 dark:bg-gray-800/20 p-4 rounded-2xl border border-gray-100 dark:border-gray-800/80 flex flex-col min-h-[500px]">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xs font-black text-emerald-500 flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                Finalizados ({kanbanColumns["Finalizado"].length})
-              </h3>
-              <span className="text-[10px] font-black text-emerald-500 bg-emerald-50 dark:bg-emerald-950/20 px-2 py-0.5 rounded-md">
-                {formatCurrency(
-                  kanbanColumns["Finalizado"].reduce(
-                    (acc, m) => acc + m.totalPrice,
-                    0,
-                  ),
+          {(statusFilter === "Todos" || statusFilter === "Finalizado") && (
+            <div className="bg-gray-50 dark:bg-gray-800/20 p-4 rounded-2xl border border-gray-100 dark:border-gray-800/80 flex flex-col min-h-[500px]">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xs font-black text-emerald-500 flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                  Finalizados ({kanbanColumns["Finalizado"].length})
+                </h3>
+                <span className="text-[10px] font-black text-emerald-500 bg-emerald-50 dark:bg-emerald-950/20 px-2 py-0.5 rounded-md">
+                  {formatCurrency(
+                    kanbanColumns["Finalizado"].reduce(
+                      (acc, m) => acc + m.totalPrice,
+                      0,
+                    ),
+                  )}
+                </span>
+              </div>
+              <div className="space-y-3.5 overflow-y-auto flex-1 custom-scrollbar max-h-[600px] pr-1">
+                {kanbanColumns["Finalizado"].length === 0 ? (
+                  <div className="text-center py-10 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
+                    <p className="text-[10px] font-medium text-gray-400">
+                      Nenhum chamado concluído ainda
+                    </p>
+                  </div>
+                ) : (
+                  kanbanColumns["Finalizado"].map((m) => renderKanbanCard(m))
                 )}
-              </span>
+              </div>
             </div>
-            <div className="space-y-3.5 overflow-y-auto flex-1 custom-scrollbar max-h-[600px] pr-1">
-              {kanbanColumns["Finalizado"].length === 0 ? (
-                <div className="text-center py-10 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
-                  <p className="text-[10px] font-medium text-gray-400">
-                    Nenhum chamado concluído ainda
-                  </p>
-                </div>
-              ) : (
-                kanbanColumns["Finalizado"].map((m) => renderKanbanCard(m))
-              )}
+          )}
+
+          {/* Coluna 4: Perdidos */}
+          {(statusFilter === "Todos" || statusFilter === "Perdido") && (
+            <div className="bg-gray-50 dark:bg-gray-800/20 p-4 rounded-2xl border border-gray-100 dark:border-gray-800/80 flex flex-col min-h-[500px]">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xs font-black text-red-500 flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
+                  Perdidos ({kanbanColumns["Perdido"].length})
+                </h3>
+                <span className="text-[10px] font-black text-red-500 bg-red-50 dark:bg-red-950/20 px-2 py-0.5 rounded-md">
+                  {formatCurrency(
+                    kanbanColumns["Perdido"].reduce(
+                      (acc, m) => acc + m.totalPrice,
+                      0,
+                    ),
+                  )}
+                </span>
+              </div>
+              <div className="space-y-3.5 overflow-y-auto flex-1 custom-scrollbar max-h-[600px] pr-1">
+                {kanbanColumns["Perdido"].length === 0 ? (
+                  <div className="text-center py-10 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
+                    <p className="text-[10px] font-medium text-gray-400">
+                      Nenhum chamado perdido
+                    </p>
+                  </div>
+                ) : (
+                  kanbanColumns["Perdido"].map((m) => renderKanbanCard(m))
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -1191,14 +1346,16 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white dark:bg-gray-900 w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-gray-100 dark:border-gray-800">
             {/* Header Modal */}
-            <div className="px-6 py-5 border-b border-gray-150 dark:border-gray-800 flex justify-between items-center bg-gradient-to-r from-indigo-50 via-purple-50/50 to-white dark:from-indigo-950/20 dark:via-purple-950/10 dark:to-gray-900 transition-colors">
+            <div className="shrink-0 px-6 py-5 border-b border-gray-150 dark:border-gray-800 flex justify-between items-center bg-gradient-to-r from-indigo-50 via-purple-50/50 to-white dark:from-indigo-950/20 dark:via-purple-950/10 dark:to-gray-900 transition-colors">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-indigo-600 rounded-xl text-white shadow-lg shadow-indigo-600/20 dark:shadow-indigo-900/30">
                   <WrenchIcon className="w-5 h-5 text-white animate-pulse" />
                 </div>
                 <div>
                   <h3 className="text-sm font-black text-gray-950 dark:text-white tracking-tight">
-                    {modalMode === "create"
+                    {isReadOnly
+                      ? "Visualizar Chamado de Manutenção"
+                      : modalMode === "create"
                       ? "Registrar Novo Chamado de Manutenção"
                       : "Editar Chamado de Manutenção"}
                   </h3>
@@ -1220,7 +1377,7 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
             </div>
 
             {/* Abas de Navegação interna */}
-            <div className="flex border-b border-gray-150 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-x-auto p-1.5 gap-1 select-none">
+            <div className="flex shrink-0 border-b border-gray-150 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-x-auto p-1.5 gap-1 select-none">
               {[
                 { id: "dados", label: "Dados do Cliente", color: "text-indigo-600 bg-indigo-500/10 dark:bg-indigo-500/20 border-indigo-500", icon: <UsersIcon className="w-4 h-4" /> },
                 { id: "servicos", label: "Serviços e Mão de Obra", color: "text-purple-600 bg-purple-500/10 dark:bg-purple-500/20 border-purple-500", icon: <WrenchIcon className="w-4 h-4" /> },
@@ -1250,12 +1407,14 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
 
             {/* Form Body */}
             <form
+              id="maint-modal-form"
               onSubmit={handleSaveRecord}
               className="flex-1 overflow-y-auto p-6 space-y-4"
             >
               {/* TAB 1: Dados Gerais */}
               {activeTab === "dados" && (
-                <div className="space-y-4">
+                <fieldset disabled={isReadOnly} className="space-y-4 border-0 p-0 m-0">
+                  <div className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-[10px] font-black text-gray-400 tracking-tight mb-1 ml-1">
@@ -1512,38 +1671,74 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
                       </label>
                       <select
                         value={editingRecord.status || "Especulação"}
-                        onChange={(e) =>
-                          setEditingRecord({
-                            ...editingRecord,
-                            status: e.target.value as any,
-                          })
-                        }
+                        onChange={(e) => {
+                          const val = e.target.value as any;
+                          if (val === "Perdido") {
+                            setTempLossReason(editingRecord.motivoPerdido || "");
+                            setLossReasonRecord({
+                              record: editingRecord,
+                              source: "modal",
+                            });
+                            setShowLossReasonModal(true);
+                          } else {
+                            setEditingRecord({
+                              ...editingRecord,
+                              status: val,
+                            });
+                          }
+                        }}
                         className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-800 p-2.5 text-xs font-bold shadow-sm"
                       >
                         <option value="Especulação">Especulação</option>
                         <option value="Aprovado">Aprovado</option>
                         <option value="Finalizado">Finalizado</option>
+                        <option value="Perdido">Perdido</option>
                       </select>
                     </div>
+
+                    {editingRecord.status === "Perdido" && (
+                      <div className="col-span-1 md:col-span-3">
+                        <label className="block text-[10px] font-black text-red-500 tracking-tight mb-1 ml-1 flex items-center gap-1 animate-pulse">
+                          ⚠️ Motivo do Orçamento Perdido *
+                        </label>
+                        <textarea
+                          value={editingRecord.motivoPerdido || ""}
+                          onChange={(e) =>
+                            setEditingRecord({
+                              ...editingRecord,
+                              motivoPerdido: e.target.value,
+                            })
+                          }
+                          required
+                          placeholder="Informe detalhadamente por que este orçamento de manutenção foi perdido (Ex: Cliente achou caro, fechou com concorrente, mudou de ideia)..."
+                          className="w-full rounded-xl border border-red-200 dark:border-red-950/40 bg-red-50/20 dark:bg-red-950/10 p-2.5 text-xs font-semibold focus:ring-red-500 focus:border-red-500 outline-none"
+                          rows={3}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
+              </fieldset>
+            )}
 
               {/* TAB 2: Serviços e Mão de Obra */}
               {activeTab === "servicos" && (
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 tracking-tight">
-                      Incluir Serviços Técnicos
-                    </h4>
-                    <button
-                      type="button"
-                      onClick={handleAddServiceItem}
-                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1"
-                    >
-                      <PlusIcon className="w-3.5 h-3.5" /> Adicionar Serviço
-                    </button>
-                  </div>
+                <fieldset disabled={isReadOnly} className="space-y-4 border-0 p-0 m-0">
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 tracking-tight">
+                        Incluir Serviços Técnicos
+                      </h4>
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={handleAddServiceItem}
+                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1"
+                        >
+                          <PlusIcon className="w-3.5 h-3.5" /> Adicionar Serviço
+                        </button>
+                      )}
+                    </div>
 
                   {(editingRecord.services || []).length === 0 ? (
                     <div className="text-center py-12 bg-gray-50 dark:bg-gray-800/30 rounded-2xl border border-gray-100 dark:border-gray-800">
@@ -1629,7 +1824,7 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
                                     type="button"
                                     onClick={() => {
                                       if (!srv.description.trim()) {
-                                        alert("Por favor, informe a descrição do serviço.");
+                                        safeAlert("Por favor, informe a descrição do serviço.");
                                         return;
                                       }
                                       handleUpdateServiceItem(idx, {
@@ -1661,11 +1856,11 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
                         return (
                           <div
                             key={srv.id}
-                            className="p-3 bg-gray-50/50 dark:bg-gray-800/20 border border-gray-100 dark:border-gray-800/60 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-sm"
+                            className="py-1.5 px-3 bg-gray-50/50 dark:bg-gray-800/20 border border-gray-100 dark:border-gray-800/60 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-2 shadow-sm"
                           >
-                            <div className="flex items-center gap-3 flex-wrap md:flex-nowrap">
+                            <div className="flex items-center gap-2.5 flex-wrap md:flex-nowrap">
                               {srv.date && (
-                                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50/80 dark:bg-indigo-950/50 px-2.5 py-1 rounded-lg">
+                                <span className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50/80 dark:bg-indigo-950/50 px-2 py-0.5 rounded-md font-mono">
                                   {srv.date.split("-").reverse().join("/")}
                                 </span>
                               )}
@@ -1678,52 +1873,72 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-3.5 justify-between md:justify-end">
+                            <div className="flex items-center gap-2.5 justify-between md:justify-end">
                               {/* VALOR */}
-                              <div className="md:text-right pr-2">
-                                <span className="block text-[8px] text-gray-400 font-bold tracking-wider">
+                              <div className="flex flex-col md:items-end leading-none pr-1.5">
+                                <span className="text-[8px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">
                                   Valor
                                 </span>
-                                <span className="text-xs font-black text-indigo-600 dark:text-indigo-400">
+                                <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
                                   {formatCurrency(srv.unitPrice)}
                                 </span>
                               </div>
 
                               {/* ACTIONS */}
-                              <div className="flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleUpdateServiceItem(idx, {
-                                      isEditing: true,
-                                    })
-                                  }
-                                  className="text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/20 p-1.5 rounded-lg transition-all"
-                                  title="Editar"
-                                >
-                                  <EditIcon className="w-4 h-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveServiceItem(idx)}
-                                  className="text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 p-1.5 rounded-lg transition-all"
-                                  title="Remover"
-                                >
-                                  <TrashIcon className="w-4 h-4" />
-                                </button>
-                              </div>
+                              {!isReadOnly && (
+                                <div className="flex items-center gap-0.5">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleUpdateServiceItem(idx, {
+                                        isEditing: true,
+                                      })
+                                    }
+                                    className="text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/20 p-1 rounded-md transition-all"
+                                    title="Editar"
+                                  >
+                                    <EditIcon className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveServiceItem(idx)}
+                                    className="text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 p-1 rounded-md transition-all"
+                                    title="Remover"
+                                  >
+                                    <TrashIcon className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           </div>
                         );
                       })}
                     </div>
                   )}
-                </div>
+
+                  {/* Totalizador de Serviços */}
+                  {(() => {
+                    const servicesTotal = (editingRecord.services || []).reduce((acc, s) => acc + s.unitPrice * s.qty, 0);
+                    if (servicesTotal <= 0) return null;
+                    return (
+                      <div className="bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100/30 p-4 rounded-xl flex justify-between items-center mt-4">
+                        <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                          Total de Serviços (Receita / Entrada):
+                        </span>
+                        <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">
+                          {formatCurrency(servicesTotal)}
+                        </span>
+                      </div>
+                    );
+                  })()}
+                  </div>
+                </fieldset>
               )}
 
               {/* TAB 3: Peças e Materiais */}
               {activeTab === "materiais" && (
-                <div className="space-y-4">
+                <fieldset disabled={isReadOnly} className="space-y-4 border-0 p-0 m-0">
+                  <div className="space-y-4">
                   <div className="flex justify-between items-center">
                     <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 tracking-tight">
                       Incluir Peças e Materiais
@@ -1951,56 +2166,60 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
                           </span>
                         </div>
 
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            placeholder="Nome da categoria (ex: Inversor, Painéis, Cabos)..."
-                            value={newCategoryName}
-                            onChange={(e) => setNewCategoryName(e.target.value)}
-                            className="flex-1 rounded-lg border border-indigo-200 dark:border-indigo-800 focus:border-indigo-500 bg-white dark:bg-gray-900 px-3 py-1.5 text-xs font-medium text-gray-900 dark:text-white placeholder-gray-400 shadow-sm outline-none transition-colors"
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                e.preventDefault();
-                                handleAddCategory();
-                              }
-                            }}
-                          />
-                          <button
-                            type="button"
-                            onClick={handleAddCategory}
-                            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow-sm hover:shadow transition-all whitespace-nowrap"
-                          >
-                            + Criar Categoria
-                          </button>
-                        </div>
+                        {!isReadOnly && (
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              placeholder="Nome da categoria (ex: Inversor, Painéis, Cabos)..."
+                              value={newCategoryName}
+                              onChange={(e) => setNewCategoryName(e.target.value)}
+                              className="flex-1 rounded-lg border border-indigo-200 dark:border-indigo-800 focus:border-indigo-500 bg-white dark:bg-gray-900 px-3 py-1.5 text-xs font-medium text-gray-900 dark:text-white placeholder-gray-400 shadow-sm outline-none transition-colors"
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  handleAddCategory();
+                                }
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={handleAddCategory}
+                              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow-sm hover:shadow transition-all whitespace-nowrap"
+                            >
+                              + Criar Categoria
+                            </button>
+                          </div>
+                        )}
 
                         {/* Lista de tags de categorias */}
                         {(editingRecord.categories || []).length > 0 ? (
                           <div className="flex flex-wrap gap-1.5 pt-0.5">
-                            {(editingRecord.categories || []).map((cat) => (
+                            {[...(editingRecord.categories || [])].sort((a, b) => a.localeCompare(b, "pt-BR")).map((cat) => (
                               <span
                                 key={cat}
                                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200 text-xs font-semibold shadow-sm border border-indigo-150/50 dark:border-indigo-900/40"
                               >
                                 <span>{cat}</span>
-                                <div className="flex items-center gap-1.5 ml-1 border-l border-indigo-200 dark:border-indigo-800/40 pl-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleEditCategory(cat)}
-                                    className="text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all"
-                                    title="Editar Categoria"
-                                  >
-                                    <EditIcon className="w-3 h-3" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveCategory(cat)}
-                                    className="text-red-500 hover:text-red-700 dark:hover:text-red-400 transition-all"
-                                    title="Excluir Categoria"
-                                  >
-                                    <TrashIcon className="w-3 h-3" />
-                                  </button>
-                                </div>
+                                {!isReadOnly && (
+                                  <div className="flex items-center gap-1.5 ml-1 border-l border-indigo-200 dark:border-indigo-800/40 pl-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleEditCategory(cat)}
+                                      className="text-indigo-500 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all"
+                                      title="Editar Categoria"
+                                    >
+                                      <EditIcon className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveCategory(cat)}
+                                      className="text-red-500 hover:text-red-700 dark:hover:text-red-400 transition-all"
+                                      title="Excluir Categoria"
+                                    >
+                                      <TrashIcon className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                )}
                               </span>
                             ))}
                           </div>
@@ -2015,13 +2234,15 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
                         <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 tracking-wide">
                           Peças e Materiais Lançados
                         </span>
-                        <button
-                          type="button"
-                          onClick={handleAddMaterialItem}
-                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1"
-                        >
-                          <PlusIcon className="w-3.5 h-3.5" /> Adicionar Peça / Material
-                        </button>
+                        {!isReadOnly && (
+                          <button
+                            type="button"
+                            onClick={handleAddMaterialItem}
+                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1"
+                          >
+                            <PlusIcon className="w-3.5 h-3.5" /> Adicionar Peça / Material
+                          </button>
+                        )}
                       </div>
 
                       {(editingRecord.materials || []).length === 0 ? (
@@ -2040,7 +2261,7 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
                             const subCost = mat.qty * mat.unitCost;
                             const subPrice = mat.qty * mat.unitPrice;
                             const isEditing = mat.isEditing !== false;
-                            const categoriesList = editingRecord.categories || [];
+                            const categoriesList = [...(editingRecord.categories || [])].sort((a, b) => a.localeCompare(b, "pt-BR"));
 
                             if (isEditing) {
                               return (
@@ -2138,7 +2359,7 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
                                         type="button"
                                         onClick={() => {
                                           if (!mat.description.trim()) {
-                                            alert("Por favor, informe a descrição.");
+                                            safeAlert("Por favor, informe a descrição.");
                                             return;
                                           }
                                           handleUpdateMaterialItem(idx, {
@@ -2172,12 +2393,12 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
                             return (
                               <div
                                 key={mat.id}
-                                className="p-3 bg-gray-50 dark:bg-gray-800/10 border border-gray-100 dark:border-gray-800/60 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4"
+                                className="py-1.5 px-3 bg-gray-50 dark:bg-gray-800/10 border border-gray-100 dark:border-gray-800/60 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-2 shadow-sm"
                               >
-                                <div className="flex-1 flex flex-col md:flex-row md:items-center gap-2 md:gap-4">
+                                <div className="flex-1 flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
                                   {/* DATA */}
                                   {mat.date && (
-                                    <span className="text-[10px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-lg font-bold font-mono">
+                                    <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-md font-bold font-mono">
                                       {mat.date.split("-").reverse().join("/")}
                                     </span>
                                   )}
@@ -2199,39 +2420,41 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
                                   </div>
 
                                   {/* VALOR */}
-                                  <div className="md:text-right pr-4">
-                                    <span className="block text-[8px] text-gray-400 font-bold tracking-wider">
+                                  <div className="flex flex-col md:items-end leading-none pr-1.5">
+                                    <span className="text-[8px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">
                                       Valor
                                     </span>
-                                    <span className="text-xs font-black text-indigo-600 dark:text-indigo-400">
+                                    <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
                                       {formatCurrency(mat.unitPrice)}
                                     </span>
                                   </div>
                                 </div>
 
                                 {/* ACTIONS */}
-                                <div className="flex items-center gap-1.5 justify-end border-t md:border-t-0 border-gray-100 dark:border-gray-800/60 pt-2 md:pt-0">
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleUpdateMaterialItem(idx, {
-                                        isEditing: true,
-                                      })
-                                    }
-                                    className="text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/20 p-1.5 rounded-lg transition-all"
-                                    title="Editar"
-                                  >
-                                    <EditIcon className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveMaterialItem(idx)}
-                                    className="text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 p-1.5 rounded-lg transition-all"
-                                    title="Remover"
-                                  >
-                                    <TrashIcon className="w-4 h-4" />
-                                  </button>
-                                </div>
+                                {!isReadOnly && (
+                                  <div className="flex items-center gap-0.5 justify-end pt-1 md:pt-0">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleUpdateMaterialItem(idx, {
+                                          isEditing: true,
+                                        })
+                                      }
+                                      className="text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/20 p-1 rounded-md transition-all"
+                                      title="Editar"
+                                    >
+                                      <EditIcon className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveMaterialItem(idx)}
+                                      className="text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 p-1 rounded-md transition-all"
+                                      title="Remover"
+                                    >
+                                      <TrashIcon className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -2239,14 +2462,31 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
                       )}
                     </>
                   )}
-                </div>
+
+                  {/* Totalizador de Peças e Materiais */}
+                  {(() => {
+                    const materialsTotal = (editingRecord.materials || []).reduce((acc, m) => acc + m.unitCost * m.qty, 0);
+                    if (materialsTotal <= 0) return null;
+                    return (
+                      <div className="bg-rose-50/50 dark:bg-rose-950/20 border border-rose-100/30 p-4 rounded-xl flex justify-between items-center mt-4">
+                        <span className="text-xs font-bold text-rose-800 dark:text-rose-300">
+                          Total de Peças e Materiais (Despesa / Saída):
+                        </span>
+                        <span className="text-sm font-black text-rose-600 dark:text-rose-400">
+                          {formatCurrency(materialsTotal)}
+                        </span>
+                      </div>
+                    );
+                  })()}
+                  </div>
+                </fieldset>
               )}
 
               {/* TAB 4: Resumo Financeiro */}
               {activeTab === "resumo" && (
                 <div className="space-y-5">
                   <h4 className="text-xs font-bold text-gray-900 dark:text-white tracking-tight">
-                    Consolidação de Custos e Preço de Venda
+                    Consolidação de Receitas (Entradas) e Despesas (Saídas)
                   </h4>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2258,9 +2498,9 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
 
                       <div className="flex justify-between text-xs py-1.5 border-b border-gray-100 dark:border-gray-800/60">
                         <span className="text-gray-500 font-medium">
-                          Mão de Obra (Venda cobrada):
+                          Serviços e Mão de Obra (Receita / Entrada):
                         </span>
-                        <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
                           {formatCurrency(
                             (editingRecord.services || []).reduce(
                               (acc, s) => acc + s.unitPrice * s.qty,
@@ -2272,9 +2512,9 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
 
                       <div className="flex justify-between text-xs py-1.5 border-b border-gray-100 dark:border-gray-800/60">
                         <span className="text-gray-500 font-medium">
-                          Peças e Materiais (Custo):
+                          Peças e Materiais (Despesa / Saída):
                         </span>
-                        <span className="font-bold text-gray-700 dark:text-gray-300">
+                        <span className="font-bold text-rose-600 dark:text-rose-400">
                           {formatCurrency(
                             (editingRecord.materials || []).reduce(
                               (acc, m) => acc + m.unitCost * m.qty,
@@ -2292,33 +2532,33 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
                           Margem de Lucro do Chamado
                         </h5>
                         <div className="flex items-baseline gap-2">
-                          <span className="text-3xl font-black text-indigo-600 dark:text-indigo-400">
+                          <span className={`text-3xl font-black ${computedTotals.profit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
                             {computedTotals.margin.toFixed(1)}%
                           </span>
                           <span className="text-xs text-gray-500 font-bold">
-                            de margem média
+                            de margem líquida
                           </span>
                         </div>
                       </div>
 
                       <div className="space-y-1.5 mt-4">
                         <div className="flex justify-between text-xs text-gray-500">
-                          <span>Custo Combinado:</span>
-                          <span className="font-bold text-gray-700 dark:text-gray-300">
+                          <span>Total de Despesas (Saída):</span>
+                          <span className="font-bold text-rose-600 dark:text-rose-400">
                             {formatCurrency(computedTotals.cost)}
                           </span>
                         </div>
                         <div className="flex justify-between text-xs text-gray-500">
-                          <span>Preço Final Cobrado:</span>
-                          <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                          <span>Total de Receita (Entrada):</span>
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400">
                             {formatCurrency(computedTotals.price)}
                           </span>
                         </div>
                         <div className="flex justify-between text-xs font-bold pt-1.5 border-t border-indigo-100/30">
                           <span className="text-gray-800 dark:text-white">
-                            Lucro Estimado:
+                            Saldo Líquido Estimado:
                           </span>
-                          <span className="text-emerald-500">
+                          <span className={computedTotals.profit >= 0 ? "text-emerald-500 font-black" : "text-rose-500 font-black"}>
                             {formatCurrency(computedTotals.profit)}
                           </span>
                         </div>
@@ -2351,25 +2591,27 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
                               >
                                 {item.category}
                               </span>
-                              <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded-md font-bold whitespace-nowrap">
-                                {item.count}{" "}
-                                {item.count === 1 ? "item" : "itens"}
-                              </span>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded-md font-bold whitespace-nowrap">
+                                  {item.count}{" "}
+                                  {item.count === 1 ? "item" : "itens"}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingCategoryMaterials({ category: item.category, items: item.items })}
+                                  className="p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition-colors"
+                                  title="Visualizar lançamentos"
+                                >
+                                  <EyeIcon className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </div>
                             <div className="flex justify-between items-baseline mt-1.5 pt-1.5 border-t border-gray-50 dark:border-gray-800/40">
                               <span className="text-[9px] text-gray-400 font-semibold">
-                                Total Custo:
+                                Valor Total:
                               </span>
-                              <span className="text-xs font-black text-gray-700 dark:text-gray-300">
+                              <span className="text-xs font-black text-rose-600 dark:text-rose-400">
                                 {formatCurrency(item.totalCost)}
-                              </span>
-                            </div>
-                            <div className="flex justify-between items-baseline">
-                              <span className="text-[9px] text-gray-400 font-semibold">
-                                Total Venda:
-                              </span>
-                              <span className="text-xs font-black text-indigo-600 dark:text-indigo-400">
-                                {formatCurrency(item.totalPrice)}
                               </span>
                             </div>
                           </div>
@@ -2384,6 +2626,7 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
                     </label>
                     <textarea
                       rows={2}
+                      disabled={isReadOnly}
                       value={editingRecord.notes || ""}
                       onChange={(e) =>
                         setEditingRecord({
@@ -2391,7 +2634,7 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
                           notes: e.target.value,
                         })
                       }
-                      className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-800 p-2.5 text-xs font-semibold shadow-sm outline-none"
+                      className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-800 p-2.5 text-xs font-semibold shadow-sm outline-none disabled:opacity-50"
                       placeholder="Garantia de atendimento, notas adicionais..."
                     />
                   </div>
@@ -2400,14 +2643,30 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
             </form>
 
             {/* Footer Modal */}
-            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-800/30 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center">
+            <div className="shrink-0 px-6 py-4 bg-gray-50 dark:bg-gray-800/30 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center">
               <div className="text-left">
-                <span className="block text-[8px] text-gray-400 font-black tracking-wider">
-                  Valor total cobrado
-                </span>
-                <span className="text-sm font-black text-indigo-600 dark:text-indigo-400">
-                  {formatCurrency(computedTotals.price)}
-                </span>
+                {activeTab !== "dados" && activeTab !== "resumo" && (
+                  <>
+                    <span className="block text-[8px] text-gray-400 font-black tracking-wider">
+                      {activeTab === "servicos" || activeTab === "materiais" ? "Valor Total" : "Valor total cobrado"}
+                    </span>
+                    <span className={`text-sm font-black ${
+                      activeTab === "servicos"
+                        ? "text-purple-600 dark:text-purple-400"
+                        : activeTab === "materiais"
+                        ? "text-amber-600 dark:text-amber-400"
+                        : "text-indigo-600 dark:text-indigo-400"
+                    }`}>
+                      {formatCurrency(
+                        activeTab === "servicos"
+                          ? (editingRecord.services || []).reduce((acc, s) => acc + s.unitPrice * s.qty, 0)
+                          : activeTab === "materiais"
+                          ? (editingRecord.materials || []).reduce((acc, m) => acc + m.unitCost * m.qty, 0)
+                          : computedTotals.price
+                      )}
+                    </span>
+                  </>
+                )}
               </div>
               <div className="flex gap-2">
                 <button
@@ -2418,18 +2677,179 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
                   }}
                   className="px-4 py-2 bg-gray-100 text-gray-500 rounded-xl font-bold text-xs hover:bg-gray-200 transition-all"
                 >
-                  Cancelar
+                  {isReadOnly ? "Fechar" : "Cancelar"}
                 </button>
-                <button
-                  type="button"
-                  onClick={handleSaveRecord}
-                  disabled={isSaving}
-                  className="flex items-center gap-1 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/20 transition-all disabled:opacity-50"
-                >
-                  <SaveIcon className="w-4 h-4" />{" "}
-                  {isSaving ? "Salvando..." : "Salvar Manutenção"}
-                </button>
+                {!isReadOnly && (
+                  <button
+                    type="button"
+                    onClick={handleSaveRecord}
+                    disabled={isSaving}
+                    className="flex items-center gap-1 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/20 transition-all disabled:opacity-50"
+                  >
+                    <SaveIcon className="w-4 h-4" />{" "}
+                    {isSaving ? "Salvando..." : "Salvar Manutenção"}
+                  </button>
+                )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Justificativa de Perda */}
+      {showLossReasonModal && lossReasonRecord && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 p-6 space-y-4">
+            <div className="flex items-center gap-3 text-red-600 dark:text-red-400">
+              <div className="p-2 bg-red-100 dark:bg-red-950/40 rounded-xl">
+                <XCircleIcon className="w-5 h-5 text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-gray-950 dark:text-white tracking-tight">
+                  Motivo de Perda do Orçamento
+                </h3>
+                <p className="text-[10px] text-gray-500 dark:text-gray-400 font-bold">
+                  {lossReasonRecord.record.clientName || "Cliente"}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-[10px] font-black text-gray-400 tracking-tight">
+                Justificativa / Motivo de Perda *
+              </label>
+              <textarea
+                value={tempLossReason}
+                onChange={(e) => setTempLossReason(e.target.value)}
+                placeholder="Por que este orçamento de manutenção foi perdido? (Ex: preço, prazo, concorrente, etc)..."
+                className="w-full rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800 p-3 text-xs font-semibold focus:ring-red-500 focus:border-red-500 outline-none"
+                rows={4}
+                autoFocus
+              />
+            </div>
+
+            <div className="flex gap-2 justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLossReasonModal(false);
+                  setLossReasonRecord(null);
+                }}
+                className="px-4 py-2 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-xl font-bold text-xs hover:bg-gray-200 dark:hover:bg-gray-700 transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={!tempLossReason.trim()}
+                onClick={async () => {
+                  const reason = tempLossReason.trim();
+                  if (!reason) return;
+
+                  if (lossReasonRecord.source === 'modal') {
+                    setEditingRecord({
+                      ...lossReasonRecord.record,
+                      status: 'Perdido',
+                      motivoPerdido: reason,
+                    });
+                  } else {
+                    // Update directly in database and state
+                    const updated = {
+                      ...lossReasonRecord.record,
+                      status: 'Perdido' as const,
+                      motivoPerdido: reason,
+                    };
+                    try {
+                      await dataService.save("manutencoes", updated);
+                      setMaintenances((prev) =>
+                        prev.map((m) => (m.id === updated.id ? updated : m)),
+                      );
+                    } catch (e) {
+                      console.error("Erro ao salvar motivo de perda:", e);
+                    }
+                  }
+                  setShowLossReasonModal(false);
+                  setLossReasonRecord(null);
+                }}
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-red-600/20 transition-all disabled:opacity-50"
+              >
+                Confirmar Perda
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Detalhes dos Gastos por Categoria */}
+      {viewingCategoryMaterials && (
+        <div className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 w-full max-w-lg rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 flex flex-col overflow-hidden max-h-[85vh]">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-150 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-800/20">
+              <div>
+                <h3 className="text-sm font-black text-gray-950 dark:text-white tracking-tight">
+                  Consulta de Gastos Lançados
+                </h3>
+                <p className="text-[10px] text-gray-500 dark:text-gray-400 font-bold">
+                  Categoria: {viewingCategoryMaterials.category}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingCategoryMaterials(null)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+              >
+                <XCircleIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Tabela de Lançamentos */}
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="overflow-hidden border border-gray-100 dark:border-gray-800 rounded-xl">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 text-[10px] font-black text-gray-400 tracking-wider">
+                      <th className="py-2.5 px-4 font-bold">Data</th>
+                      <th className="py-2.5 px-4 font-bold">Descrição</th>
+                      <th className="py-2.5 px-4 font-bold text-right">Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 dark:divide-gray-800/40">
+                    {viewingCategoryMaterials.items.map((item) => (
+                      <tr key={item.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20 font-semibold text-gray-700 dark:text-gray-300">
+                        <td className="py-2.5 px-4 text-gray-500 whitespace-nowrap">
+                          {item.date ? new Date(item.date + "T00:00:00").toLocaleDateString("pt-BR") : "-"}
+                        </td>
+                        <td className="py-2.5 px-4 truncate max-w-[220px]" title={item.description}>
+                          {item.description || "Sem descrição"}
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-black text-rose-600 dark:text-rose-400 whitespace-nowrap">
+                          {formatCurrency(item.unitCost * item.qty)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-gray-100 dark:border-gray-800 font-bold bg-gray-50/50 dark:bg-gray-800/20">
+                      <td colSpan={2} className="py-2.5 px-4 text-gray-500 text-right">Total:</td>
+                      <td className="py-2.5 px-4 text-right font-black text-rose-600 dark:text-rose-400 whitespace-nowrap">
+                        {formatCurrency(viewingCategoryMaterials.items.reduce((acc, curr) => acc + curr.unitCost * curr.qty, 0))}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-gray-50 dark:bg-gray-800/30 border-t border-gray-100 dark:border-gray-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setViewingCategoryMaterials(null)}
+                className="px-5 py-2.5 bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700 rounded-xl font-bold text-xs transition-colors"
+              >
+                Fechar
+              </button>
             </div>
           </div>
         </div>
@@ -2468,6 +2888,17 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
           <p className="text-[10px] text-gray-500 dark:text-gray-400 line-clamp-2 leading-relaxed italic">
             "{m.description}"
           </p>
+        )}
+
+        {m.status === "Perdido" && m.motivoPerdido && (
+          <div className="bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-950/40 p-2.5 rounded-xl">
+            <span className="block text-[8px] font-black text-red-500 uppercase tracking-wider mb-0.5">
+              Motivo da Perda
+            </span>
+            <p className="text-[10px] text-red-700 dark:text-red-400 font-medium leading-normal italic">
+              "{m.motivoPerdido}"
+            </p>
+          </div>
         )}
 
         {/* Badges de Serviços e Itens */}
@@ -2511,13 +2942,29 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
           {/* Botões rápidos de mudança de status */}
           <div className="flex gap-1">
             {m.status === "Especulação" && (
-              <button
-                onClick={() => handleQuickStatusChange(m, "Aprovado")}
-                className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/30 dark:hover:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 text-[9px] font-black rounded-lg transition-all"
-                title="Aprovar Manutenção"
-              >
-                Aprovar OS
-              </button>
+              <>
+                <button
+                  onClick={() => handleQuickStatusChange(m, "Aprovado")}
+                  className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/30 dark:hover:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 text-[9px] font-black rounded-lg transition-all"
+                  title="Aprovar Manutenção"
+                >
+                  Aprovar OS
+                </button>
+                <button
+                  onClick={() => {
+                    setTempLossReason(m.motivoPerdido || "");
+                    setLossReasonRecord({
+                      record: m,
+                      source: "kanban",
+                    });
+                    setShowLossReasonModal(true);
+                  }}
+                  className="px-2 py-1 bg-red-50 hover:bg-red-100 dark:bg-red-950/30 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 text-[9px] font-black rounded-lg transition-all"
+                  title="Marcar como Perdido"
+                >
+                  Perdido
+                </button>
+              </>
             )}
             {m.status === "Aprovado" && (
               <button
@@ -2537,10 +2984,19 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
                 Reabrir
               </button>
             )}
+            {m.status === "Perdido" && (
+              <button
+                onClick={() => handleQuickStatusChange(m, "Especulação")}
+                className="px-2 py-1 bg-gray-50 hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 text-[9px] font-bold rounded-lg transition-all"
+                title="Mover para Especulação"
+              >
+                Reabrir
+              </button>
+            )}
           </div>
 
           {/* Botões de Ações gerais */}
-          <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex items-center gap-1.5">
             <button
               onClick={() => setPrintRecord(m)}
               className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md transition-all"
@@ -2551,16 +3007,13 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
             <button
               onClick={() => handleOpenEditModal(m)}
               className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md transition-all"
-              title="Editar detalhes"
+              title={m.status === "Finalizado" ? "Visualizar detalhes" : "Editar detalhes"}
             >
-              <EditIcon className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => handleDeleteRecord(m.id)}
-              className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-md transition-all"
-              title="Excluir"
-            >
-              <TrashIcon className="w-3.5 h-3.5" />
+              {m.status === "Finalizado" ? (
+                <EyeIcon className="w-3.5 h-3.5" />
+              ) : (
+                <EditIcon className="w-3.5 h-3.5" />
+              )}
             </button>
           </div>
         </div>

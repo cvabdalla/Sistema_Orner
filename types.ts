@@ -562,7 +562,7 @@ export interface ManutencaoRecord {
     complemento?: string;
     city?: string;
     estado?: string;
-    status: 'Especulação' | 'Aprovado' | 'Finalizado';
+    status: 'Especulação' | 'Aprovado' | 'Finalizado' | 'Perdido';
     title: string;
     description?: string;
     startDate?: string;
@@ -575,6 +575,7 @@ export interface ManutencaoRecord {
     totalCost: number;
     totalPrice: number;
     notes?: string;
+    motivoPerdido?: string;
     createdAt: string;
 }
 

@@ -65,6 +65,7 @@ ALTER TABLE "manutencoes" ADD COLUMN IF NOT EXISTS "estado" text;
 ALTER TABLE "manutencoes" ADD COLUMN IF NOT EXISTS "categories" jsonb DEFAULT '[]'::jsonb;
 ALTER TABLE "manutencoes" ADD COLUMN IF NOT EXISTS "materialsSource" text DEFAULT 'manual';
 ALTER TABLE "manutencoes" ADD COLUMN IF NOT EXISTS "selectedChecklists" jsonb DEFAULT '[]'::jsonb;
+ALTER TABLE "manutencoes" ADD COLUMN IF NOT EXISTS "motivoPerdido" text;
 
 -- Desabilita RLS para garantir gravação simplificada por qualquer usuário logado
 ALTER TABLE "manutencoes" DISABLE ROW LEVEL SECURITY;
