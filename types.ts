@@ -168,6 +168,8 @@ export interface SalesSummaryItem {
     homologation?: number;
     installation?: number;
     travelCost?: number;
+    deslocamento?: number;
+    pedagio?: number;
     adequationCost?: number;
     materialCost?: number;
     invoicedTax?: number;

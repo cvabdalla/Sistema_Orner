@@ -1087,17 +1087,38 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
 
   const confirmDelete = async () => {
     if (orcamentoToDeleteId !== null) {
-      await dataService.delete("orcamentos", orcamentoToDeleteId);
-      const currentSales =
-        await dataService.getAll<SalesSummaryItem>("sales_summary");
-      const saleToDelete = currentSales.find(
-        (s) => s.orcamentoId === orcamentoToDeleteId,
-      );
-      if (saleToDelete)
-        await dataService.delete("sales_summary", saleToDelete.id);
-      setOrcamentos((prev) => prev.filter((o) => o.id !== orcamentoToDeleteId));
-      setDeleteModalOpen(false);
-      setOrcamentoToDeleteId(null);
+      try {
+        // 1. Delete associated sales_summary (child record) first to avoid foreign key violations
+        try {
+          const currentSales = await dataService.getAll<SalesSummaryItem>("sales_summary");
+          const saleToDelete = currentSales.find(
+            (s) => Number(s.orcamentoId) === Number(orcamentoToDeleteId)
+          );
+          if (saleToDelete) {
+            await dataService.delete("sales_summary", saleToDelete.id);
+          }
+        } catch (salesError) {
+          console.error("Erro ao remover registro associado no Resumo de Vendas:", salesError);
+          // Don't throw salesError so we can still try to delete the orcamento itself
+        }
+
+        // 2. Now delete the main orcamento (parent record)
+        await dataService.delete("orcamentos", orcamentoToDeleteId);
+
+        // 3. Update local state and close the modal
+        setOrcamentos((prev) => prev.filter((o) => o.id !== orcamentoToDeleteId));
+        setDeleteModalOpen(false);
+        setOrcamentoToDeleteId(null);
+      } catch (e: any) {
+        console.error("Erro ao excluir orçamento:", e);
+        alert(`Erro ao excluir orçamento: ${e.message || "Ocorreu um erro no banco de dados."}`);
+        
+        // Ensure local state updates and modal closes even if DB operation fails,
+        // so the UI remains interactive and matches the offline cache behavior.
+        setOrcamentos((prev) => prev.filter((o) => o.id !== orcamentoToDeleteId));
+        setDeleteModalOpen(false);
+        setOrcamentoToDeleteId(null);
+      }
     }
   };
 
