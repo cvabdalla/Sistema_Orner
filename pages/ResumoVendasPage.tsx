@@ -186,13 +186,31 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
         }
     };
 
+    const augmentedSalesData = useMemo(() => {
+        return salesData.map(item => {
+            const b = allBudgets.find(bud => bud.id === item.orcamentoId);
+            if (b) {
+                const variant = b.variants?.find(v => v.isPrincipal) || b.variants?.[0];
+                const fs = variant?.formState || b.formState;
+                if (fs) {
+                    return {
+                        ...item,
+                        supplier: fs.fornecedor || item.supplier || 'N/A',
+                        clientName: fs.nomeCliente || item.clientName
+                    };
+                }
+            }
+            return item;
+        });
+    }, [salesData, allBudgets]);
+
     const suppliersList = useMemo(() => {
         const unique = new Set<string>();
-        salesData.forEach(item => {
+        augmentedSalesData.forEach(item => {
             if (item.supplier) unique.add(item.supplier.trim());
         });
         return Array.from(unique).sort();
-    }, [salesData]);
+    }, [augmentedSalesData]);
 
     const handleStartEdit = (item: SalesSummaryItem, field: 'invoicedTax' | 'bankFees') => {
         setEditingCell({ id: item.id, field });
@@ -247,7 +265,7 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
 
     // Filters for Budgets (Orçamentos)
     const filteredSalesData = useMemo(() => {
-        return [...salesData].sort((a, b) => b.date.localeCompare(a.date)).filter(item => {
+        return [...augmentedSalesData].sort((a, b) => b.date.localeCompare(a.date)).filter(item => {
             if (startDate && item.date < startDate) return false;
             if (endDate && item.date > endDate) return false;
             if (selectedSuppliers.length > 0) {
@@ -256,7 +274,7 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
             }
             return true;
         });
-    }, [salesData, startDate, endDate, selectedSuppliers]);
+    }, [augmentedSalesData, startDate, endDate, selectedSuppliers]);
 
     // Filters for Maintenance (Manutenções)
     const filteredMaintenanceData = useMemo(() => {
@@ -431,8 +449,8 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
 
     if (isLoading) return <div className="flex justify-center p-20"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
 
-    const thClass = "px-3 py-3.5 border-b border-gray-200 dark:border-gray-700 text-[10px] font-black tracking-wider text-gray-500 dark:text-gray-400 text-center whitespace-nowrap";
-    const tdClass = "px-3 py-3 border-b border-gray-100 dark:border-gray-800 text-[11px] text-gray-700 dark:text-gray-300 text-right whitespace-nowrap";
+    const thClass = "px-3 py-1.5 border-b border-gray-200 dark:border-gray-700 text-[10px] font-black tracking-wider text-gray-500 dark:text-gray-400 text-center whitespace-nowrap sticky top-0 z-20 bg-gray-100 dark:bg-gray-900";
+    const tdClass = "px-3 py-1 border-b border-gray-100 dark:border-gray-800 text-[11px] text-gray-700 dark:text-gray-300 text-right whitespace-nowrap";
 
     // Editable input component for Imposto and Taxas de Banco inside Orçamentos
     const EditableCell = ({ item, field }: { item: SalesSummaryItem, field: 'invoicedTax' | 'bankFees' }) => {
@@ -1078,12 +1096,12 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                             </div>
                         </div>
 
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full border-collapse">
+                        <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+                            <table className="min-w-full border-separate border-spacing-0">
                                 <thead>
                                     <tr className="bg-gray-100/50 dark:bg-gray-900/60">
-                                        <th className="w-10 px-3 py-3 border-b border-gray-200 dark:border-gray-700"></th>
-                                        <th className={`${thClass}`}>Cliente</th>
+                                        <th className="w-10 px-3 py-1.5 border-b border-gray-200 dark:border-gray-700 sticky left-0 top-0 z-30 bg-gray-100 dark:bg-gray-900"></th>
+                                        <th className={`${thClass} text-left sticky left-10 top-0 z-30 bg-gray-100 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700`}>Cliente</th>
                                         <th className={`${thClass}`}>Data</th>
                                         <th className={`${thClass}`}>Preço Venda Final</th>
                                         <th className={`${thClass}`}>Custo do Sistema (kit)</th>
@@ -1095,11 +1113,11 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                                         <th className={`${thClass}`}>Pedágio</th>
                                         <th className={`${thClass}`}>Adequação Local</th>
                                         <th className={`${thClass}`}>Materiais e Componentes</th>
-                                        <th className={`${thClass} bg-indigo-50/20 dark:bg-indigo-950/20`}>Imposto</th>
+                                        <th className={`${thClass} bg-indigo-100 dark:bg-indigo-950`}>Imposto</th>
                                         <th className={`${thClass}`}>Comissão</th>
-                                        <th className={`${thClass} bg-indigo-50/20 dark:bg-indigo-950/20`}>Taxas de Banco</th>
-                                        <th className={`${thClass} bg-gray-150 dark:bg-gray-700`}>Custo Total</th>
-                                        <th className={`${thClass} bg-green-50/50 dark:bg-green-950/20 text-green-700 dark:text-green-400`}>Lucro Líquido</th>
+                                        <th className={`${thClass} bg-indigo-100 dark:bg-indigo-950`}>Taxas de Banco</th>
+                                        <th className={`${thClass} bg-gray-200 dark:bg-gray-700`}>Custo Total</th>
+                                        <th className={`${thClass} bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-400`}>Lucro Líquido</th>
                                         <th className={`${thClass}`}>Margem Final</th>
                                         <th className={`${thClass}`}>Status</th>
                                     </tr>
@@ -1159,7 +1177,7 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                                             <React.Fragment key={item.id}>
                                                 <tr className={`hover:bg-indigo-50/25 dark:hover:bg-indigo-950/10 transition-colors group cursor-pointer ${isExpanded ? 'bg-indigo-50/20 dark:bg-indigo-950/5' : ''}`}>
                                                     {/* Expand Arrow click triggers drawer */}
-                                                    <td className="px-2 py-3 border-b border-gray-100 dark:border-gray-800 text-center text-gray-400">
+                                                    <td className={`w-10 px-2 py-1 border-b border-gray-100 dark:border-gray-800 text-center text-gray-400 sticky left-0 z-10 ${isExpanded ? 'bg-indigo-50/20 dark:bg-indigo-950/5' : 'bg-white dark:bg-gray-800 group-hover:bg-indigo-50/25 dark:group-hover:bg-indigo-950/15'} transition-colors`}>
                                                         <button 
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
@@ -1173,7 +1191,7 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                                                     </td>
                                                     <td 
                                                         onClick={() => setExpandedBudgetRowId(isExpanded ? null : item.id)}
-                                                        className={`${tdClass} text-left font-bold text-gray-900 dark:text-white truncate max-w-[120px]`}
+                                                        className={`${tdClass} text-left font-bold text-gray-900 dark:text-white truncate max-w-[120px] sticky left-10 z-10 border-r border-gray-200 dark:border-gray-700 ${isExpanded ? 'bg-indigo-50/20 dark:bg-indigo-950/5' : 'bg-white dark:bg-gray-800 group-hover:bg-indigo-50/25 dark:group-hover:bg-indigo-950/15'} transition-colors`}
                                                     >
                                                         {item.clientName}
                                                     </td>
@@ -1323,17 +1341,17 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                             </div>
                         </div>
 
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full border-collapse">
+                        <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+                            <table className="min-w-full border-separate border-spacing-0">
                                 <thead>
                                     <tr className="bg-gray-100/50 dark:bg-gray-900/60">
-                                        <th className="w-10 px-3 py-3 border-b border-gray-200 dark:border-gray-700"></th>
-                                        <th className={`${thClass} text-left`}>Cliente</th>
+                                        <th className="w-10 px-3 py-1.5 border-b border-gray-200 dark:border-gray-700 sticky left-0 top-0 z-30 bg-gray-100 dark:bg-gray-900"></th>
+                                        <th className={`${thClass} text-left sticky left-10 top-0 z-30 bg-gray-100 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700`}>Cliente</th>
                                         <th className={`${thClass}`}>Data Conclusão</th>
                                         <th className={`${thClass} text-left`}>Título do Chamado / Serviço</th>
                                         <th className={`${thClass}`}>Valor Cobrado</th>
                                         <th className={`${thClass}`}>Despesas Lançadas</th>
-                                        <th className={`${thClass} bg-green-50/50 dark:bg-green-950/20 text-green-700 dark:text-green-400`}>Lucro Líquido</th>
+                                        <th className={`${thClass} bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-400`}>Lucro Líquido</th>
                                         <th className={`${thClass}`}>Margem</th>
                                         <th className={`${thClass}`}>Status</th>
                                     </tr>
@@ -1347,7 +1365,7 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                                         return (
                                             <React.Fragment key={item.id}>
                                                 <tr className={`hover:bg-emerald-50/25 dark:hover:bg-emerald-950/10 transition-colors group cursor-pointer ${isExpanded ? 'bg-emerald-50/20 dark:bg-emerald-950/5' : ''}`}>
-                                                    <td className="px-2 py-3 border-b border-gray-100 dark:border-gray-800 text-center text-gray-450">
+                                                    <td className={`px-2 py-1 border-b border-gray-100 dark:border-gray-800 text-center text-gray-450 sticky left-0 z-10 ${isExpanded ? 'bg-emerald-50/20 dark:bg-emerald-950/5' : 'bg-white dark:bg-gray-800 group-hover:bg-emerald-50/25 dark:group-hover:bg-emerald-950/15'} transition-colors`}>
                                                         <button 
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
@@ -1361,7 +1379,7 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                                                     </td>
                                                     <td 
                                                         onClick={() => setExpandedMaintRowId(isExpanded ? null : item.id)}
-                                                        className={`${tdClass} text-left font-bold text-gray-900 dark:text-white truncate max-w-[140px]`}
+                                                        className={`${tdClass} text-left font-bold text-gray-900 dark:text-white truncate max-w-[140px] sticky left-10 z-10 border-r border-gray-200 dark:border-gray-700 ${isExpanded ? 'bg-emerald-50/20 dark:bg-emerald-950/5' : 'bg-white dark:bg-gray-800 group-hover:bg-emerald-50/25 dark:group-hover:bg-emerald-950/15'} transition-colors`}
                                                     >
                                                         {item.clientName}
                                                     </td>
