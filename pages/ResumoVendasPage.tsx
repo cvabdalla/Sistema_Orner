@@ -196,7 +196,8 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                     return {
                         ...item,
                         supplier: fs.fornecedor || item.supplier || 'N/A',
-                        clientName: fs.nomeCliente || item.clientName
+                        clientName: fs.nomeCliente || item.clientName,
+                        status: b.status || item.status
                     };
                 }
             }
