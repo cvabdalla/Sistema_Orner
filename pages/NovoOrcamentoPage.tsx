@@ -949,13 +949,14 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
 
         const totalEstrutura = totalStockStructure + totalOffStockStructure;
         const custoMO = n_maoDeObraGeral + totalInstalacao + totalEstrutura;
-        const precoVendaFinal = valorVendaSistema + custoMO;
+        const precoVendaFinalBase = valorVendaSistema + custoMO;
+        const comissaoVendasValor = formState.comissaoVendasOpcao === 'Sim' ? roundToCents(precoVendaFinalBase * (n_comissaoVendasPerc / 100)) : 0;
+        const precoVendaFinal = precoVendaFinalBase + comissaoVendasValor;
         const despesasNotaCF = custoMO; 
         const nfServicoValor = roundToCents(despesasNotaCF * (n_nfServicoPerc / 100));
-        const comissaoVendasValor = formState.comissaoVendasOpcao === 'Sim' ? roundToCents(precoVendaFinal * (n_comissaoVendasPerc / 100)) : 0;
         const totalCustoTerceiro = n_visitaTecnicaCusto + n_projetoHomologacaoCusto + totalEstrutura + instalacaoCusto + n_custoViagem + n_adequacaoLocalCusto;
 
-        const valorFinalServico = custoMO;
+        const valorFinalServico = custoMO + comissaoVendasValor;
         const impostos = nfServicoValor;
         const custosTotaisServico = totalCustoTerceiro; 
         const comissoes = comissaoVendasValor;
@@ -963,12 +964,12 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         const descontoAplicadoValor = roundToCents(precoVendaFinal * (n_descontoAplicadoPerc / 100));
         const lucroLiquidoServicoCDesc = lucroLiquidoServicoSDesc - descontoAplicadoValor;
         const lucroLiquido = lucroLiquidoServicoCDesc;
-        const margemLiquida = precoVendaFinal > 0 ? (lucroLiquido / precoVendaFinal) * 100 : 0;
+        const margemLiquida = precoVendaFinalBase > 0 ? (lucroLiquido / precoVendaFinalBase) * 100 : 0;
         const valorFinalSistema = precoVendaFinal - descontoAplicadoValor;
         const lucroLiquidoVenda = lucroLiquido;
         const margemFinal = margemLiquida;
         const totalDivisaoLucro = lucroLiquidoVenda;
-        const margemLiquidaServico = valorFinalServico > 0 ? (lucroLiquidoServicoCDesc / valorFinalServico) * 100 : 0;
+        const margemLiquidaServico = custoMO > 0 ? (lucroLiquidoServicoCDesc / custoMO) * 100 : 0;
 
         const newCalculated = {
             valorVendaSistema: roundToCents(valorVendaSistema),
@@ -1044,7 +1045,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         const C2 = n_visitaTecnicaCusto + n_projetoHomologacaoCusto + totalEstrutura + instalacaoCusto + n_custoViagem + n_adequacaoLocalCusto;
         const VVS = n_custoSistema;
         const nfPerc = n_nfServicoPerc / 100;
-        const comPerc = formState.comissaoVendasOpcao === 'Sim' ? n_comissaoVendasPerc / 100 : 0;
+        const comPerc = 0; // Commission is added on top of the base sales price, so it doesn't reduce the margin
         const descPerc = n_descontoAplicadoPerc / 100;
         const M_desejada = targetMargin;
 
@@ -1148,7 +1149,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         const E = totalInstalacaoParcial + totalEstrutura;
         const VVS = n_custoSistema;
         const nf = n_nfServicoPerc / 100;
-        const com = formState.comissaoVendasOpcao === 'Sim' ? n_comissaoVendasPerc / 100 : 0;
+        const com = 0; // Commission is added on top and doesn't impact net profit
         const desc = n_descontoAplicadoPerc / 100;
 
         const numerador = targetLucroLiquido + E * nf + (VVS + E) * (com + desc);
@@ -1208,7 +1209,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         const E = totalInstalacaoParcial + totalEstrutura;
         const VVS = n_custoSistema;
         const nf = n_nfServicoPerc / 100;
-        const com = formState.comissaoVendasOpcao === 'Sim' ? n_comissaoVendasPerc / 100 : 0;
+        const com = 0; // Commission is added on top and doesn't impact net margin
         const desc = n_descontoAplicadoPerc / 100;
 
         const numerador = E * nf + (VVS + E) * (targetMargin + com + desc);

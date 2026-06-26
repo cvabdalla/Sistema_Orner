@@ -169,7 +169,8 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
 
                     saleItem.totalCost = extraCosts;
                     saleItem.netProfit = (saleItem.closedValue || 0) - (saleItem.systemCost || 0) - extraCosts;
-                    saleItem.finalMargin = saleItem.closedValue > 0 ? (saleItem.netProfit / saleItem.closedValue) * 100 : 0;
+                    const baseVal = (saleItem.closedValue || 0) - (saleItem.commission || 0);
+                    saleItem.finalMargin = baseVal > 0 ? (saleItem.netProfit / baseVal) * 100 : 0;
 
                     await dataService.save('sales_summary', saleItem);
                     syncCount++;
@@ -241,7 +242,8 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                     (newItem.bankFees || 0);
 
                 const netProfit = (newItem.closedValue || 0) - (newItem.systemCost || 0) - extraCosts;
-                const finalMargin = newItem.closedValue > 0 ? (netProfit / newItem.closedValue) * 100 : 0;
+                const baseVal = (newItem.closedValue || 0) - (newItem.commission || 0);
+                const finalMargin = baseVal > 0 ? (netProfit / baseVal) * 100 : 0;
                 
                 return { ...newItem, totalCost: extraCosts, netProfit, finalMargin };
             }

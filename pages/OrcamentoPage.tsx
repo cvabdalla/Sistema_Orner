@@ -1300,9 +1300,10 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
         saleItem.totalCost = extraCosts;
         saleItem.netProfit =
           saleItem.closedValue - saleItem.systemCost - extraCosts;
+        const baseValue = saleItem.closedValue - (saleItem.commission ?? 0);
         saleItem.finalMargin =
-          saleItem.closedValue > 0
-            ? (saleItem.netProfit / saleItem.closedValue) * 100
+          baseValue > 0
+            ? (saleItem.netProfit / baseValue) * 100
             : 0;
 
         await dataService.save("sales_summary", saleItem);
@@ -1533,9 +1534,10 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
             saleItem.totalCost = extraCosts;
             saleItem.netProfit =
               saleItem.closedValue - saleItem.systemCost - extraCosts;
+            const baseValue = saleItem.closedValue - (saleItem.commission ?? 0);
             saleItem.finalMargin =
-              saleItem.closedValue > 0
-                ? (saleItem.netProfit / saleItem.closedValue) * 100
+              baseValue > 0
+                ? (saleItem.netProfit / baseValue) * 100
                 : 0;
 
             await dataService.save("sales_summary", saleItem);
