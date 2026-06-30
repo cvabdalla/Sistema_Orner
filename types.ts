@@ -152,6 +152,14 @@ export interface SavedOrcamento {
         deslocamentoMargem?: number;
         linked_checkout_id?: string;
     };
+    custos_lancados?: {
+        homologacao?: boolean;
+        deslocamento?: boolean;
+        pedagio?: boolean;
+        instalacao?: boolean;
+        imposto?: boolean;
+        comissao?: boolean;
+    };
     motivo_perda?: string;
 }
 

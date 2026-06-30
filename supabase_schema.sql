@@ -63,10 +63,12 @@ COMMENT ON TABLE "instaladores" IS 'Cadastro completo de parceiros instaladores 
 ALTER TABLE "orcamentos" ADD COLUMN IF NOT EXISTS "venda_etapas" jsonb DEFAULT '{}'::jsonb;
 ALTER TABLE "orcamentos" ADD COLUMN IF NOT EXISTS "custos_estimados" jsonb DEFAULT '{}'::jsonb;
 ALTER TABLE "orcamentos" ADD COLUMN IF NOT EXISTS "custos_reais" jsonb DEFAULT '{}'::jsonb;
+ALTER TABLE "orcamentos" ADD COLUMN IF NOT EXISTS "custos_lancados" jsonb DEFAULT '{}'::jsonb;
 
 COMMENT ON COLUMN "orcamentos"."venda_etapas" IS 'Armazena as etapas de acompanhamento da venda flegáveis (Compra Equipamento, Homologação, etc)';
 COMMENT ON COLUMN "orcamentos"."custos_estimados" IS 'Armazena valores estimados no orçamento de Homologação, Deslocamento, Pedágio, Adequação, Instalação e Materiais';
 COMMENT ON COLUMN "orcamentos"."custos_reais" IS 'Armazena valores reais realizados de Homologação, Deslocamento, Pedágio, Adequação, Instalação, Materiais, Imposto e parâmetros de deslocamento real';
+COMMENT ON COLUMN "orcamentos"."custos_lancados" IS 'Armazena o status de quais provisões (deslocamento, pedagio, instalacao, homologacao, imposto, comissao) ja foram lancadas ou desconsideradas na tela de fluxo de caixa';
 
 -- 10. Tabela de manutencoes para chamados de manutenção, reparos e orçamentos avulsos
 CREATE TABLE IF NOT EXISTS "manutencoes" (

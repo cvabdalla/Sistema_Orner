@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { AddIcon, FilterIcon, CalendarIcon, TrashIcon, ClipboardListIcon, DocumentReportIcon, ExclamationTriangleIcon, CreditCardIcon, XCircleIcon, TableIcon, UploadIcon } from '../assets/icons';
-import type { FinancialTransaction, FinancialTransactionStatus, FinancialCategory, FinancialTransactionType, FinanceiroPageProps, User, ExpenseReport, BankAccount } from '../types';
+import type { FinancialTransaction, FinancialTransactionStatus, FinancialCategory, FinancialTransactionType, FinanceiroPageProps, User, ExpenseReport, BankAccount, SavedOrcamento } from '../types';
 import { dataService } from '../services/dataService';
 
 import VisaoGeral from '../components/Financeiro/VisaoGeral';
@@ -13,8 +13,9 @@ import BancosView from '../components/Financeiro/BancosView';
 import OFXImportModal from '../components/Financeiro/OFXImportModal';
 import CreditCardModal from '../components/Financeiro/CreditCardModal';
 import Modal from '../components/Modal';
+import InstalacaoView from '../components/Financeiro/InstalacaoView';
 
-type FinanceiroTab = 'visaoGeral' | 'aReceber' | 'aPagar' | 'cancelados';
+type FinanceiroTab = 'visaoGeral' | 'aReceber' | 'aPagar' | 'instalacao' | 'cancelados';
 export type DrePeriodType = 'mensal' | 'trimestral' | 'semestral' | 'anual';
 
 const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) => {
@@ -22,6 +23,7 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
     const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
     const [categories, setCategories] = useState<FinancialCategory[]>([]);
     const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+    const [budgets, setBudgets] = useState<SavedOrcamento[]>([]);
     const [isModalOpen, setModalOpen] = useState(false);
     const [editingTransaction, setEditingTransaction] = useState<FinancialTransaction | null>(null);
     const [forcedModalType, setForcedModalType] = useState<FinancialTransactionType | undefined>(undefined);
@@ -91,14 +93,16 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
 
         try {
             const isAdmin = currentUser.profileId === ADMIN_PROFILE_ID;
-            const [txs, cats, banks] = await Promise.all([
+            const [txs, cats, banks, orcs] = await Promise.all([
                 dataService.getAll<FinancialTransaction>('financial_transactions', currentUser.id, isAdmin),
                 dataService.getAll<FinancialCategory>('financial_categories'),
-                dataService.getAll<BankAccount>('bank_accounts', currentUser.id, isAdmin)
+                dataService.getAll<BankAccount>('bank_accounts', currentUser.id, isAdmin),
+                dataService.getAll<SavedOrcamento>('orcamentos', currentUser.id, isAdmin)
             ]);
             setTransactions(txs || []);
             setCategories(cats || []);
             setBankAccounts(banks || []);
+            setBudgets(orcs || []);
         } catch (error) {
             console.error("Erro ao carregar dados financeiros:", error);
         } finally {
@@ -396,6 +400,7 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
                         <TabButton tabId="visaoGeral" label="Visão Geral" />
                         <TabButton tabId="aReceber" label="A Receber" />
                         <TabButton tabId="aPagar" label="A Pagar" />
+                        <TabButton tabId="instalacao" label="Instalação" />
                         <TabButton tabId="cancelados" label="Cancelados" />
                     </div>
                 ) : (
@@ -527,6 +532,15 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
                                 onOpenCreditCard={() => setCreditCardModalOpen(true)}
                                 onEditTransaction={(tx) => handleOpenModal(tx)}
                                 onCancelTransaction={handleCancelRequest}
+                            />
+                        ) : activeTab === 'instalacao' ? (
+                            <InstalacaoView 
+                                budgets={budgets}
+                                startDate={startDate}
+                                endDate={endDate}
+                                categories={categories}
+                                bankAccounts={bankAccounts}
+                                onRefresh={loadData}
                             />
                         ) : (
                             <ContasTable

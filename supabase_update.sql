@@ -72,3 +72,7 @@ ALTER TABLE "manutencoes" DISABLE ROW LEVEL SECURITY;
 
 COMMENT ON TABLE "manutencoes" IS 'Tabela que armazena registros de orçamentos e chamados de manutenção e reparos avulsos.';
 
+-- 6. Adiciona suporte ao descarte de custos/provisões individuais da tela de fluxo de caixa (Instalação)
+ALTER TABLE "orcamentos" ADD COLUMN IF NOT EXISTS "custos_lancados" jsonb DEFAULT '{}'::jsonb;
+COMMENT ON COLUMN "orcamentos"."custos_lancados" IS 'Armazena quais provisões de custos foram faturadas ou ignoradas na tela de controle de fluxo de caixa';
+

@@ -23,6 +23,15 @@ const formatCurrency = (value: number) => {
 
 const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 
+const toTitleCase = (str: string) => {
+    if (!str) return '';
+    return str
+        .toLowerCase()
+        .split(/\s+/)
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+};
+
 const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categories, onEdit, onCancel, onStatusChange, onOpenCreditCard }) => {
     const [statusFilter, setStatusFilter] = useState<FinancialTransactionStatus | 'all'>('all');
     const [selectedGroup, setSelectedGroup] = useState<FinancialTransaction[] | null>(null);
@@ -50,7 +59,7 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                 }
                 ccGroups[groupKey].items.push(t);
             } else {
-                normalTransactions.push({ ...t, displayDescription: t.description });
+                normalTransactions.push({ ...t, displayDescription: toTitleCase(t.description) });
             }
         });
 
