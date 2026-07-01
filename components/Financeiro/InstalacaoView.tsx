@@ -69,7 +69,7 @@ const InstalacaoView: React.FC<InstalacaoViewProps> = ({
     onRefresh 
 }) => {
     const [searchTerm, setSearchTerm] = useState('');
-    const [statusFilter, setStatusFilter] = useState<'Aprovado' | 'Todos'>('Aprovado');
+    const [costLaunchFilter, setCostLaunchFilter] = useState<'pending' | 'launched' | 'all'>('pending');
     const [isSaving, setIsSaving] = useState(false);
     
     // Modal para lançar custos de um orçamento específico
@@ -147,19 +147,17 @@ const InstalacaoView: React.FC<InstalacaoViewProps> = ({
         });
     }, [budgets]);
 
-    // Filtrar dados: exibe apenas projetos com pelo menos um custo pendente e que atendam aos filtros
+    // Filtrar dados com base nas escolhas de visualização
     const filteredBudgets = useMemo(() => {
         return mappedBudgets.filter(item => {
-            // Se não tem custos pendentes, ele "some" da lista de lançamento
-            if (item.pendingCostsCount === 0) return false;
+            // Filtro de lançamento do custo
+            if (costLaunchFilter === 'pending' && item.pendingCostsCount === 0) return false;
+            if (costLaunchFilter === 'launched' && item.pendingCostsCount > 0) return false;
+            if (costLaunchFilter === 'launched' && !item.hasAnyCost) return false;
+            if (costLaunchFilter === 'all' && !item.hasAnyCost) return false;
 
-            // Filtro por status do orçamento
-            if (statusFilter === 'Aprovado' && item.status !== 'Aprovado') return false;
-            if (statusFilter === 'Todos' && item.status !== 'Aprovado' && item.status !== 'Finalizado') return false;
-
-            // Filtro por período
-            if (startDate && item.date && item.date < startDate) return false;
-            if (endDate && item.date && item.date > endDate) return false;
+            // Deve conter apenas orçamentos "Aprovado" (Finalizados e outros estados são desconsiderados)
+            if (item.status !== 'Aprovado') return false;
 
             // Filtro por busca de cliente
             if (searchTerm.trim() !== '') {
@@ -169,9 +167,30 @@ const InstalacaoView: React.FC<InstalacaoViewProps> = ({
 
             return true;
         });
-    }, [mappedBudgets, statusFilter, startDate, endDate, searchTerm]);
+    }, [mappedBudgets, costLaunchFilter, searchTerm]);
 
-    // Calcular totais dos itens PENDENTES que estão na tabela filtrada
+    // Calcular orçamentos que possuem custos pendentes (independente de estar exibindo Lançados/Todos)
+    const pendingBudgets = useMemo(() => {
+        return mappedBudgets.filter(item => {
+            if (item.pendingCostsCount === 0) return false;
+
+            // Deve conter apenas orçamentos "Aprovado" (Finalizados e outros estados são desconsiderados)
+            if (item.status !== 'Aprovado') return false;
+
+            // Filtro por período ignorado para provisões pendentes, pois representam contas pendentes de pagamento
+            // independente do período em que o orçamento foi feito.
+
+            // Filtro por busca de cliente
+            if (searchTerm.trim() !== '') {
+                const search = searchTerm.toLowerCase();
+                if (!item.clientName.toLowerCase().includes(search)) return false;
+            }
+
+            return true;
+        });
+    }, [mappedBudgets, searchTerm]);
+
+    // Calcular totais das provisões PENDENTES
     const metrics = useMemo(() => {
         let totalDeslocamento = 0;
         let totalPedagio = 0;
@@ -181,7 +200,7 @@ const InstalacaoView: React.FC<InstalacaoViewProps> = ({
         let totalComissao = 0;
         let totalGeral = 0;
 
-        filteredBudgets.forEach(item => {
+        pendingBudgets.forEach(item => {
             item.costs.forEach(c => {
                 if (!c.launched) {
                     if (c.type === 'deslocamento') totalDeslocamento += c.value;
@@ -196,7 +215,7 @@ const InstalacaoView: React.FC<InstalacaoViewProps> = ({
         });
 
         return {
-            count: filteredBudgets.length,
+            count: pendingBudgets.length,
             totalDeslocamento,
             totalPedagio,
             totalImposto,
@@ -205,7 +224,7 @@ const InstalacaoView: React.FC<InstalacaoViewProps> = ({
             totalComissao,
             totalGeral
         };
-    }, [filteredBudgets]);
+    }, [pendingBudgets]);
 
     // Abre o painel para lançar custos da linha selecionada
     const handleOpenLaunchModal = (item: any) => {
@@ -527,24 +546,37 @@ const InstalacaoView: React.FC<InstalacaoViewProps> = ({
                 <div className="p-5 border-b border-gray-150 dark:border-gray-700 flex flex-col md:flex-row justify-between md:items-center gap-4 bg-gray-50/50 dark:bg-gray-750">
                     <div>
                         <h2 className="text-base font-black text-gray-900 dark:text-white flex items-center gap-2">
-                            <WrenchIcon className="w-5 h-5 text-indigo-600" /> Custos de Instalação e Logística Pendentes (Provisões)
+                            <WrenchIcon className="w-5 h-5 text-indigo-600" /> {
+                                costLaunchFilter === 'pending' 
+                                    ? 'Custos de Instalação e Logística Pendentes (Provisões)' 
+                                    : costLaunchFilter === 'launched'
+                                    ? 'Custos de Instalação e Logística Concluídos / Lançados'
+                                    : 'Todos os Custos de Instalação e Logística (Provisões)'
+                            }
                         </h2>
                         <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 font-semibold">
-                            Selecione uma linha ou clique em Lançar para faturar no Contas a Pagar. Clique em Encerrar para encerrar o projeto sem fazer lançamentos.
+                            {
+                                costLaunchFilter === 'pending'
+                                    ? 'Selecione uma linha ou clique em Lançar para faturar no Contas a Pagar. Clique em Encerrar para marcar todos os itens como concluídos.'
+                                    : costLaunchFilter === 'launched'
+                                    ? 'Visualização das provisões que já foram faturadas no Contas a Pagar ou encerradas.'
+                                    : 'Lista completa de provisões (pendentes, faturadas e encerradas).'
+                            }
                         </p>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-3">
-                        {/* Seletor de Status do Orçamento */}
+                        {/* Seletor de Tipo de Lançamento */}
                         <div className="flex items-center gap-1.5 bg-white dark:bg-gray-900 px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-xl">
-                            <span className="text-[10px] font-black text-gray-400 tracking-wide">Status:</span>
+                            <span className="text-[10px] font-black text-gray-400 tracking-wide">Exibir:</span>
                             <select 
-                                value={statusFilter} 
-                                onChange={(e) => setStatusFilter(e.target.value as any)}
+                                value={costLaunchFilter} 
+                                onChange={(e) => setCostLaunchFilter(e.target.value as any)}
                                 className="bg-transparent border-none text-[11px] font-bold text-gray-750 dark:text-gray-200 focus:ring-0 p-0 cursor-pointer outline-none"
                             >
-                                <option value="Aprovado">Aprovados</option>
-                                <option value="Todos">Aprovados + Finalizados</option>
+                                <option value="pending">Provisões Pendentes</option>
+                                <option value="launched">Lançados / Concluídos</option>
+                                <option value="all">Todos</option>
                             </select>
                         </div>
 
@@ -577,17 +609,17 @@ const InstalacaoView: React.FC<InstalacaoViewProps> = ({
                                 <th className="px-5 py-3 font-black text-center border-b border-gray-150 dark:border-gray-700 bg-indigo-50/50 dark:bg-indigo-950/25">Ações</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-[11px] font-bold text-gray-700 dark:text-gray-300">
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-[11px] font-bold text-gray-750 dark:text-gray-300">
                             {filteredBudgets.length > 0 ? (
                                 filteredBudgets.map((item) => (
                                     <tr 
                                         key={item.id} 
-                                        className="hover:bg-gray-50/50 dark:hover:bg-gray-900/40 transition-colors cursor-pointer group"
-                                        onClick={() => handleOpenLaunchModal(item)}
+                                        className={`hover:bg-gray-50/50 dark:hover:bg-gray-900/40 transition-colors group ${item.pendingCostsCount > 0 ? 'cursor-pointer' : 'cursor-default'}`}
+                                        onClick={() => item.pendingCostsCount > 0 && handleOpenLaunchModal(item)}
                                     >
                                         <td className="px-5 py-3.5 sticky left-0 bg-white dark:bg-gray-800 font-extrabold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-800 shadow-[2px_0_5px_rgba(0,0,0,0.01)]">
                                             <div className="flex flex-col">
-                                                <span className="group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{item.clientName}</span>
+                                                <span className={`transition-colors ${item.pendingCostsCount > 0 ? 'group-hover:text-indigo-600 dark:group-hover:text-indigo-400' : ''}`}>{item.clientName}</span>
                                                 <span className={`text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded-full w-max mt-1 ${
                                                     item.status === 'Aprovado' 
                                                         ? 'bg-emerald-50 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800' 
@@ -680,34 +712,48 @@ const InstalacaoView: React.FC<InstalacaoViewProps> = ({
                                         </td>
 
                                         {/* Ações */}
-                                        <td className="px-5 py-3.5 text-center border-b border-gray-100 dark:border-gray-800 bg-indigo-50/20 dark:bg-indigo-950/10">
-                                            <div className="flex items-center justify-center gap-2">
-                                                <button 
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleOpenLaunchModal(item);
-                                                    }}
-                                                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-[10px] font-black rounded-lg transition-all shadow-sm tracking-wide"
-                                                >
-                                                    Lançar
-                                                </button>
-                                                <button 
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleDismissProject(item);
-                                                    }}
-                                                    className="px-3.5 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-650 text-gray-700 dark:text-gray-200 active:scale-95 text-[10px] font-black rounded-lg transition-all shadow-sm border border-gray-200 dark:border-gray-600 tracking-wide"
-                                                >
-                                                    Encerrar
-                                                </button>
-                                            </div>
+                                        <td className={`px-5 py-3.5 text-center border-b border-gray-100 dark:border-gray-800 ${item.pendingCostsCount > 0 ? 'bg-indigo-50/20 dark:bg-indigo-950/10' : 'bg-emerald-50/20 dark:bg-emerald-950/10'}`}>
+                                            {item.pendingCostsCount > 0 ? (
+                                                <div className="flex items-center justify-center gap-2">
+                                                    <button 
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleOpenLaunchModal(item);
+                                                        }}
+                                                        className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-[10px] font-black rounded-lg transition-all shadow-sm tracking-wide"
+                                                    >
+                                                        Lançar
+                                                    </button>
+                                                    <button 
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleDismissProject(item);
+                                                        }}
+                                                        className="px-3.5 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-650 text-gray-700 dark:text-gray-200 active:scale-95 text-[10px] font-black rounded-lg transition-all shadow-sm border border-gray-200 dark:border-gray-600 tracking-wide"
+                                                    >
+                                                        Encerrar
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center justify-center gap-2">
+                                                    <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-extrabold text-[10px] bg-emerald-50 dark:bg-emerald-950/30 px-2.5 py-1 rounded-lg border border-emerald-100 dark:border-emerald-900/40">
+                                                        <CheckCircleIcon className="w-4 h-4 text-emerald-500" /> Concluído
+                                                    </span>
+                                                </div>
+                                            )}
                                         </td>
                                     </tr>
                                 ))
                             ) : (
                                 <tr>
                                     <td colSpan={9} className="py-20 text-center text-gray-400 font-bold italic bg-white dark:bg-gray-800">
-                                        Nenhum projeto com provisões pendentes encontrado para os filtros aplicados.
+                                        {
+                                            costLaunchFilter === 'pending'
+                                                ? 'Nenhum projeto com provisões pendentes encontrado para os filtros aplicados.'
+                                                : costLaunchFilter === 'launched'
+                                                ? 'Nenhum projeto com provisões faturadas/concluídas encontrado para os filtros aplicados.'
+                                                : 'Nenhum projeto encontrado para os filtros aplicados.'
+                                        }
                                     </td>
                                 </tr>
                             )}
