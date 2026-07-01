@@ -64,61 +64,19 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
             };
 
             const lastDayOfMonth = new Date(year, month + 1, 0);
-            let defaultEndDate = formatDate(lastDayOfMonth);
-
-            // Garante que o fim do mês de Julho de 2026 esteja visível se o sistema estiver em Junho ou antes,
-            // ou se o usuário estiver em Julho para que os lançamentos desse mês não sumam.
-            if (defaultEndDate < '2026-07-31') {
-                defaultEndDate = '2026-07-31';
-            }
 
             if (activeTab === 'visaoGeral') {
                 // Início do ano até fim do mês vigente
                 setStartDate(`${year}-01-01`);
-                setEndDate(defaultEndDate);
-            } else if (activeTab === 'aReceber' || activeTab === 'aPagar') {
-                const targetType = activeTab === 'aReceber' ? 'receita' : 'despesa';
-                const pendingTxs = transactions.filter(t => t.type === targetType && t.status === 'pendente');
-                
-                let calculatedStartDate = '';
-                if (pendingTxs.length > 0) {
-                    const sortedPendingDates = pendingTxs
-                        .map(t => t.dueDate ? t.dueDate.split('T')[0] : '')
-                        .filter(Boolean)
-                        .sort();
-                    
-                    if (sortedPendingDates.length > 0) {
-                        calculatedStartDate = sortedPendingDates[0];
-                    }
-                }
-
-                const firstDayOfMonth = new Date(year, month, 1);
-                let firstDayStr = formatDate(firstDayOfMonth);
-
-                // Se o mês atual for antes de julho de 2026, garante que mostre a partir de 1º de julho de 2026
-                // ou da primeira pendente (o que for anterior)
-                if (firstDayStr < '2026-07-01') {
-                    firstDayStr = '2026-07-01';
-                }
-
-                if (calculatedStartDate && calculatedStartDate < firstDayStr) {
-                    setStartDate(calculatedStartDate);
-                } else {
-                    setStartDate(firstDayStr);
-                }
-                setEndDate(defaultEndDate);
+                setEndDate(formatDate(lastDayOfMonth));
             } else {
                 // Início do mês vigente até fim do mês vigente
                 const firstDayOfMonth = new Date(year, month, 1);
-                let startStr = formatDate(firstDayOfMonth);
-                if (startStr < '2026-07-01') {
-                    startStr = '2026-07-01';
-                }
-                setStartDate(startStr);
-                setEndDate(defaultEndDate);
+                setStartDate(formatDate(firstDayOfMonth));
+                setEndDate(formatDate(lastDayOfMonth));
             }
         }
-    }, [view, activeTab, transactions]);
+    }, [view, activeTab]);
 
     useEffect(() => {
         if (view === 'dre') {
