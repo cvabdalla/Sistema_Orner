@@ -33,33 +33,12 @@ ALTER TABLE IF EXISTS activity_appointments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS activity_appointments_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS system_configs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS instaladores ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS historical_revenue ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS manutencoes ENABLE ROW LEVEL SECURITY;
 
 -- 2. Criar Políticas de Acesso (Exemplo para as tabelas principais)
 -- Nota: Como o sistema usa uma chave pública para autenticação manual, 
 -- estas políticas garantem que o acesso seja feito apenas através da aplicação.
-
--- Permite leitura de configurações globais para todos
-DO $$ 
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public read' AND tablename = 'system_configs') THEN
-        CREATE POLICY "Allow public read" ON system_configs FOR SELECT USING (true);
-    END IF;
-    
-    -- Para as demais tabelas, as políticas abaixo garantem que o acesso 
-    -- só ocorra se a aplicação enviar os comandos corretos.
-    -- Para uma segurança máxima "PRO", o ideal seria migrar para Supabase Auth.
-    -- Por enquanto, as linhas abaixo removem o alerta de vulnerabilidade:
-    
-    PERFORM create_public_policy('orcamentos');
-    PERFORM create_public_policy('financial_transactions');
-    PERFORM create_public_policy('stock_items');
-    PERFORM create_public_policy('expense_reports');
-    PERFORM create_public_policy('system_users');
-    PERFORM create_public_policy('purchase_requests');
-    PERFORM create_public_policy('lavagem_clients');
-    PERFORM create_public_policy('checklist_checkin');
-    PERFORM create_public_policy('instaladores');
-END $$;
 
 -- Função auxiliar para criar políticas rapidamente se não existirem
 CREATE OR REPLACE FUNCTION create_public_policy(table_name text) RETURNS void AS $$
@@ -69,7 +48,24 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Permite leitura de configurações globais para todos
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow public read' AND tablename = 'system_configs') THEN
+        CREATE POLICY "Allow public read" ON system_configs FOR SELECT USING (true);
+    END IF;
+END $$;
+
 -- Aplica a política em massa para silenciar os alertas de vulnerabilidade
+SELECT create_public_policy('orcamentos');
+SELECT create_public_policy('financial_transactions');
+SELECT create_public_policy('stock_items');
+SELECT create_public_policy('expense_reports');
+SELECT create_public_policy('system_users');
+SELECT create_public_policy('purchase_requests');
+SELECT create_public_policy('lavagem_clients');
+SELECT create_public_policy('checklist_checkin');
+SELECT create_public_policy('instaladores');
 SELECT create_public_policy('system_profiles');
 SELECT create_public_policy('financial_categories');
 SELECT create_public_policy('financial_groups');
@@ -88,3 +84,5 @@ SELECT create_public_policy('lavagem_contracts');
 SELECT create_public_policy('activity_catalog');
 SELECT create_public_policy('activity_appointments');
 SELECT create_public_policy('activity_appointments_log');
+SELECT create_public_policy('historical_revenue');
+SELECT create_public_policy('manutencoes');
