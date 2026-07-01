@@ -587,5 +587,20 @@ export interface ManutencaoRecord {
     notes?: string;
     motivoPerdido?: string;
     createdAt: string;
+    approvalDate?: string;
 }
+
+export interface HistoricalRevenue {
+    id: string;
+    owner_id: string;
+    year: number;
+    month: number;
+    client_name?: string;
+    venda_sistema: number;
+    custo_sistema: number;
+    manutencao: number;
+    lavagem: number;
+    created_at?: string;
+}
+
 

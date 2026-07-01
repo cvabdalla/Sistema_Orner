@@ -430,7 +430,14 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
     record: ManutencaoRecord,
     newStatus: "Especulação" | "Aprovado" | "Finalizado" | "Perdido",
   ) => {
-    const updated = { ...record, status: newStatus };
+    const todayStr = new Date().toISOString().split("T")[0];
+    const updated = { 
+      ...record, 
+      status: newStatus,
+      approvalDate: (newStatus === "Aprovado" || newStatus === "Finalizado") 
+        ? (record.approvalDate || todayStr) 
+        : record.approvalDate
+    };
     try {
       await dataService.save("manutencoes", updated);
       setMaintenances((prev) =>
@@ -728,6 +735,9 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
         notes: editingRecord.notes || "",
         motivoPerdido: editingRecord.motivoPerdido || "",
         createdAt: editingRecord.createdAt || new Date().toISOString(),
+        approvalDate: (editingRecord.status === "Aprovado" || editingRecord.status === "Finalizado")
+          ? (editingRecord.approvalDate || new Date().toISOString().split("T")[0])
+          : editingRecord.approvalDate,
       };
 
       await dataService.save("manutencoes", finalRecord);

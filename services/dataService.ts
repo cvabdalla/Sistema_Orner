@@ -187,7 +187,8 @@ class SupabaseDataService implements IDataService {
                 'homologacao_entries',
                 'login_access_logs',
                 'instaladores',
-                'manutencoes'
+                'manutencoes',
+                'historical_revenue'
             ];
 
             if (!isAdmin && userId && privateCollections.includes(collection)) {
@@ -203,8 +204,11 @@ class SupabaseDataService implements IDataService {
             return ((data as any[]) || []).map(item => this.deserialize<T>(collection, item));
         } catch (e: any) {
             const isNetworkError = e.message?.includes('fetch') || e.message?.includes('Failed to fetch') || e.message?.includes('network');
+            const isMissingTable = e.message?.includes('Could not find the table') || e.message?.includes('does not exist') || e.message?.includes('schema cache') || e.code === '42P01';
             if (isNetworkError) {
                 console.warn(`[OFFLINE WARNING] Conexão parcial indisponível ao carregar ${collection}. Usando cache local.`);
+            } else if (isMissingTable) {
+                console.warn(`[DB INFO] Tabela parcial '${collection}' ainda não criada no Supabase ou cache de esquema pendente.`);
             } else {
                 console.error(`[DB ERROR] Erro parcial carregar ${collection}:`, e.message);
             }
@@ -232,7 +236,8 @@ class SupabaseDataService implements IDataService {
                 'homologacao_entries',
                 'login_access_logs',
                 'instaladores',
-                'manutencoes'
+                'manutencoes',
+                'historical_revenue'
             ];
 
             // Se for admin, não filtra. Se não for admin e tiver userId em coleção privada, filtra.
@@ -249,8 +254,12 @@ class SupabaseDataService implements IDataService {
             
             if (error) {
                 const isNetworkError = error.message?.includes('fetch') || error.message?.includes('Failed to fetch') || error.message?.includes('network');
+                const isMissingTable = error.message?.includes('Could not find the table') || error.message?.includes('does not exist') || error.message?.includes('schema cache') || error.code === '42P01';
+                
                 if (isNetworkError) {
                     console.warn(`[OFFLINE WARNING] Conexão indisponível ao carregar ${collection}. Usando cache local.`);
+                } else if (isMissingTable) {
+                    console.warn(`[DB INFO] Tabela '${collection}' ainda não criada no Supabase ou cache de esquema pendente. Execute o script 'supabase_update.sql' para criá-la. Detalhes:`, error.message);
                 } else {
                     console.error(`[DB ERROR] Erro ao carregar ${collection}:`, error.message, error.details);
                 }
@@ -274,8 +283,11 @@ class SupabaseDataService implements IDataService {
 
         } catch (e: any) {
             const isNetworkError = e.message?.includes('fetch') || e.message?.includes('Failed to fetch') || e.message?.includes('network');
+            const isMissingTable = e.message?.includes('Could not find the table') || e.message?.includes('does not exist') || e.message?.includes('schema cache') || e.code === '42P01';
             if (isNetworkError) {
                 console.warn(`[OFFLINE WARNING] Erro inesperado ao carregar ${collection}:`, e.message);
+            } else if (isMissingTable) {
+                console.warn(`[DB INFO] Erro inesperado: Tabela '${collection}' não encontrada ou ainda não criada. Detalhes:`, e.message);
             } else {
                 console.error(`[RUNTIME ERROR] Erro inesperado ao carregar ${collection}:`, e.message);
             }

@@ -1,15 +1,14 @@
-
 import React from 'react';
-import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Bar } from 'recharts';
+import { ResponsiveContainer, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Line } from 'recharts';
 
-interface ChartData {
+interface SalesChartData {
     name: string;
-    receita: number;
-    despesa: number;
+    precoVenda: number;
+    custoSistema: number;
 }
 
-interface ChartComponentProps {
-    data: ChartData[];
+interface SalesChartComponentProps {
+    data: SalesChartData[];
 }
 
 const formatCurrency = (value: number) => {
@@ -23,27 +22,26 @@ const formatCompact = (value: number) => {
     return new Intl.NumberFormat('pt-BR', { notation: 'compact', compactDisplay: 'short', maximumFractionDigits: 2 }).format(rounded);
 }
 
-const ChartComponent: React.FC<ChartComponentProps> = ({ data }) => {
+const SalesChartComponent: React.FC<SalesChartComponentProps> = ({ data }) => {
   return (
-    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg h-[450px] flex flex-col">
-        <div className="flex flex-col sm:flex-row justify-between items-start mb-8 gap-4">
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg h-[400px] flex flex-col justify-between">
+        <div className="flex flex-col sm:flex-row justify-between items-start mb-4 gap-4">
             <div>
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white">Desempenho Financeiro (Últimos 6 Meses)</h3>
-                <p className="text-xs text-gray-500 font-medium mt-1">Comparativo mensal de receitas e despesas realizadas</p>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white">Evolução de Vendas (Últimos 6 Meses)</h3>
+                <p className="text-xs text-gray-500 font-medium mt-1">Histórico recente de preço de venda e custo do sistema</p>
             </div>
         </div>
         {data && data.length > 0 ? (
-            <div className="flex-1 w-full">
+            <div className="flex-1 w-full mt-4">
                 <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
+                    <LineChart
                     data={data}
                     margin={{
-                        top: 10,
+                        top: 15,
                         right: 10,
                         left: -20,
                         bottom: 0,
                     }}
-                    barGap={4}
                     >
                     <CartesianGrid strokeDasharray="3 3" vertical={false} strokeOpacity={0.1} />
                     <XAxis 
@@ -70,18 +68,34 @@ const ChartComponent: React.FC<ChartComponentProps> = ({ data }) => {
                         formatter={(value) => formatCurrency(value as number)}
                     />
                     <Legend wrapperStyle={{ fontSize: '11px', fontWeight: 600, paddingTop: '10px' }} />
-                    <Bar dataKey="receita" fill="#4ade80" name="Receita" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="despesa" fill="#f87171" name="Despesa" radius={[4, 4, 0, 0]} />
-                    </BarChart>
+                    <Line 
+                        type="monotone" 
+                        dataKey="precoVenda" 
+                        stroke="#10b981" 
+                        name="Preço de Venda" 
+                        strokeWidth={3}
+                        dot={{ r: 4, strokeWidth: 2 }}
+                        activeDot={{ r: 6 }}
+                    />
+                    <Line 
+                        type="monotone" 
+                        dataKey="custoSistema" 
+                        stroke="#f57c00" 
+                        name="Custo do Sistema" 
+                        strokeWidth={3}
+                        dot={{ r: 4, strokeWidth: 2 }}
+                        activeDot={{ r: 6 }}
+                    />
+                    </LineChart>
                 </ResponsiveContainer>
             </div>
         ) : (
             <div className="h-full flex flex-col items-center justify-center text-gray-400">
-                <p>Nenhum dado financeiro registrado para o período.</p>
+                <p>Nenhum dado de vendas registrado para o período.</p>
             </div>
         )}
     </div>
   );
 };
 
-export default ChartComponent;
+export default SalesChartComponent;

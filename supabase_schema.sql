@@ -104,4 +104,36 @@ ALTER TABLE "manutencoes" DISABLE ROW LEVEL SECURITY;
 
 COMMENT ON TABLE "manutencoes" IS 'Tabela que armazena registros de orçamentos e chamados de manutenção e reparos avulsos.';
 
+-- 11. Tabela de histórico faturamento retroativo
+CREATE TABLE IF NOT EXISTS "historical_revenue" (
+    "id" text PRIMARY KEY,
+    "owner_id" text NOT NULL,
+    "year" integer NOT NULL,
+    "month" integer NOT NULL,
+    "client_name" text,
+    "venda_sistema" numeric DEFAULT 0,
+    "custo_sistema" numeric DEFAULT 0,
+    "manutencao" numeric DEFAULT 0,
+    "lavagem" numeric DEFAULT 0,
+    "created_at" timestamp with time zone DEFAULT timezone('utc'::text, now())
+);
+
+ALTER TABLE "historical_revenue" DISABLE ROW LEVEL SECURITY;
+
+-- Como redundância extrema para o caso do Supabase forçar a ativação de RLS, criamos políticas totalmente permissivas para todos:
+DROP POLICY IF EXISTS "Permitir leitura total para autenticados" ON "historical_revenue";
+CREATE POLICY "Permitir leitura total para todos" ON "historical_revenue" AS PERMISSIVE FOR SELECT TO public USING (true);
+
+DROP POLICY IF EXISTS "Permitir inserção total para autenticados" ON "historical_revenue";
+CREATE POLICY "Permitir inserção total para todos" ON "historical_revenue" AS PERMISSIVE FOR INSERT TO public WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Permitir atualização total para autenticados" ON "historical_revenue";
+CREATE POLICY "Permitir atualização total para todos" ON "historical_revenue" AS PERMISSIVE FOR UPDATE TO public USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Permitir deleção total para autenticados" ON "historical_revenue";
+CREATE POLICY "Permitir deleção total para todos" ON "historical_revenue" AS PERMISSIVE FOR DELETE TO public USING (true);
+
+COMMENT ON TABLE "historical_revenue" IS 'Tabela que armazena faturamento histórico retroativo de vendas de sistemas, manutenção e lavagem para relatórios comparativos de anos anteriores.';
+
+
 
