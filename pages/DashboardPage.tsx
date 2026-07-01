@@ -30,7 +30,7 @@ const DashboardPage: React.FC = () => {
   const [maintenances, setMaintenances] = useState<ManutencaoRecord[]>([]);
   const [lavagemContracts, setLavagemContracts] = useState<LavagemContract[]>([]);
   const [historicalRevenues, setHistoricalRevenues] = useState<HistoricalRevenue[]>([]);
-  const [activeTab, setActiveTab] = useState<'financeiro' | 'vendas'>('financeiro');
+  const [activeTab, setActiveTab] = useState<'financeiro' | 'vendas'>('vendas');
   const [isLoading, setIsLoading] = useState(true);
   const [isHistModalOpen, setIsHistModalOpen] = useState(false);
 
