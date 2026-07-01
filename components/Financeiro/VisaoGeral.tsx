@@ -2,7 +2,7 @@ import React, { useMemo, useEffect, useState } from 'react';
 import type { FinancialTransaction, CreditCard, FinancialCategory, BankAccount } from '../../types';
 import DashboardCard from '../DashboardCard';
 import FluxoCaixaChart from './FluxoCaixaChart';
-import { DollarIcon, ArrowUpIcon, ArrowDownIcon, CalendarIcon, UploadIcon, CreditCardIcon, CheckCircleIcon } from '../../assets/icons';
+import { DollarIcon, ArrowUpIcon, ArrowDownIcon, CalendarIcon, UploadIcon, CreditCardIcon, CheckCircleIcon, ExclamationTriangleIcon } from '../../assets/icons';
 import { dataService } from '../../services/dataService';
 import CreditCardDetailModal from './CreditCardDetailModal';
 
@@ -165,35 +165,47 @@ const VisaoGeral: React.FC<VisaoGeralProps> = ({ transactions, allTransactions, 
 
     const RenderItem: React.FC<{ t: any }> = ({ t }) => {
         const isPaid = t.status === 'pago';
+        const todayStr = new Date().toISOString().split('T')[0];
+        const isOverdue = !isPaid && t.status === 'pendente' && t.dueDate < todayStr;
+
         return (
             <div 
                 onClick={t.isCC ? () => setSelectedGroup(t.originalItems) : undefined}
                 className={`flex items-center justify-between p-3.5 rounded-2xl border transition-all ${
                     isPaid 
                     ? 'bg-gray-50/80 dark:bg-gray-700/20 border-transparent opacity-80' 
-                    : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 shadow-sm hover:border-indigo-300'
+                    : isOverdue
+                        ? 'bg-rose-50/25 dark:bg-rose-950/10 border-rose-200 dark:border-rose-900/30 shadow-sm hover:border-rose-300'
+                        : 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 shadow-sm hover:border-indigo-300'
                 } ${t.isCC ? 'cursor-pointer' : ''}`}
             >
                 <div className="flex items-center gap-3">
                     <div className={`p-2 rounded-xl ${
                         isPaid 
                         ? 'bg-gray-200 text-gray-500' 
-                        : t.type === 'receita' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
+                        : isOverdue
+                            ? 'bg-rose-100 text-rose-650'
+                            : t.type === 'receita' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
                     }`}>
-                        {isPaid ? <CheckCircleIcon className="w-4 h-4" /> : t.type === 'receita' ? <ArrowUpIcon className="w-4 h-4" /> : <ArrowDownIcon className="w-4 h-4" />}
+                        {isPaid ? <CheckCircleIcon className="w-4 h-4" /> : isOverdue ? <ExclamationTriangleIcon className="w-4 h-4 text-rose-500" /> : t.type === 'receita' ? <ArrowUpIcon className="w-4 h-4" /> : <ArrowDownIcon className="w-4 h-4" />}
                     </div>
                     <div>
-                        <p className={`font-bold text-[12px] leading-tight ${isPaid ? 'text-gray-500' : 'text-gray-800 dark:text-gray-100'}`}>
+                        <p className={`font-bold text-[12px] leading-tight flex items-center gap-1.5 ${isPaid ? 'text-gray-500' : isOverdue ? 'text-rose-700 dark:text-rose-400 font-extrabold' : 'text-gray-800 dark:text-gray-100'}`}>
                             {t.displayDescription} {t.isCC ? <span className="text-[10px] text-indigo-500 font-black ml-1">({t.count})</span> : null}
+                            {isOverdue && (
+                                <span className="px-1.5 py-0.5 bg-rose-100 dark:bg-rose-950/40 text-rose-750 dark:text-rose-300 rounded text-[8px] font-black uppercase tracking-tighter shadow-sm border border-rose-200 dark:border-rose-900/20">
+                                    Atrasado
+                                </span>
+                            )}
                         </p>
-                        <p className="text-[9px] text-gray-400 font-bold mt-0.5">
-                            {isPaid ? (t.type === 'receita' ? 'Recebido em: ' : 'Pago em: ') : 'Vence em: '}
+                        <p className={`text-[9px] font-bold mt-0.5 ${isOverdue ? 'text-rose-500' : 'text-gray-400'}`}>
+                            {isPaid ? (t.type === 'receita' ? 'Recebido em: ' : 'Pago em: ') : isOverdue ? 'Vencido em: ' : 'Vence em: '}
                             {new Date(isPaid ? (t.paymentDate || t.dueDate) : t.dueDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
                         </p>
                     </div>
                 </div>
                 <div className={`text-right font-black text-xs ${
-                    isPaid ? 'text-gray-400' : t.type === 'receita' ? 'text-green-600' : 'text-red-600'
+                    isPaid ? 'text-gray-400' : isOverdue ? 'text-rose-600' : t.type === 'receita' ? 'text-green-600' : 'text-red-600'
                 }`}>
                     {formatCurrency(t.amount)}
                 </div>

@@ -233,10 +233,14 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                             const isPending = !isPaid && !isCancelled;
                             const isApprovedForPayment = tx.invoiceSent && isPending;
                             
+                            const todayStr = new Date().toISOString().split('T')[0];
+                            const isOverdue = isPending && tx.dueDate < todayStr;
+                            
                             let statusLabel = 'Pendente';
                             if (isCancelled) statusLabel = 'Cancelado';
                             else if (isPaid) statusLabel = tx.type === 'receita' ? 'Recebido' : 'Pago';
                             else if (isApprovedForPayment) statusLabel = 'Liberado p/ Pag.';
+                            else if (isOverdue) statusLabel = 'Atrasado';
 
                             const actionLabel = tx.type === 'receita' ? 'Receber' : 'Pagar';
 
@@ -246,7 +250,9 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                                     ? 'bg-gray-50/50 dark:bg-gray-900/10 opacity-70 border-l-4 border-l-transparent' 
                                     : isCancelled 
                                         ? 'bg-red-50/20 opacity-50 border-l-4 border-l-transparent italic' 
-                                        : `bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-indigo-900/10 border-l-4 ${isPending ? (tx.type === 'receita' ? 'border-l-green-500' : 'border-l-red-500') : 'border-l-transparent'}`;
+                                        : isOverdue
+                                            ? 'bg-rose-50/25 dark:bg-rose-950/10 border-l-4 border-l-rose-500 hover:bg-rose-100/30'
+                                            : `bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-indigo-900/10 border-l-4 ${isPending ? (tx.type === 'receita' ? 'border-l-green-500' : 'border-l-red-500') : 'border-l-transparent'}`;
 
                             return (
                                 <tr key={tx.id} className={`transition-all duration-200 ${rowStateClass}`}>
@@ -263,12 +269,17 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                                             
                                             <div className="flex flex-col">
                                                 <div className="flex items-center gap-2">
-                                                    <span className={`text-[13px] font-bold ${isCancelled ? 'line-through text-gray-400' : 'text-gray-900 dark:text-white'} ${isApprovedForPayment ? 'text-emerald-800 dark:text-emerald-400' : ''}`}>
+                                                    <span className={`text-[13px] font-bold ${isCancelled ? 'line-through text-gray-400' : 'text-gray-900 dark:text-white'} ${isApprovedForPayment ? 'text-emerald-800 dark:text-emerald-400' : ''} ${isOverdue ? 'text-rose-700 dark:text-rose-400 font-extrabold animate-pulse' : ''}`}>
                                                         {tx.displayDescription}
                                                     </span>
                                                     {isApprovedForPayment && (
                                                         <span className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded text-[8px] font-black border border-emerald-200 dark:border-emerald-800 uppercase tracking-tighter shadow-sm">
                                                             <CheckCircleIcon className="w-2.5 h-2.5" /> OK
+                                                        </span>
+                                                    )}
+                                                    {isOverdue && (
+                                                        <span className="flex items-center gap-1 px-1.5 py-0.5 bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 rounded text-[8px] font-black border border-rose-200 dark:border-rose-900/30 uppercase tracking-tighter shadow-sm">
+                                                            <ExclamationTriangleIcon className="w-2.5 h-2.5 text-rose-500" /> ATRASADO
                                                         </span>
                                                     )}
                                                 </div>
@@ -290,7 +301,7 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                                         {getCategoryName(tx.categoryId)}
                                     </td>
 
-                                    <td className={`py-4 px-6 font-bold text-center ${isPaid || isCancelled ? 'text-gray-300' : 'text-gray-700 dark:text-gray-200'}`}>
+                                    <td className={`py-4 px-6 font-bold text-center ${isPaid || isCancelled ? 'text-gray-300' : isOverdue ? 'text-rose-600 dark:text-rose-400' : 'text-gray-700 dark:text-gray-200'}`}>
                                         {formatDate(tx.dueDate)}
                                     </td>
 
@@ -303,6 +314,7 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                                             isCancelled ? 'bg-red-50/50 text-red-400 border-red-100' : 
                                             isPaid ? 'bg-green-50 text-green-700 border-green-100' : 
                                             isApprovedForPayment ? 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-500/30' : 
+                                            isOverdue ? 'bg-rose-100 text-rose-700 border-rose-250 shadow-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/30' :
                                             'bg-yellow-50 text-yellow-700 border-yellow-100'
                                         }`}>
                                             {statusLabel}

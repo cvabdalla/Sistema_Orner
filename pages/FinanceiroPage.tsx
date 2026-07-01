@@ -115,12 +115,28 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
     }, [currentUser]);
 
     const filteredTransactions = useMemo(() => {
+        const todayStr = new Date().toISOString().split('T')[0];
         return transactions.filter(t => {
             const txDate = t.dueDate ? t.dueDate.split('T')[0] : '';
             if (!txDate) return false;
+
+            // O filtro de conta/banco sempre se aplica
+            if (selectedBankFilter !== 'all' && t.bankId !== selectedBankFilter) return false;
+
+            // Se for pendente e estiver vencido/atrasado (antes do dia de hoje),
+            // sempre incluímos (ignorando o filtro de startDate).
+            const isOverdue = t.status === 'pendente' && txDate < todayStr;
+
+            if (isOverdue) {
+                // Para os atrasados, nós queremos ver todos que estão pendentes.
+                // Mas opcionalmente podemos filtrar por limite superior (endDate) se necessário.
+                if (endDate && txDate > endDate) return false;
+                return true;
+            }
+
+            // Para transações normais, aplicamos o filtro de data padrão
             if (startDate && txDate < startDate) return false;
             if (endDate && txDate > endDate) return false;
-            if (selectedBankFilter !== 'all' && t.bankId !== selectedBankFilter) return false;
             return true;
         });
     }, [transactions, startDate, endDate, selectedBankFilter]);
