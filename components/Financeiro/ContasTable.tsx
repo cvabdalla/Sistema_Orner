@@ -233,6 +233,10 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                             const isPending = !isPaid && !isCancelled;
                             const isApprovedForPayment = tx.invoiceSent && isPending;
                             
+                            const todayStr = new Date().toISOString().split('T')[0];
+                            const txDateOnly = tx.dueDate ? tx.dueDate.split('T')[0] : '';
+                            const isLate = isPending && txDateOnly < todayStr;
+                            
                             let statusLabel = 'Pendente';
                             if (isCancelled) statusLabel = 'Cancelado';
                             else if (isPaid) statusLabel = tx.type === 'receita' ? 'Recebido' : 'Pago';
@@ -246,7 +250,9 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                                     ? 'bg-gray-50/50 dark:bg-gray-900/10 opacity-70 border-l-4 border-l-transparent' 
                                     : isCancelled 
                                         ? 'bg-red-50/20 opacity-50 border-l-4 border-l-transparent italic' 
-                                        : `bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-indigo-900/10 border-l-4 ${isPending ? (tx.type === 'receita' ? 'border-l-green-500' : 'border-l-red-500') : 'border-l-transparent'}`;
+                                        : isLate
+                                            ? 'bg-red-50/35 dark:bg-red-950/20 hover:bg-red-100/20 dark:hover:bg-red-900/10 border-l-4 border-l-red-600'
+                                            : `bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-indigo-900/10 border-l-4 ${isPending ? (tx.type === 'receita' ? 'border-l-green-500' : 'border-l-red-500') : 'border-l-transparent'}`;
 
                             return (
                                 <tr key={tx.id} className={`transition-all duration-200 ${rowStateClass}`}>
@@ -290,8 +296,11 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                                         {getCategoryName(tx.categoryId)}
                                     </td>
 
-                                    <td className={`py-4 px-6 font-bold text-center ${isPaid || isCancelled ? 'text-gray-300' : 'text-gray-700 dark:text-gray-200'}`}>
-                                        {formatDate(tx.dueDate)}
+                                    <td className={`py-4 px-6 font-bold text-center ${isPaid || isCancelled ? 'text-gray-300' : isLate ? 'text-red-600 dark:text-red-400 font-black' : 'text-gray-700 dark:text-gray-200'}`}>
+                                        <div className="flex items-center justify-center gap-1.5" title={isLate ? "Vencimento atrasado!" : undefined}>
+                                            {isLate && <ExclamationTriangleIcon className="w-3.5 h-3.5 text-red-500 animate-pulse shrink-0" />}
+                                            <span>{formatDate(tx.dueDate)}</span>
+                                        </div>
                                     </td>
 
                                     <td className={`py-4 px-6 font-black text-right ${isPaid || isCancelled ? 'text-gray-300 line-through' : tx.type === 'receita' ? 'text-green-600' : 'text-red-600'}`}>
@@ -303,9 +312,10 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                                             isCancelled ? 'bg-red-50/50 text-red-400 border-red-100' : 
                                             isPaid ? 'bg-green-50 text-green-700 border-green-100' : 
                                             isApprovedForPayment ? 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-500/30' : 
+                                            isLate ? 'bg-red-100 text-red-850 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900/50 shadow-md animate-pulse' :
                                             'bg-yellow-50 text-yellow-700 border-yellow-100'
                                         }`}>
-                                            {statusLabel}
+                                            {isLate ? 'Atrasado' : statusLabel}
                                         </span>
                                     </td>
 
