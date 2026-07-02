@@ -634,7 +634,9 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
         
         let targetStatus = editingEntryId ? entries.find(e => e.id === editingEntryId)?.status || 'Aberto' : 'Aberto';
         
-        if ((activeFormType === 'manutencao' || activeFormType === 'checkout') && targetStatus === 'Aberto') {
+        const isEditingCheckout = activeFormType === 'checkout' && editingEntryId;
+
+        if (!isEditingCheckout && (activeFormType === 'manutencao' || activeFormType === 'checkout') && targetStatus === 'Aberto') {
             const msg = activeFormType === 'manutencao' 
                 ? "Deseja salvar e já FINALIZAR este registro de manutenção? (Isso dará baixa imediata no estoque)"
                 : "Deseja salvar e já FINALIZAR este check-out de obra? (Isso dará baixa definitiva no estoque e concluirá o projeto)";
@@ -1446,7 +1448,11 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
                                     ) : (
                                         !isViewOnly && (
                                             <button type="button" onClick={handleSave} disabled={isSaving} className="px-8 py-2 bg-green-600 text-white rounded-xl font-bold text-[11px] shadow-lg hover:bg-green-700 transition-all active:scale-95 disabled:opacity-50">
-                                                {isSaving ? 'Gravando...' : (activeFormType === 'manutencao' ? 'Finalizar e baixar estoque' : 'Finalizar registro')}
+                                                {isSaving ? 'Gravando...' : (
+                                                    activeFormType === 'checkout' && editingEntryId 
+                                                        ? 'Salvar Alterações' 
+                                                        : (activeFormType === 'manutencao' ? 'Finalizar e baixar estoque' : 'Finalizar registro')
+                                                )}
                                             </button>
                                         )
                                     )}
