@@ -105,8 +105,8 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                 dataService.getAll<StockItem>('stock_items', currentUser.id, true),
                 dataService.getAll<StockMovement>('stock_movements', currentUser.id, true),
                 view === 'compras' ? dataService.getAll<PurchaseRequest>('purchase_requests', currentUser.id, isAdmin) : Promise.resolve([]),
-                dataService.getAll<SavedOrcamento>('orcamentos', currentUser.id, isAdmin),
-                dataService.getAll<ChecklistEntry>('checklist_checkin', currentUser.id, isAdmin)
+                dataService.getAll<SavedOrcamento>('orcamentos', currentUser.id, true),
+                dataService.getAll<ChecklistEntry>('checklist_checkin', currentUser.id, true)
             ]);
 
             setItems(loadedItems.sort((a,b) => (a.name || '').localeCompare(b.name || '')));

@@ -115,7 +115,8 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
     }, [currentUser]);
 
     const filteredTransactions = useMemo(() => {
-        const todayStr = new Date().toISOString().split('T')[0];
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
         return transactions.filter(t => {
             const txDate = t.dueDate ? t.dueDate.split('T')[0] : '';
             if (!txDate) return false;

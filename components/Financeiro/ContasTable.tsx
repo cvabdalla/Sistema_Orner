@@ -117,6 +117,12 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
     const isReceita = useMemo(() => {
         return processedTransactions.length > 0 && processedTransactions.some(t => t.type === 'receita');
     }, [processedTransactions]);
+
+    const overdueItems = useMemo(() => {
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        return processedTransactions.filter(t => t.status === 'pendente' && t.dueDate < todayStr);
+    }, [processedTransactions]);
     
     const getCategoryName = (categoryId: string) => {
         if (categoryId === 'cc-group') return 'Fatura consolidada';
@@ -213,6 +219,26 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                     )}
                 </div>
             </div>
+
+            {/* Aviso de Contas Atrasadas */}
+            {overdueItems.length > 0 && (
+                <div className="mx-6 mb-4 p-4 bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/40 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fade-in shadow-sm">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-red-600 text-white rounded-xl shadow-md shrink-0">
+                            <ExclamationTriangleIcon className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                            <h4 className="text-xs font-black text-red-850 dark:text-red-400 uppercase tracking-wider">Atenção: Contas Atrasadas</h4>
+                            <p className="text-[11px] text-red-700 dark:text-red-300 font-bold mt-0.5">
+                                Você possui <span className="underline font-black">{overdueItems.length}</span> {overdueItems.length === 1 ? 'conta pendente vencida' : 'contas pendentes vencidas'} de meses anteriores, totalizando <span className="font-black text-red-850 dark:text-red-250">{formatCurrency(overdueItems.reduce((sum, item) => sum + item.amount, 0))}</span>.
+                            </p>
+                        </div>
+                    </div>
+                    <span className="px-3 py-1 bg-red-650 text-white text-[9px] font-black uppercase tracking-wider rounded-lg border border-red-500 shadow-sm shrink-0">
+                        Atrasado
+                    </span>
+                </div>
+            )}
             
             <div className="overflow-x-auto">
                 <table className="min-w-full text-left text-sm border-collapse">
@@ -233,7 +259,8 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                             const isPending = !isPaid && !isCancelled;
                             const isApprovedForPayment = tx.invoiceSent && isPending;
                             
-                            const todayStr = new Date().toISOString().split('T')[0];
+                            const today = new Date();
+                            const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
                             const isOverdue = isPending && tx.dueDate < todayStr;
                             
                             let statusLabel = 'Pendente';
@@ -251,7 +278,7 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                                     : isCancelled 
                                         ? 'bg-red-50/20 opacity-50 border-l-4 border-l-transparent italic' 
                                         : isOverdue
-                                            ? 'bg-rose-50/25 dark:bg-rose-950/10 border-l-4 border-l-rose-500 hover:bg-rose-100/30'
+                                            ? 'bg-rose-50/70 dark:bg-rose-950/25 border-l-4 border-l-red-500 hover:bg-rose-100/40 font-semibold text-rose-900 dark:text-rose-100'
                                             : `bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-indigo-900/10 border-l-4 ${isPending ? (tx.type === 'receita' ? 'border-l-green-500' : 'border-l-red-500') : 'border-l-transparent'}`;
 
                             return (

@@ -271,11 +271,11 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
             const listFields = 'id, owner_id, project, responsible, date, status';
             
             const results = await Promise.allSettled([
-                dataService.getPartial<any>(currentTable, listFields, currentUser.id, isAdmin),
+                dataService.getPartial<any>(currentTable, listFields, currentUser.id, true),
                 dataService.getAll<StockItem>('stock_items', currentUser.id, true),
-                dataService.getAll<SavedOrcamento>('orcamentos', currentUser.id, isAdmin),
-                dataService.getPartial<any>('checklist_checkin', listFields, currentUser.id, isAdmin),
-                dataService.getAll<LavagemClient>('lavagem_clients', currentUser.id, isAdmin)
+                dataService.getAll<SavedOrcamento>('orcamentos', currentUser.id, true),
+                dataService.getPartial<any>('checklist_checkin', listFields, currentUser.id, true),
+                dataService.getAll<LavagemClient>('lavagem_clients', currentUser.id, true)
             ]);
             
             const rawCurrent = results[0].status === 'fulfilled' ? (results[0].value as any[]) : [];

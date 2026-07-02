@@ -262,9 +262,9 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
         ),
         dataService.getAll<SavedOrcamento>("orcamentos", currentUser.id, true),
         dataService.getAll<any>("lavagem_clients", currentUser.id, true),
-        dataService.getAll<ChecklistEntry>("checklist_checkin", currentUser.id, isAdmin),
-        dataService.getAll<ChecklistEntry>("checklist_checkout", currentUser.id, isAdmin),
-        dataService.getAll<ChecklistEntry>("checklist_manutencao", currentUser.id, isAdmin),
+        dataService.getAll<ChecklistEntry>("checklist_checkin", currentUser.id, true),
+        dataService.getAll<ChecklistEntry>("checklist_checkout", currentUser.id, true),
+        dataService.getAll<ChecklistEntry>("checklist_manutencao", currentUser.id, true),
         dataService.getAll<StockItem>("stock_items", currentUser.id, true),
       ]);
 
