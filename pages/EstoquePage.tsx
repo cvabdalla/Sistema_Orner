@@ -46,6 +46,8 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
 
     const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
     const [requestToEdit, setRequestToEdit] = useState<PurchaseRequest | null>(null);
+    const [hdInvoiceFile, setHdInvoiceFile] = useState<string | null>(null);
+    const [hdInvoiceFileName, setHdInvoiceFileName] = useState<string | null>(null);
     const [isManualItem, setIsManualItem] = useState(false);
 
     // States for status transition confirmation
@@ -149,6 +151,40 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!hdInvoiceFile) {
+            setPreviewUrl(null);
+            return;
+        }
+
+        if (hdInvoiceFile.startsWith('data:')) {
+            try {
+                const arr = hdInvoiceFile.split(',');
+                const mime = arr[0].match(/:(.*?);/)?.[1] || '';
+                const bstr = atob(arr[1]);
+                let n = bstr.length;
+                const u8arr = new Uint8Array(n);
+                while (n--) {
+                    u8arr[n] = bstr.charCodeAt(n);
+                }
+                const blob = new Blob([u8arr], { type: mime });
+                const url = URL.createObjectURL(blob);
+                setPreviewUrl(url);
+
+                return () => {
+                    URL.revokeObjectURL(url);
+                };
+            } catch (err) {
+                console.error("Erro ao converter data URL em blob:", err);
+                setPreviewUrl(hdInvoiceFile);
+            }
+        } else {
+            setPreviewUrl(hdInvoiceFile);
+        }
+    }, [hdInvoiceFile]);
 
     const handleUpdateStatus = async () => {
         if (!confirmRequest || !nextStatus) return;
@@ -285,6 +321,8 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                 status: 'Concluído',
                 invoiceFile: nfForm.invoiceFile || undefined,
                 invoiceKey: nfForm.invoiceKey || undefined,
+                invoiceNumber: nfForm.invoiceNumber || undefined,
+                invoiceFileName: nfForm.invoiceFileName || undefined,
                 observation: `${request.observation || ''}\n[Efetivado: nf ${nfForm.invoiceNumber}]`.trim()
             });
             
@@ -1429,6 +1467,18 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                     <td className="px-6 py-4 text-right">
                                         <div className="flex justify-end gap-2">
                                             <button onClick={() => handleManageRequest(req)} className="p-1.5 text-gray-400 hover:text-indigo-600 transition-colors" title="Gerenciar pedido"><ClipboardListIcon className="w-5 h-5"/></button>
+                                            {req.invoiceFile && (
+                                                <button 
+                                                    onClick={() => {
+                                                        setHdInvoiceFile(req.invoiceFile || null);
+                                                        setHdInvoiceFileName(req.invoiceFileName || 'nota_fiscal');
+                                                    }} 
+                                                    className="p-1.5 text-indigo-500 hover:text-indigo-600 transition-colors" 
+                                                    title="Visualizar anexo da NF"
+                                                >
+                                                    <EyeIcon className="w-5 h-5"/>
+                                                </button>
+                                            )}
                                             
                                             {req.status === 'Aberto' && isAdmin && (
                                                 <button onClick={() => triggerStatusConfirmation(req, 'Aprovado')} className="p-1.5 text-blue-500 hover:text-blue-600 transition-colors" title="Aprovar compra">
@@ -1620,6 +1670,65 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                                 <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1 ml-0.5">Observações adicionais</label>
                                 <textarea rows={2} disabled={!!requestToEdit && (requestToEdit.status === 'Concluído' || requestToEdit.status === 'Cancelado')} placeholder="Detalhes como marca, cor, urgência ou motivo..." value={requestForm.observation} onChange={e => setRequestForm({...requestForm, observation: e.target.value})} className="w-full rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800/80 px-3 py-2 text-xs font-medium shadow-sm outline-none transition-all hover:border-gray-300 dark:hover:border-gray-650 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 resize-none min-h-[50px] leading-relaxed disabled:opacity-60 disabled:bg-gray-50" />
                             </div>
+
+                            {requestToEdit && (requestToEdit.invoiceFile || requestToEdit.invoiceKey || requestToEdit.invoiceNumber) && (
+                                <div className="p-4 rounded-xl bg-gradient-to-br from-indigo-50/50 to-purple-50/50 dark:from-indigo-950/20 dark:to-purple-950/20 border border-indigo-100/80 dark:border-indigo-800/40 shadow-sm animate-fade-in text-left">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <DocumentReportIcon className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                                        <h4 className="text-xs font-extrabold text-gray-900 dark:text-white uppercase tracking-wider">Dados da Nota Fiscal (NF-e)</h4>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs mb-3">
+                                        {requestToEdit.invoiceNumber && (
+                                            <div>
+                                                <span className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase">Número da Nota Fiscal</span>
+                                                <span className="font-extrabold text-gray-850 dark:text-gray-200">{requestToEdit.invoiceNumber}</span>
+                                            </div>
+                                        )}
+                                        {requestToEdit.invoiceKey && (
+                                            <div className="sm:col-span-2">
+                                                <span className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase">Chave de Acesso</span>
+                                                <span className="font-mono text-[10.5px] font-bold text-gray-700 dark:text-gray-300 break-all">{requestToEdit.invoiceKey.replace(/(.{4})/g, '$1 ')}</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {requestToEdit.invoiceFile && (
+                                        <div className="pt-3 border-t border-indigo-100/50 dark:border-indigo-800/30 flex flex-col sm:flex-row items-center justify-between gap-3">
+                                            <div className="flex items-center gap-2.5 self-start sm:self-auto">
+                                                <div className="w-10 h-10 rounded-xl bg-indigo-100/70 dark:bg-indigo-900/40 flex items-center justify-center text-indigo-650 dark:text-indigo-400 font-extrabold shadow-inner shrink-0">
+                                                    {(requestToEdit.invoiceFile.startsWith('data:application/pdf') || requestToEdit.invoiceFileName?.toLowerCase().endsWith('.pdf')) ? 'PDF' : 'IMG'}
+                                                </div>
+                                                <div className="text-left min-w-0">
+                                                    <span className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase">Arquivo Anexado</span>
+                                                    <span className="block text-xs font-bold text-gray-750 dark:text-gray-350 truncate max-w-[200px]" title={requestToEdit.invoiceFileName || 'nota_fiscal'}>
+                                                        {requestToEdit.invoiceFileName || 'Nota Fiscal Digital'}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex gap-2 w-full sm:w-auto">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setHdInvoiceFile(requestToEdit.invoiceFile || null);
+                                                        setHdInvoiceFileName(requestToEdit.invoiceFileName || 'nota_fiscal');
+                                                    }}
+                                                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-md hover:shadow-indigo-600/10 transition-all cursor-pointer"
+                                                >
+                                                    <EyeIcon className="w-4 h-4" /> Visualizar
+                                                </button>
+                                                <a
+                                                    href={requestToEdit.invoiceFile}
+                                                    download={requestToEdit.invoiceFileName || 'nota_fiscal.pdf'}
+                                                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md hover:shadow-emerald-600/10 transition-all"
+                                                >
+                                                    <ArrowDownIcon className="w-4 h-4" /> Baixar
+                                                </a>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
                         <div className="flex gap-3 pt-4 border-t border-gray-100 dark:border-gray-750">
@@ -1760,6 +1869,54 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                         </div>
                     </div>
                 </Modal>
+            )}
+
+            {hdInvoiceFile && (
+                <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={() => { setHdInvoiceFile(null); setHdInvoiceFileName(null); }}>
+                    <div className="relative max-w-5xl w-full h-full flex flex-col items-center justify-center gap-4">
+                        <button className="absolute top-0 right-0 p-3 text-white hover:text-indigo-400 z-[110]" onClick={(e) => { e.stopPropagation(); setHdInvoiceFile(null); setHdInvoiceFileName(null); }}><XCircleIcon className="w-10 h-10" /></button>
+                        <div className="flex-1 w-full flex items-center justify-center overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                            {hdInvoiceFile.startsWith('data:application/pdf') || hdInvoiceFileName?.toLowerCase().endsWith('.pdf') ? (
+                                <div className="bg-gray-900/95 border border-gray-800 p-8 rounded-3xl max-w-lg w-full text-center space-y-6 shadow-2xl animate-zoom-in" onClick={(e) => e.stopPropagation()}>
+                                    <div className="mx-auto w-20 h-20 bg-indigo-500/10 rounded-2xl flex items-center justify-center text-indigo-400 shadow-inner border border-indigo-500/20">
+                                        <DocumentReportIcon className="w-12 h-12" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <h3 className="text-lg font-black text-white tracking-tight">Documento PDF Anexado</h3>
+                                        <p className="text-xs text-indigo-300 font-mono bg-indigo-950/40 py-1.5 px-3 rounded-lg inline-block max-w-full truncate">{hdInvoiceFileName || 'nota_fiscal.pdf'}</p>
+                                    </div>
+                                    <p className="text-xs text-gray-400 leading-relaxed max-w-sm mx-auto">
+                                        Para garantir sua privacidade e compatibilidade total, o navegador restringe a exibição direta de PDFs embutidos em visualizações integradas. Abra em uma nova guia ou faça o download seguro abaixo.
+                                    </p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                                        <a 
+                                            href={previewUrl || hdInvoiceFile} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center justify-center gap-2 px-5 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs tracking-tight transition-all shadow-lg shadow-indigo-600/15 active:scale-[0.98]"
+                                        >
+                                            <EyeIcon className="w-4 h-4" /> Abrir em Nova Guia
+                                        </a>
+                                        <a 
+                                            href={previewUrl || hdInvoiceFile} 
+                                            download={hdInvoiceFileName || 'nota-fiscal.pdf'}
+                                            className="inline-flex items-center justify-center gap-2 px-5 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs tracking-tight transition-all shadow-lg shadow-emerald-600/15 active:scale-[0.98]"
+                                        >
+                                            <ArrowDownIcon className="w-4 h-4" /> Baixar Arquivo
+                                        </a>
+                                    </div>
+                                </div>
+                            ) : (
+                                <img src={previewUrl || hdInvoiceFile} className="max-w-full max-h-full object-contain rounded-lg shadow-2xl animate-zoom-in" alt="Nota Fiscal" />
+                            )}
+                        </div>
+                        {!hdInvoiceFileName?.toLowerCase().endsWith('.pdf') && !hdInvoiceFile.startsWith('data:application/pdf') && (
+                            <div className="flex gap-4">
+                                <button onClick={(e) => { e.stopPropagation(); const a = document.createElement('a'); a.href = previewUrl || hdInvoiceFile; a.download = hdInvoiceFileName || 'nota-fiscal.pdf'; a.click(); }} className="px-8 py-2.5 bg-indigo-600 text-white rounded-full font-black text-xs tracking-tight shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-2"><ArrowDownIcon className="w-4 h-4" /> Baixar Documento Anexo</button>
+                            </div>
+                        )}
+                    </div>
+                </div>
             )}
         </div>
     );

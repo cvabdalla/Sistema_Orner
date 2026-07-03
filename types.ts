@@ -276,6 +276,8 @@ export interface PurchaseRequest {
     observation?: string;
     invoiceFile?: string;
     invoiceKey?: string;
+    invoiceNumber?: string;
+    invoiceFileName?: string;
 }
 
 export interface StockMovement {
