@@ -106,12 +106,17 @@ const EstoquePage: React.FC<EstoquePageProps> = ({ view, setCurrentPage, current
                 dataService.getAll<StockMovement>('stock_movements', currentUser.id, true),
                 view === 'compras' ? dataService.getAll<PurchaseRequest>('purchase_requests', currentUser.id, isAdmin) : Promise.resolve([]),
                 dataService.getAll<SavedOrcamento>('orcamentos', currentUser.id, true),
-                dataService.getAll<ChecklistEntry>('checklist_checkin', currentUser.id, true)
+                dataService.getPartial<any>('checklist_checkin', 'id, owner_id, project, responsible, date, status, details->componentesEstoque', currentUser.id, true)
             ]);
 
             setItems(loadedItems.sort((a,b) => (a.name || '').localeCompare(b.name || '')));
             setMovements(loadedMovements.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-            setCheckins(loadedCheckins);
+            setCheckins((loadedCheckins || []).map((c: any) => ({
+                ...c,
+                details: {
+                    componentesEstoque: c.componentesEstoque || []
+                }
+            })));
             
             if (view === 'compras') {
                 setRequests(loadedRequests.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));

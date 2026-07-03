@@ -367,15 +367,13 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
     if (orc.custos_reais?.linked_checkout_id) {
       matchedCheckout = checklistCheckouts.find(
         (c) =>
-          String(c.id) === String(orc.custos_reais?.linked_checkout_id) &&
-          c.status === "Finalizado",
+          String(c.id) === String(orc.custos_reais?.linked_checkout_id),
       );
     }
     if (!matchedCheckout && clientName) {
       matchedCheckout = checklistCheckouts.find(
         (c) =>
-          c.project?.toLowerCase().trim() === clientName.toLowerCase().trim() &&
-          c.status === "Finalizado",
+          c.project?.toLowerCase().trim() === clientName.toLowerCase().trim(),
       );
     }
     if (matchedCheckout && matchedCheckout.details?.componentesEstoque) {
@@ -1017,8 +1015,9 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
         ),
         dataService.getAll<Instalador>("instaladores", currentUser.id, true),
         dataService.getAll<any>("system_configs", undefined, true),
-        dataService.getAll<ChecklistEntry>(
+        dataService.getPartial<any>(
           "checklist_checkout",
+          "id, owner_id, project, responsible, date, status, details->componentesEstoque",
           undefined,
           true,
         ),
@@ -1029,7 +1028,12 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
       setLavagemClients(clientsData || []);
       setLavagemRecords(recordsData || []);
       setInstaladores(instaladoresData || []);
-      setChecklistCheckouts(checkoutData || []);
+      setChecklistCheckouts((checkoutData || []).map((c: any) => ({
+        ...c,
+        details: {
+          componentesEstoque: c.componentesEstoque || []
+        }
+      })));
       setStockItems(stockData || []);
 
       const remoteKm =

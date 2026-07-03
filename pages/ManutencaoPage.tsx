@@ -262,9 +262,9 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
         ),
         dataService.getAll<SavedOrcamento>("orcamentos", currentUser.id, true),
         dataService.getAll<any>("lavagem_clients", currentUser.id, true),
-        dataService.getAll<ChecklistEntry>("checklist_checkin", currentUser.id, true),
-        dataService.getAll<ChecklistEntry>("checklist_checkout", currentUser.id, true),
-        dataService.getAll<ChecklistEntry>("checklist_manutencao", currentUser.id, true),
+        dataService.getPartial<any>("checklist_checkin", "id, owner_id, project, responsible, date, status, details->componentesEstoque", currentUser.id, true),
+        dataService.getPartial<any>("checklist_checkout", "id, owner_id, project, responsible, date, status, details->componentesEstoque", currentUser.id, true),
+        dataService.getPartial<any>("checklist_manutencao", "id, owner_id, project, responsible, date, status, details->componentesEstoque", currentUser.id, true),
         dataService.getAll<StockItem>("stock_items", currentUser.id, true),
       ]);
 
@@ -272,10 +272,17 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
       setOrcamentos(orcData || []);
       setLavagemClients(lavData || []);
 
+      const formatChecklist = (c: any) => ({
+        ...c,
+        details: {
+          componentesEstoque: c.componentesEstoque || []
+        }
+      });
+
       const combinedChecklists: ChecklistEntry[] = [
-        ...(checkins || []).map((c) => ({ ...c, type: "checkin" as const })),
-        ...(checkouts || []).map((c) => ({ ...c, type: "checkout" as const })),
-        ...(manutChecklists || []).map((c) => ({ ...c, type: "manutencao" as const })),
+        ...(checkins || []).map((c) => ({ ...formatChecklist(c), type: "checkin" as const })),
+        ...(checkouts || []).map((c) => ({ ...formatChecklist(c), type: "checkout" as const })),
+        ...(manutChecklists || []).map((c) => ({ ...formatChecklist(c), type: "manutencao" as const })),
       ];
       setChecklists(combinedChecklists);
       setStockItems(stock || []);

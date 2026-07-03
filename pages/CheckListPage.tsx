@@ -481,8 +481,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
         let reservedComponents = [];
         
         if (targetEntry.type === 'checkout') {
-            const allCheckinsData = await dataService.getAll<ChecklistEntry>('checklist_checkin');
-            const originalCheckin = allCheckinsData.find(c => String(c.id) === String(targetEntry.id));
+            const originalCheckin = await dataService.getById<ChecklistEntry>('checklist_checkin', targetEntry.id);
             reservedComponents = originalCheckin?.details?.componentesEstoque || [];
         }
 
@@ -604,8 +603,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
                 await processStockDeduction(statusTargetEntry);
                 
                 if (statusTargetEntry.type === 'checkout') {
-                    const allCheckinsData = await dataService.getAll<ChecklistEntry>('checklist_checkin');
-                    const originalCheckin = allCheckinsData.find(c => String(c.id) === String(statusTargetEntry.id));
+                    const originalCheckin = await dataService.getById<ChecklistEntry>('checklist_checkin', statusTargetEntry.id);
                     if (originalCheckin) {
                         const { type: chkinType = '', ...chkinDataToSave } = { ...originalCheckin, status: 'Finalizado' as const };
                         await dataService.save('checklist_checkin', chkinDataToSave as any);
@@ -663,8 +661,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
                 
                 if (activeFormType === 'checkout') {
                     // Atualiza checkin relacionado
-                    const allCheckinsData = await dataService.getAll<ChecklistEntry>('checklist_checkin');
-                    const originalCheckin = allCheckinsData.find(c => String(c.id) === String(newEntry.id));
+                    const originalCheckin = await dataService.getById<ChecklistEntry>('checklist_checkin', newEntry.id);
                     if (originalCheckin) {
                         const { type: chkinType = '', ...chkinDataToSave } = { ...originalCheckin, status: 'Finalizado' as const };
                         await dataService.save('checklist_checkin', chkinDataToSave as any);

@@ -500,13 +500,16 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
     const handleViewCheckout = async (checkinId: string, clientName: string) => {
         setIsLoading(true);
         try {
-            // Buscamos todos os checklists de checkout para fazer o cruzamento robusto em memória
-            const checkouts = await dataService.getAll<ChecklistEntry>('checklist_checkout');
+            // Buscamos todos os checklists de checkout usando campos parciais para fazer o cruzamento sem baixar imagens pesadas
+            const checkouts = await dataService.getPartial<any>(
+                'checklist_checkout',
+                'id, project, details->originalCheckinId, details->nomeCliente'
+            );
             const foundCheckout = checkouts.find(c => {
                 if (!c) return false;
-                const matchesCheckinId = String(c.id) === String(checkinId) || (c.details && String(c.details.originalCheckinId) === String(checkinId));
+                const matchesCheckinId = String(c.id) === String(checkinId) || String(c.originalCheckinId || '') === String(checkinId);
                 const matchesClientName = c.project?.toLowerCase().trim() === clientName?.toLowerCase().trim() || 
-                                          (c.details && c.details.nomeCliente?.toLowerCase().trim() === clientName?.toLowerCase().trim());
+                                          String(c.nomeCliente || '').toLowerCase().trim() === clientName?.toLowerCase().trim();
                 return matchesCheckinId || matchesClientName;
             });
 
