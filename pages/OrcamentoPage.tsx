@@ -2874,7 +2874,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
                                         let targetCheckout = undefined;
                                         if (selectedId) {
                                           targetCheckout = checklistCheckouts.find(
-                                            (c) => String(c.id) === String(selectedId) && c.status === "Finalizado"
+                                            (c) => String(c.id) === String(selectedId)
                                           );
                                         } else {
                                           const orc = orcamentos.find(o => o.id === editingTrackId);
@@ -2882,7 +2882,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
                                           const clientName = variant?.formState?.nomeCliente || "";
                                           if (clientName) {
                                             targetCheckout = checklistCheckouts.find(
-                                              (c) => c.project?.toLowerCase().trim() === clientName.toLowerCase().trim() && c.status === "Finalizado"
+                                              (c) => c.project?.toLowerCase().trim() === clientName.toLowerCase().trim()
                                             );
                                           }
                                         }
@@ -2916,18 +2916,10 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
                                       otherOrcamentos.forEach((o) => {
                                         if (o.custos_reais?.linked_checkout_id) {
                                           usedCheckouts.add(String(o.custos_reais.linked_checkout_id).toLowerCase().trim());
-                                        } else {
-                                          const v = o.variants?.find((vi) => vi.isPrincipal) || o.variants?.[0] || { formState: o.formState };
-                                          const clName = v?.formState?.nomeCliente || "";
-                                          if (clName) {
-                                            usedCheckouts.add(clName.toLowerCase().trim());
-                                          }
                                         }
                                       });
 
                                       const filteredOptions = checklistCheckouts.filter((checkout) => {
-                                        // 1. MUST be 'Finalizado'
-                                        if (checkout.status !== "Finalizado") return false;
 
                                         const checkoutIdStr = String(checkout.id).toLowerCase().trim();
                                         const checkoutProjectStr = (checkout.project || "").toLowerCase().trim();
@@ -3025,12 +3017,12 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
                                       item.key === "materiais" &&
                                       (trackCustosReais?.linked_checkout_id
                                         ? checklistCheckouts.some(
-                                            (c) => String(c.id) === String(trackCustosReais.linked_checkout_id) && c.status === "Finalizado"
+                                            (c) => String(c.id) === String(trackCustosReais.linked_checkout_id)
                                           )
                                         : checklistCheckouts.some(
                                             (c) =>
                                               c.project?.toLowerCase().trim() ===
-                                              clientName.toLowerCase().trim() && c.status === "Finalizado"
+                                              clientName.toLowerCase().trim()
                                           ));
 
                                     return (
