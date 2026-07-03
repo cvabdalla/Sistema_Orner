@@ -135,5 +135,17 @@ CREATE POLICY "Permitir deleção total para todos" ON "historical_revenue" AS P
 
 COMMENT ON TABLE "historical_revenue" IS 'Tabela que armazena faturamento histórico retroativo de vendas de sistemas, manutenção e lavagem para relatórios comparativos de anos anteriores.';
 
+-- Adicionar colunas adicionais para a tabela purchase_requests (Nota Fiscal)
+ALTER TABLE "purchase_requests" ADD COLUMN IF NOT EXISTS "invoiceFile" text;
+ALTER TABLE "purchase_requests" ADD COLUMN IF NOT EXISTS "invoiceFileName" text;
+ALTER TABLE "purchase_requests" ADD COLUMN IF NOT EXISTS "invoiceKey" text;
+ALTER TABLE "purchase_requests" ADD COLUMN IF NOT EXISTS "invoiceNumber" text;
+
+COMMENT ON COLUMN "purchase_requests"."invoiceFile" IS 'Conteúdo do arquivo da Nota Fiscal anexado (Base64)';
+COMMENT ON COLUMN "purchase_requests"."invoiceFileName" IS 'Nome do arquivo de Nota Fiscal anexado';
+COMMENT ON COLUMN "purchase_requests"."invoiceKey" IS 'Chave de acesso da Nota Fiscal (44 dígitos)';
+COMMENT ON COLUMN "purchase_requests"."invoiceNumber" IS 'Número de identificação da Nota Fiscal';
+
+
 
 

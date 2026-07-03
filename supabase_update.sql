@@ -114,4 +114,16 @@ COMMENT ON COLUMN "historical_revenue"."custo_sistema" IS 'Armazena o custo tota
 ALTER TABLE "historical_revenue" ADD COLUMN IF NOT EXISTS "client_name" text;
 COMMENT ON COLUMN "historical_revenue"."client_name" IS 'Armazena o nome do cliente associado ao histórico de faturamento retroativo';
 
+-- 9. Colunas ausentes na tabela purchase_requests para suportar anexo de nota fiscal completo
+ALTER TABLE "purchase_requests" ADD COLUMN IF NOT EXISTS "invoiceFile" text;
+ALTER TABLE "purchase_requests" ADD COLUMN IF NOT EXISTS "invoiceFileName" text;
+ALTER TABLE "purchase_requests" ADD COLUMN IF NOT EXISTS "invoiceKey" text;
+ALTER TABLE "purchase_requests" ADD COLUMN IF NOT EXISTS "invoiceNumber" text;
+
+COMMENT ON COLUMN "purchase_requests"."invoiceFile" IS 'Conteúdo do arquivo da Nota Fiscal anexado (Base64)';
+COMMENT ON COLUMN "purchase_requests"."invoiceFileName" IS 'Nome do arquivo de Nota Fiscal anexado';
+COMMENT ON COLUMN "purchase_requests"."invoiceKey" IS 'Chave de acesso da Nota Fiscal (44 dígitos)';
+COMMENT ON COLUMN "purchase_requests"."invoiceNumber" IS 'Número de identificação da Nota Fiscal';
+
+
 
