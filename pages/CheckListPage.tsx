@@ -609,12 +609,15 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
                         await dataService.save('checklist_checkin', chkinDataToSave as any);
                     }
 
+                    // O orçamento não deve ser alterado automaticamente para 'Finalizado' ao finalizar o checklist (conforme solicitação do cliente)
+                    /*
                     const allOrcamentosData = await dataService.getAll<SavedOrcamento>('orcamentos');
                     const targetOrcamento = allOrcamentosData.find(o => {
                         const variant = o.variants?.find(v => v.isPrincipal) || o.variants?.[0] || { formState: o.formState };
                         return variant.formState?.nomeCliente === statusTargetEntry.project;
                     });
                     if (targetOrcamento) await dataService.save('orcamentos', { ...targetOrcamento, status: 'Finalizado' });
+                    */
                 }
             }
 
@@ -667,6 +670,8 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
                         await dataService.save('checklist_checkin', chkinDataToSave as any);
                     }
 
+                    // O orçamento não deve ser alterado automaticamente para 'Finalizado' ao finalizar o checklist (conforme solicitação do cliente)
+                    /*
                     // Atualiza orçamento relacionado
                     const allOrcamentos = await dataService.getAll<SavedOrcamento>('orcamentos');
                     const relatedOrcamento = allOrcamentos.find(o => String(o.id) === String(newEntry.id));
@@ -674,6 +679,7 @@ const CheckListPage: React.FC<CheckListPageProps> = ({ view, currentUser, userPe
                         const orcDataToSave = { ...relatedOrcamento, status: 'Finalizado' as any };
                         await dataService.save('orcamentos', orcDataToSave as any);
                     }
+                    */
                 }
             }
             const { type: _unusedType = '', ...dataToSave } = newEntry;
