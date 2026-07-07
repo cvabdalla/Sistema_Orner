@@ -358,9 +358,10 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
 
     const isRealConfigured =
       orc.custos_reais && Object.keys(orc.custos_reais).length >= 6;
-    const currentReais = isRealConfigured
-      ? { ...originalCustos, ...orc.custos_reais }
-      : { ...originalCustos };
+    const currentReais = {
+      ...originalCustos,
+      ...(orc.custos_reais || {})
+    };
 
     const clientName = fs.nomeCliente || "";
     let matchedCheckout: ChecklistEntry | undefined = undefined;
@@ -398,7 +399,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
     };
   };
 
-  const handleStartEditTracking = (orc: SavedOrcamento) => {
+  const handleStartEditTracking = async (orc: SavedOrcamento) => {
     setEditingTrackId(orc.id);
     const tracking = getRunningTracking(orc);
     setTrackVendaEtapas(tracking.etapas);
@@ -416,6 +417,49 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
       setPendingInstallationEndDate(matchingClient.installation_end_date);
     } else {
       setPendingInstallationEndDate("");
+    }
+
+    // Carregar detalhes completos do checkout (incluindo componentesEstoque) sob demanda para evitar timeouts
+    let checkoutId = tracking.reais?.linked_checkout_id;
+    if (!checkoutId && clientName) {
+      const matched = checklistCheckouts.find(
+        (c) => c.project?.toLowerCase().trim() === clientName.toLowerCase().trim()
+      );
+      if (matched) checkoutId = matched.id;
+    }
+
+    if (checkoutId) {
+      try {
+        const fullCheckout = await dataService.getById<ChecklistEntry>('checklist_checkout', checkoutId);
+        if (fullCheckout && fullCheckout.details) {
+          setChecklistCheckouts((prev) =>
+            prev.map((c) =>
+              String(c.id) === String(checkoutId)
+                ? { ...c, details: { ...c.details, componentesEstoque: fullCheckout.details.componentesEstoque || [] } }
+                : c
+            )
+          );
+          
+          const list = fullCheckout.details.componentesEstoque || [];
+          const calculatedMaterialsCost = list.reduce(
+            (sum: number, comp: any) => {
+              const item = stockItems.find(
+                (si) => String(si.id) === String(comp.itemId),
+              );
+              const price = item ? item.averagePrice || 0 : 0;
+              return sum + comp.qty * price;
+            },
+            0,
+          );
+          
+          setTrackCustosReais((prev: any) => ({
+            ...prev,
+            materiais: calculatedMaterialsCost
+          }));
+        }
+      } catch (err) {
+        console.error("Erro ao carregar checkout no início da edição:", err);
+      }
     }
   };
 
@@ -1017,7 +1061,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
         dataService.getAll<any>("system_configs", undefined, true),
         dataService.getPartial<any>(
           "checklist_checkout",
-          "id, owner_id, project, responsible, date, status, details->componentesEstoque",
+          "id, owner_id, project, responsible, date, status",
           undefined,
           true,
         ),
@@ -1031,7 +1075,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
       setChecklistCheckouts((checkoutData || []).map((c: any) => ({
         ...c,
         details: {
-          componentesEstoque: c.componentesEstoque || []
+          componentesEstoque: []
         }
       })));
       setStockItems(stockData || []);
@@ -2868,30 +2912,33 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
                                   </label>
                                   <select
                                     value={trackCustosReais?.linked_checkout_id || ""}
-                                    onChange={(e) => {
+                                    onChange={async (e) => {
                                       const selectedId = e.target.value;
-                                      setTrackCustosReais((prev: any) => {
-                                        const updated = {
+                                      setTrackCustosReais((prev: any) => ({
+                                        ...prev,
+                                        linked_checkout_id: selectedId,
+                                      }));
+
+                                      if (!selectedId) {
+                                        setTrackCustosReais((prev: any) => ({
                                           ...prev,
-                                          linked_checkout_id: selectedId,
-                                        };
-                                        let targetCheckout = undefined;
-                                        if (selectedId) {
-                                          targetCheckout = checklistCheckouts.find(
-                                            (c) => String(c.id) === String(selectedId)
+                                          materiais: trackCustosEstimados.materiais || 0,
+                                        }));
+                                        return;
+                                      }
+
+                                      try {
+                                        const fullCheckout = await dataService.getById<ChecklistEntry>('checklist_checkout', selectedId);
+                                        if (fullCheckout && fullCheckout.details) {
+                                          setChecklistCheckouts((prev) =>
+                                            prev.map((c) =>
+                                              String(c.id) === String(selectedId)
+                                                ? { ...c, details: fullCheckout.details }
+                                                : c
+                                            )
                                           );
-                                        } else {
-                                          const orc = orcamentos.find(o => o.id === editingTrackId);
-                                          const variant = orc?.variants?.find((v) => v.isPrincipal) || orc?.variants?.[0] || { formState: orc?.formState };
-                                          const clientName = variant?.formState?.nomeCliente || "";
-                                          if (clientName) {
-                                            targetCheckout = checklistCheckouts.find(
-                                              (c) => c.project?.toLowerCase().trim() === clientName.toLowerCase().trim()
-                                            );
-                                          }
-                                        }
-                                        if (targetCheckout && targetCheckout.details?.componentesEstoque) {
-                                          const list = targetCheckout.details.componentesEstoque || [];
+
+                                          const list = fullCheckout.details.componentesEstoque || [];
                                           const calculatedMaterialsCost = list.reduce(
                                             (sum: number, comp: any) => {
                                               const item = stockItems.find(
@@ -2902,12 +2949,15 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
                                             },
                                             0,
                                           );
-                                          updated.materiais = calculatedMaterialsCost;
-                                        } else if (!selectedId) {
-                                          updated.materiais = trackCustosEstimados.materiais || 0;
+
+                                          setTrackCustosReais((prev: any) => ({
+                                            ...prev,
+                                            materiais: calculatedMaterialsCost,
+                                          }));
                                         }
-                                        return updated;
-                                      });
+                                      } catch (err) {
+                                        console.error("Erro ao carregar checkout selecionado:", err);
+                                      }
                                     }}
                                     className="w-full text-[10px] font-bold bg-white dark:bg-gray-800 border border-indigo-100 dark:border-indigo-950/45 rounded-lg px-2 py-1.5 outline-none text-indigo-900 dark:text-indigo-100 focus:border-indigo-500 select-none cursor-pointer"
                                   >
@@ -2947,11 +2997,17 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
                                         return true;
                                       });
 
-                                      return filteredOptions.map((checkout) => (
-                                        <option key={checkout.id} value={checkout.id}>
-                                          {checkout.project} (ID: {checkout.id} - {new Date(checkout.id).toLocaleDateString('pt-BR')})
-                                        </option>
-                                      ));
+                                      return filteredOptions.map((checkout) => {
+                                        const dateNum = Number(checkout.id);
+                                        const dateLabel = isNaN(dateNum) 
+                                          ? "Sem Data" 
+                                          : new Date(dateNum).toLocaleDateString('pt-BR');
+                                        return (
+                                          <option key={checkout.id} value={checkout.id}>
+                                            {checkout.project} (ID: {checkout.id} - {dateLabel})
+                                          </option>
+                                        );
+                                      });
                                     })()}
                                   </select>
                                   <p className="text-[7.5px] text-gray-450 dark:text-gray-550 mt-1 leading-normal">

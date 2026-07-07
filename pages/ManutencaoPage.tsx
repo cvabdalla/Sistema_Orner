@@ -262,8 +262,8 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
         ),
         dataService.getAll<SavedOrcamento>("orcamentos", currentUser.id, true),
         dataService.getAll<any>("lavagem_clients", currentUser.id, true),
-        dataService.getPartial<any>("checklist_checkin", "id, owner_id, project, responsible, date, status, details->componentesEstoque", currentUser.id, true),
-        dataService.getPartial<any>("checklist_checkout", "id, owner_id, project, responsible, date, status, details->componentesEstoque", currentUser.id, true),
+        dataService.getPartial<any>("checklist_checkin", "id, owner_id, project, responsible, date, status", currentUser.id, true),
+        dataService.getPartial<any>("checklist_checkout", "id, owner_id, project, responsible, date, status", currentUser.id, true),
         dataService.getPartial<any>("checklist_manutencao", "id, owner_id, project, responsible, date, status, details->componentesEstoque", currentUser.id, true),
         dataService.getAll<StockItem>("stock_items", currentUser.id, true),
       ]);
@@ -515,7 +515,7 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
   };
 
   // Alterna a seleção de um checklist e atualiza a lista de materiais
-  const handleToggleChecklist = (checklistId: string) => {
+  const handleToggleChecklist = async (checklistId: string) => {
     if (!editingRecord) return;
     const currentSelected = editingRecord.selectedChecklists || [];
     let nextSelected: string[];
@@ -525,9 +525,33 @@ export const ManutencaoPage: React.FC<ManutencaoPageProps> = ({
       nextSelected = [...currentSelected, checklistId];
     }
 
+    let updatedChecklists = [...checklists];
+    const isAdding = nextSelected.includes(checklistId);
+    if (isAdding) {
+      const existing = checklists.find((c) => c.id === checklistId);
+      if (existing && (!existing.details?.componentesEstoque || existing.details.componentesEstoque.length === 0)) {
+        try {
+          const table = existing.type === "checkin" 
+            ? "checklist_checkin" 
+            : existing.type === "checkout" 
+              ? "checklist_checkout" 
+              : "checklist_manutencao";
+          const full = await dataService.getById<any>(table, checklistId);
+          if (full && full.details) {
+            updatedChecklists = checklists.map((c) =>
+              c.id === checklistId ? { ...c, details: full.details } : c
+            );
+            setChecklists(updatedChecklists);
+          }
+        } catch (err) {
+          console.error("Erro ao carregar detalhes do checklist para manutenção:", err);
+        }
+      }
+    }
+
     const compiledMaterials: ManutencaoMaterialItem[] = [];
     nextSelected.forEach((chkId) => {
-      const chk = checklists.find((c) => c.id === chkId);
+      const chk = updatedChecklists.find((c) => c.id === chkId);
       if (!chk) return;
 
       const components = chk.details?.componentesEstoque || [];
