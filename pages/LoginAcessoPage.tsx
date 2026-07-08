@@ -18,6 +18,7 @@ const LoginAcessoPage: React.FC<LoginAcessoPageProps> = ({ currentUser }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLog, setSelectedLog] = useState<AccessLogEntry | null>(null);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [filterDate, setFilterDate] = useState('');
 
   // Perfil e validação de Admin
@@ -216,7 +217,10 @@ const LoginAcessoPage: React.FC<LoginAcessoPageProps> = ({ currentUser }) => {
                       return (
                         <tr 
                           key={log.id} 
-                          onClick={() => setSelectedLog(log)}
+                          onClick={() => {
+                            setSelectedLog(log);
+                            setIsHistoryModalOpen(true);
+                          }}
                           className={`cursor-pointer transition duration-150 ${
                             isSelected 
                             ? 'bg-indigo-50/70 dark:bg-indigo-950/20' 
@@ -240,6 +244,7 @@ const LoginAcessoPage: React.FC<LoginAcessoPageProps> = ({ currentUser }) => {
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setSelectedLog(log);
+                                setIsHistoryModalOpen(true);
                               }}
                               className="p-1 px-3 text-xs font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 bg-indigo-100/35 dark:bg-indigo-900/10 rounded-lg hover:underline transition"
                             >
@@ -336,6 +341,83 @@ const LoginAcessoPage: React.FC<LoginAcessoPageProps> = ({ currentUser }) => {
         </div>
 
       </div>
+
+    {/* Modal de Histórico de Navegação */}
+    {isHistoryModalOpen && selectedLog && (
+      <Modal 
+        title="Histórico de Navegação" 
+        onClose={() => {
+          setIsHistoryModalOpen(false);
+        }} 
+        maxWidth="max-w-2xl"
+      >
+        <div className="space-y-6 pt-2">
+          {/* Cabeçalho da Sessão Selecionada */}
+          <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-2xl border border-gray-100 dark:border-gray-800 relative">
+            <p className="text-xs text-gray-400 font-bold tracking-wide">Usuário Autenticado</p>
+            <p className="text-base font-black text-gray-950 dark:text-white mt-1 leading-tight">{selectedLog.user_name}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-medium">{selectedLog.user_email}</p>
+            
+            <div className="grid grid-cols-2 gap-4 mt-3 pt-3 border-t border-gray-200/55 dark:border-gray-800">
+              <div>
+                <p className="text-[10px] text-gray-400 font-bold">Entrada</p>
+                <p className="text-xs font-bold text-gray-700 dark:text-gray-300">{formatDateTime(selectedLog.login_at)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-gray-400 font-bold">Total Telas</p>
+                <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400">{selectedLog.visited_pages?.length || 0}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Timeline Stepper de Telas */}
+          <div className="overflow-y-auto max-h-[350px] pr-1 scrollbar-thin">
+            <div className="relative pl-6 space-y-5 border-l-2 border-indigo-100 dark:border-indigo-950 ml-2 pt-2">
+              {selectedLog.visited_pages && selectedLog.visited_pages.map((visit, index) => {
+                const isLast = index === selectedLog.visited_pages.length - 1;
+                
+                return (
+                  <div key={index} className="relative">
+                    {/* Marcador */}
+                    <span className={`absolute -left-[31px] top-1 flex items-center justify-center w-4 h-4 rounded-full ${
+                      isLast 
+                      ? 'bg-indigo-600 border border-white dark:border-gray-800 text-white animate-pulse' 
+                      : 'bg-indigo-200 border border-white dark:border-gray-800 text-indigo-600 dark:bg-indigo-950'
+                    }`}>
+                      <span className="w-1.5 h-1.5 bg-current rounded-full" />
+                    </span>
+
+                    <div>
+                      <div className="flex justify-between items-start gap-2">
+                        <h4 className={`text-xs font-bold leading-none ${isLast ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-800 dark:text-gray-200'}`}>
+                          {visit.label}
+                        </h4>
+                        <span className="text-[10px] text-gray-400 font-semibold shrink-0">
+                          {formatTimeOnly(visit.timestamp)}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-gray-400 dark:text-gray-500 font-bold mt-1 tracking-wider">
+                        Id: {visit.page}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-4 border-t dark:border-gray-700">
+            <button 
+              type="button" 
+              onClick={() => setIsHistoryModalOpen(false)} 
+              className="px-6 py-2.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-xl font-bold text-xs hover:bg-gray-200 transition-all"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      </Modal>
+    )}
     </div>
   );
 };
