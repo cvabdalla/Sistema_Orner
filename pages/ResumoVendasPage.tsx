@@ -1287,7 +1287,7 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                                                     <td onClick={() => setExpandedBudgetRowId(isExpanded ? null : item.id)} className={`${tdClass} text-center`}>
                                                         <div className="flex flex-col items-center">
                                                             <span className="text-[9px] text-gray-450 dark:text-gray-500 font-medium">Orçado: {formatPercent(estMargin)}</span>
-                                                            <span className={`px-2 py-0.5 rounded text-[9px] font-black ${realMargin > 25 ? 'bg-green-100 text-green-800' : realMargin > 15 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
+                                                            <span className={`px-2 py-0.5 rounded text-[9px] font-black ${realMargin > 25 ? 'bg-green-100 text-green-800' : realMargin >= 20 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
                                                                 Real: {formatPercent(realMargin)}
                                                             </span>
                                                         </div>
