@@ -341,15 +341,6 @@ const DashboardPage: React.FC = () => {
           <p className="text-xs font-semibold text-gray-400 mt-0.5">Visão geral do negócio, acompanhamento financeiro e vendas</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2.5 w-full sm:w-auto items-stretch sm:items-center">
-          {activeTab === 'vendas' && (
-              <button
-                  onClick={() => setIsHistModalOpen(true)}
-                  className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-black tracking-wide transition-all bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm border border-indigo-700"
-              >
-                  <CalendarIcon className="w-3.5 h-3.5 text-white" />
-                  Alimentar Histórico
-              </button>
-          )}
           <div className="flex bg-gray-100 dark:bg-gray-800 p-0.5 rounded-xl">
             <button
               onClick={() => setActiveTab('financeiro')}
@@ -490,7 +481,7 @@ const DashboardPage: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 gap-6">
-            <YearlySalesComparisonChart sales={sales} historicalRevenues={historicalRevenues} />
+            <YearlySalesComparisonChart sales={sales} historicalRevenues={historicalRevenues} onAlimentarHistorico={() => setIsHistModalOpen(true)} />
           </div>
         </>
       )}

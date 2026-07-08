@@ -1,10 +1,12 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { ResponsiveContainer, BarChart, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Bar, Line } from 'recharts';
 import type { SalesSummaryItem } from '../types';
+import { CalendarIcon } from '../assets/icons';
 
 interface YearlySalesComparisonChartProps {
     sales: SalesSummaryItem[];
     historicalRevenues?: any[];
+    onAlimentarHistorico?: () => void;
 }
 
 const MONTHS_PT = [
@@ -33,7 +35,7 @@ const formatCompact = (value: number) => {
     return new Intl.NumberFormat('pt-BR', { notation: 'compact', compactDisplay: 'short', maximumFractionDigits: 2 }).format(value);
 };
 
-const YearlySalesComparisonChart: React.FC<YearlySalesComparisonChartProps> = ({ sales: rawSales, historicalRevenues = [] }) => {
+const YearlySalesComparisonChart: React.FC<YearlySalesComparisonChartProps> = ({ sales: rawSales, historicalRevenues = [], onAlimentarHistorico }) => {
     const currentYearStr = new Date().getFullYear().toString();
     const [selectedYear, setSelectedYear] = useState<string>(currentYearStr);
     const [selectedMonth, setSelectedMonth] = useState<string>('Todos');
@@ -248,13 +250,26 @@ const YearlySalesComparisonChart: React.FC<YearlySalesComparisonChartProps> = ({
     }, [chartData]);
 
     return (
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-lg border border-gray-100 dark:border-gray-700/50 h-[420px] flex flex-col justify-between">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-lg border border-gray-100 dark:border-gray-700/50 min-h-[420px] flex flex-col justify-between">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h3 className="text-lg font-black text-gray-950 dark:text-white tracking-tight">Comparativo de Vendas por Ano</h3>
                     <p className="text-xs font-semibold text-gray-400 mt-1">Compare o faturamento de vendas de sistemas entre diferentes períodos</p>
                 </div>
-                <div className="flex gap-3 w-full sm:w-auto">
+                <div className="flex flex-wrap items-end gap-3 w-full sm:w-auto">
+                    {onAlimentarHistorico && (
+                        <div className="flex flex-col">
+                            <label className="text-[10px] font-bold text-gray-500 mb-1">Histórico de Vendas</label>
+                            <button
+                                onClick={onAlimentarHistorico}
+                                className="flex items-center justify-center gap-1.5 px-3 py-1.5 h-[34px] rounded-xl text-[11px] font-black tracking-wide transition-all bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm border border-indigo-700 cursor-pointer"
+                            >
+                                <CalendarIcon className="w-3.5 h-3.5 text-white" />
+                                Alimentar Histórico
+                            </button>
+                        </div>
+                    )}
+
                     {/* Seletor de Ano (Combo Box multi-seleção de anos específicos) */}
                     <div className="flex flex-col relative" ref={dropdownRef}>
                         <label className="text-[10px] font-bold text-gray-500 mb-1">Anos para Comparar</label>
