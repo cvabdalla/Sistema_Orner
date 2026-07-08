@@ -120,7 +120,7 @@ const LoginAcessoPage: React.FC<LoginAcessoPageProps> = ({ currentUser }) => {
       {/* Cabeçalho */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700/50">
         <div>
-          <h1 className="text-2xl font-black text-gray-950 dark:text-white">Acessos de Login</h1>
+          <h1 className="text-2xl font-black text-gray-950 dark:text-white">Logs de Acesso</h1>
           <p className="text-xs text-gray-500 dark:text-gray-400 font-semibold mt-1">
             Histórico completo de autenticação e navegação por tela de todos os colaboradores.
           </p>

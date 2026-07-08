@@ -100,10 +100,10 @@ export const MENU_ITEMS: MenuItem[] = [
     icon: CogIcon,
     children: [
         { id: 'RELATORIOS_CONFIG', label: 'Configurações Gerais', icon: CogIcon },
-        { id: 'USUARIOS_GESTAO', label: 'Gestão de Usuários', icon: UsersIcon },
-        { id: 'USUARIOS_PERFIL', label: 'Perfis de Acesso', icon: LockClosedIcon },
-        { id: 'LOGIN_ACESSO', label: 'Login Acesso', icon: ClipboardListIcon },
-        { id: 'CADASTRO_INSTALADOR', label: 'Cadastro Instalador', icon: UsersIcon },
+        { id: 'USUARIOS_GESTAO', label: 'Cadastro de Usuários', icon: UsersIcon },
+        { id: 'CADASTRO_INSTALADOR', label: 'Cadastro de Instalador', icon: UsersIcon },
+        { id: 'USUARIOS_PERFIL', label: 'Perfil de Usuário', icon: LockClosedIcon },
+        { id: 'LOGIN_ACESSO', label: 'Logs de Acesso', icon: ClipboardListIcon },
     ]
   }
 ];

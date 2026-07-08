@@ -32,9 +32,10 @@ class AccessLogService {
             'INSTALACOES_CALENDARIO': 'Agenda de Serviços',
             'INSTALACOES_CADASTRO': 'Cadastro de Instalações',
             'INSTALACOES_LAVAGEM': 'Lavagem de Placas',
-            'USUARIOS_GESTAO': 'Gestão de Usuários',
-            'USUARIOS_PERFIL': 'Perfis de Acesso',
-            'LOGIN_ACESSO': 'Acessos de Login'
+            'USUARIOS_GESTAO': 'Cadastro de Usuários',
+            'CADASTRO_INSTALADOR': 'Cadastro de Instalador',
+            'USUARIOS_PERFIL': 'Perfil de Usuário',
+            'LOGIN_ACESSO': 'Logs de Acesso'
         };
         return PAGE_LABELS[page] || page;
     }

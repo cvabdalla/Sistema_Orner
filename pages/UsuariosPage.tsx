@@ -177,7 +177,7 @@ const UsuariosPage: React.FC<UsuariosPageProps> = ({ view, currentUser }) => {
                         </div>
                         <div>
                             <h2 className="text-xl font-black text-gray-800 dark:text-white leading-none">
-                                {isAdmin ? 'Gestão de Usuários' : 'Meu perfil e acesso'}
+                                {isAdmin ? 'Cadastro de Usuários' : 'Meu perfil e acesso'}
                             </h2>
                             <p className="text-[10px] text-gray-400 font-bold mt-1.5 tracking-tight">{visibleUsers.length} registros</p>
                         </div>
