@@ -2126,31 +2126,37 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
                     <p className="px-4 py-1.5 text-[8px] font-black text-gray-400 tracking-widest border-b border-gray-50 dark:border-gray-700/50 mb-1">
                       Filtrar por Vendedor
                     </p>
-                    {users.map((user) => (
-                      <label
-                        key={user.id}
-                        className="flex items-center px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer group transition-colors"
-                      >
-                        <input
-                          type="checkbox"
-                          className="hidden"
-                          checked={selectedUsers.includes(String(user.id))}
-                          onChange={() => toggleUserFilter(String(user.id))}
-                        />
-                        <div
-                          className={`w-4 h-4 rounded border mr-3 flex items-center justify-center transition-all ${selectedUsers.includes(String(user.id)) ? "bg-indigo-600 border-indigo-600" : "border-gray-300 dark:border-gray-600"}`}
+                    {users
+                      .filter((user) =>
+                        orcamentos.some(
+                          (orc) => String(orc.owner_id) === String(user.id)
+                        )
+                      )
+                      .map((user) => (
+                        <label
+                          key={user.id}
+                          className="flex items-center px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer group transition-colors"
                         >
-                          {selectedUsers.includes(String(user.id)) && (
-                            <CheckCircleIcon className="w-3 h-3 text-white" />
-                          )}
-                        </div>
-                        <span
-                          className={`text-xs font-bold ${selectedUsers.includes(String(user.id)) ? "text-indigo-600 dark:text-indigo-400" : "text-gray-600 dark:text-gray-300"}`}
-                        >
-                          {user.name}
-                        </span>
-                      </label>
-                    ))}
+                          <input
+                            type="checkbox"
+                            className="hidden"
+                            checked={selectedUsers.includes(String(user.id))}
+                            onChange={() => toggleUserFilter(String(user.id))}
+                          />
+                          <div
+                            className={`w-4 h-4 rounded border mr-3 flex items-center justify-center transition-all ${selectedUsers.includes(String(user.id)) ? "bg-indigo-600 border-indigo-600" : "border-gray-300 dark:border-gray-600"}`}
+                          >
+                            {selectedUsers.includes(String(user.id)) && (
+                              <CheckCircleIcon className="w-3 h-3 text-white" />
+                            )}
+                          </div>
+                          <span
+                            className={`text-xs font-bold ${selectedUsers.includes(String(user.id)) ? "text-indigo-600 dark:text-indigo-400" : "text-gray-600 dark:text-gray-300"}`}
+                          >
+                            {user.name}
+                          </span>
+                        </label>
+                      ))}
                   </div>
                 )}
               </div>
