@@ -33,6 +33,7 @@ const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>('DASHBOARD');
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [editingOrcamento, setEditingOrcamento] = useState<SavedOrcamento | null>(null);
+  const [isReadOnlyOrcamento, setIsReadOnlyOrcamento] = useState(false);
   const [editingReport, setEditingReport] = useState<ExpenseReport | null>(null);
   
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -213,13 +214,23 @@ const App: React.FC = () => {
   };
 
   const handleSetCurrentPage = (page: Page) => {
-    if (page !== 'NOVO_ORCAMENTO') setEditingOrcamento(null);
+    if (page !== 'NOVO_ORCAMENTO') {
+      setEditingOrcamento(null);
+      setIsReadOnlyOrcamento(false);
+    }
     if (page !== 'RELATORIOS_NOVO' && page !== 'INSTALACAO_LAVAGEM_SOLIC') setEditingReport(null);
     setCurrentPage(page);
   };
 
   const handleEditOrcamento = (orcamento: SavedOrcamento) => {
     setEditingOrcamento(orcamento);
+    setIsReadOnlyOrcamento(false);
+    setCurrentPage('NOVO_ORCAMENTO');
+  };
+
+  const handleConsultOrcamento = (orcamento: SavedOrcamento) => {
+    setEditingOrcamento(orcamento);
+    setIsReadOnlyOrcamento(true);
     setCurrentPage('NOVO_ORCAMENTO');
   };
 
@@ -273,8 +284,8 @@ const App: React.FC = () => {
 
     switch (currentPage) {
       case 'DASHBOARD': return <DashboardPage />;
-      case 'ORCAMENTO': return <OrcamentoPage setCurrentPage={handleSetCurrentPage} onEdit={handleEditOrcamento} currentUser={currentUser} hasGlobalView={hasGlobalView} />;
-      case 'NOVO_ORCAMENTO': return <NovoOrcamentoPage setCurrentPage={handleSetCurrentPage} orcamentoToEdit={editingOrcamento} clearEditingOrcamento={() => setEditingOrcamento(null)} currentUser={currentUser} />;
+      case 'ORCAMENTO': return <OrcamentoPage setCurrentPage={handleSetCurrentPage} onEdit={handleEditOrcamento} onConsult={handleConsultOrcamento} currentUser={currentUser} hasGlobalView={hasGlobalView} />;
+      case 'NOVO_ORCAMENTO': return <NovoOrcamentoPage setCurrentPage={handleSetCurrentPage} orcamentoToEdit={editingOrcamento} clearEditingOrcamento={() => setEditingOrcamento(null)} currentUser={currentUser} isReadOnly={isReadOnlyOrcamento} />;
       case 'RESUMO_VENDAS': return <ResumoVendasPage currentUser={currentUser} />;
       case 'MANUTENCAO': return <ManutencaoPage currentUser={currentUser} hasGlobalView={hasGlobalView} />;
       case 'FINANCEIRO_VISAO_GERAL': return <FinanceiroPage view="dashboard" currentUser={currentUser} hasGlobalView={hasGlobalView} />;

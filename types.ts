@@ -481,6 +481,7 @@ export interface AppointmentLogEntry {
 export interface OrcamentoPageProps {
     setCurrentPage: (page: Page) => void;
     onEdit: (orcamento: SavedOrcamento) => void;
+    onConsult?: (orcamento: SavedOrcamento) => void;
     currentUser: User;
     hasGlobalView?: boolean;
 }
@@ -506,6 +507,7 @@ export interface NovoOrcamentoPageProps {
     orcamentoToEdit: SavedOrcamento | null;
     clearEditingOrcamento: () => void;
     currentUser: User;
+    isReadOnly?: boolean;
 }
 
 export interface EstoquePageProps {

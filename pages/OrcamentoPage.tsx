@@ -32,6 +32,7 @@ import {
   ClipboardListIcon,
 } from "../assets/icons";
 import Modal from "../components/Modal";
+import NovoOrcamentoPage from "./NovoOrcamentoPage";
 import { dataService } from "../services/dataService";
 import type { LavagemRecord } from "../types";
 
@@ -169,6 +170,7 @@ const defaultColor = {
 const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
   setCurrentPage,
   onEdit,
+  onConsult,
   currentUser,
 }) => {
   const [orcamentos, setOrcamentos] = useState<SavedOrcamento[]>([]);
@@ -235,6 +237,8 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
   const [calcIdaVolta, setCalcIdaVolta] = useState(true);
   const [calcHotel, setCalcHotel] = useState("0");
   const [calcMargem, setCalcMargem] = useState("0");
+
+  const [consultingOrcamento, setConsultingOrcamento] = useState<SavedOrcamento | null>(null);
 
   const [activeTab, setActiveTab] = useState<string>("Em Aberto");
 
@@ -2275,6 +2279,13 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
                         {/* Top Corner Action Buttons */}
                         <div className="flex gap-1 shrink-0">
                           <button
+                            onClick={() => setConsultingOrcamento(orc)}
+                            className="p-1.5 text-gray-400 bg-gray-50 border border-gray-100 hover:text-indigo-600 hover:bg-indigo-50 dark:bg-gray-800 dark:border-gray-700/50 dark:hover:text-indigo-400 rounded-lg transition-all duration-200"
+                            title="Consultar Orçamento (Apenas Leitura)"
+                          >
+                            <EyeIcon className="w-3.5 h-3.5" />
+                          </button>
+                          <button
                             onClick={() => onEdit(orc)}
                             className={`p-1.5 rounded-lg border transition-all duration-200 ${
                               isApproved
@@ -2300,7 +2311,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
                                   setOrcamentoToDeleteId(orc.id);
                                   setDeleteModalOpen(true);
                                 }}
-                                className="p-1.5 text-gray-400 bg-gray-50 border-gray-100 hover:text-red-600 hover:bg-red-50 dark:bg-gray-800 dark:border-gray-700/50 dark:hover:text-red-400 hover:border-red-100 rounded-lg transition-all duration-200"
+                                className="p-1.5 text-gray-400 bg-gray-50 border border-gray-100 hover:text-red-600 hover:bg-red-50 dark:bg-gray-800 dark:border-gray-700/50 dark:hover:text-red-400 hover:border-red-100 rounded-lg transition-all duration-200"
                                 title="Excluir Orçamento"
                               >
                                 <TrashIcon className="w-3.5 h-3.5" />
@@ -4156,6 +4167,31 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
           </div>
         </Modal>
       )}
+
+      {consultingOrcamento && (() => {
+        const d = getDisplayData(consultingOrcamento);
+        return (
+          <Modal
+            title={`Consulta de Orçamento: ${d.clientName || 'Apenas Leitura'}`}
+            onClose={() => setConsultingOrcamento(null)}
+            maxWidth="max-w-[95vw] md:max-w-7xl"
+          >
+            <div className="p-1">
+              <NovoOrcamentoPage
+                setCurrentPage={(page) => {
+                  if (page === 'ORCAMENTO') {
+                    setConsultingOrcamento(null);
+                  }
+                }}
+                orcamentoToEdit={consultingOrcamento}
+                clearEditingOrcamento={() => setConsultingOrcamento(null)}
+                currentUser={currentUser}
+                isReadOnly={true}
+              />
+            </div>
+          </Modal>
+        );
+      })()}
     </div>
   );
 };

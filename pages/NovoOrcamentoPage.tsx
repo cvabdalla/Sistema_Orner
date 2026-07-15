@@ -23,7 +23,7 @@ const parseNumber = (val: any): number => {
     return isNaN(parsed) ? 0 : parsed;
 };
 
-const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcamento, currentUser }: NovoOrcamentoPageProps): React.ReactElement => {
+const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcamento, currentUser, isReadOnly: isReadOnlyProp }: NovoOrcamentoPageProps): React.ReactElement => {
     const [isModalOpen, setModalOpen] = useState(false);
     const [isPriceCalcModalOpen, setPriceCalcModalOpen] = useState(false);
     const [desiredMargin, setDesiredMargin] = useState('');
@@ -173,7 +173,7 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         setShowMemorialModal(true);
     };
 
-    const isReadOnly = orcamentoToEdit?.status === 'Aprovado';
+    const isReadOnly = orcamentoToEdit?.status === 'Aprovado' || !!isReadOnlyProp;
 
     const initialFormState = {
         dataOrcamento: new Date().toISOString().split('T')[0],
@@ -1308,6 +1308,26 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
 
     return (
         <div className="space-y-4">
+            {isReadOnlyProp && (
+                <div className="flex items-center justify-between bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 px-4 py-2.5 rounded-xl border border-amber-200/50 dark:border-amber-900/20 text-xs font-bold font-sans">
+                    <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        <span>Você está no <strong>Modo Consulta (Apenas Leitura)</strong>. Nenhuma alteração será salva.</span>
+                    </div>
+                    <button 
+                        onClick={() => {
+                            clearEditingOrcamento();
+                            setCurrentPage('ORCAMENTO');
+                        }}
+                        className="text-amber-900 hover:text-amber-950 dark:text-amber-200 dark:hover:text-white underline hover:no-underline font-extrabold"
+                    >
+                        Sair da Consulta
+                    </button>
+                </div>
+            )}
             {/* Top Navigation & Option Variants Row */}
             <div className="flex flex-col md:flex-row justify-between items-center gap-3 bg-white dark:bg-gray-800 p-3 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700/50">
                 <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
