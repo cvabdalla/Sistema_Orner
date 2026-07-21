@@ -211,6 +211,9 @@ export interface LavagemClient {
     is_negotiated?: boolean;
     is_courtesy?: boolean;
     negotiated_total_value?: number;
+    is_archived?: boolean;
+    archived_at?: string;
+    archived_reason?: string;
 }
 
 export interface ChecklistEntry {

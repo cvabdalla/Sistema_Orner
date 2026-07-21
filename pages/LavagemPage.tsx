@@ -6,7 +6,7 @@ import {
     XCircleIcon, SearchIcon, ClockIcon, DollarIcon,
     ChevronDownIcon, HomeIcon, MapPinIcon, UsersIcon, ClipboardListIcon,
     ExclamationTriangleIcon, FilterIcon, ArrowLeftIcon, TrendUpIcon, StarIcon,
-    DocumentReportIcon, PhoneIcon
+    DocumentReportIcon, PhoneIcon, ArchiveIcon, RefreshIcon
 } from '../assets/icons';
 import Modal from '../components/Modal';
 import DashboardCard from '../components/DashboardCard';
@@ -78,7 +78,7 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const [isLoadingCep, setIsLoadingCep] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
-    const [activeTab, setActiveTab] = useState<'timeline' | 'oportunidades'>('timeline');
+    const [activeTab, setActiveTab] = useState<'timeline' | 'oportunidades' | 'arquivados'>('timeline');
     const [filterPackageId, setFilterPackageId] = useState('Todos');
     const [filterStatus, setFilterStatus] = useState('Todos');
     const [usePeriodFilter, setUsePeriodFilter] = useState(false);
@@ -93,12 +93,15 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const [isEditWashDateModalOpen, setIsEditWashDateModalOpen] = useState(false);
     const [isConfirmActionModalOpen, setIsConfirmActionModalOpen] = useState(false);
     const [isContractDetailModalOpen, setIsContractDetailModalOpen] = useState(false);
+    const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
 
     const [editingClient, setEditingClient] = useState<LavagemClient | null>(null);
     const [editingPackage, setEditingPackage] = useState<LavagemPackage | null>(null);
     const [selectedClient, setSelectedClient] = useState<LavagemClient | null>(null);
     const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
     const [isClientLocked, setIsClientLocked] = useState(false);
+    const [clientToArchive, setClientToArchive] = useState<LavagemClient | null>(null);
+    const [archiveReason, setArchiveReason] = useState('');
 
     const [clientForm, setClientForm] = useState<Partial<LavagemClient>>({
         name: '', phone: '', cep: '', address: '', address_number: '', complement: '', city: '', plates_count: 0, installation_end_date: '', observations: ''
@@ -253,8 +256,14 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
             client,
             info: getClientPackageInfo(client)
         })).filter(({ client, info }) => {
-            if (activeTab === 'oportunidades' && client.package_id) return false;
-            if (activeTab === 'timeline' && !client.package_id) return false;
+            if (activeTab === 'arquivados') {
+                if (!client.is_archived) return false;
+            } else {
+                if (client.is_archived) return false;
+                if (activeTab === 'oportunidades' && client.package_id) return false;
+                if (activeTab === 'timeline' && !client.package_id) return false;
+            }
+
             if (searchTerm && !client.name.toLowerCase().includes(searchTerm.toLowerCase()) && !(client.city || '').toLowerCase().includes(searchTerm.toLowerCase())) return false;
 
             if (activeTab === 'timeline') {
@@ -290,6 +299,11 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                 const dateB = b.client.installation_end_date || '9999-12-31';
                 return dateA.localeCompare(dateB);
             }
+            if (activeTab === 'arquivados') {
+                const dateA = a.client.archived_at || '1970-01-01';
+                const dateB = b.client.archived_at || '1970-01-01';
+                return dateB.localeCompare(dateA);
+            }
             return 0;
         });
     }, [clients, packages, records, contracts, activeTab, searchTerm, filterStatus, usePeriodFilter, periodStart, periodEnd]);
@@ -314,7 +328,11 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
         const oneYearAgo = new Date();
         oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
         const oneYearAgoStr = oneYearAgo.toISOString().split('T')[0];
-        return clients.filter(c => !c.package_id && c.installation_end_date && c.installation_end_date <= oneYearAgoStr).length;
+        return clients.filter(c => !c.is_archived && !c.package_id && c.installation_end_date && c.installation_end_date <= oneYearAgoStr).length;
+    }, [clients]);
+
+    const archivedCount = useMemo(() => {
+        return clients.filter(c => c.is_archived).length;
     }, [clients]);
 
     const timelineGroups = useMemo(() => {
@@ -538,6 +556,53 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
         setIsLaunchServiceModalOpen(true);
     };
 
+    const handleOpenArchiveModal = (client: LavagemClient) => {
+        setClientToArchive(client);
+        setArchiveReason('');
+        setIsArchiveModalOpen(true);
+    };
+
+    const handleConfirmArchive = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!clientToArchive) return;
+        setIsSaving(true);
+        try {
+            const updatedClient: LavagemClient = {
+                ...clientToArchive,
+                is_archived: true,
+                archived_at: new Date().toISOString(),
+                archived_reason: archiveReason
+            };
+            await dataService.save('lavagem_clients', updatedClient);
+            await loadData();
+            setIsArchiveModalOpen(false);
+            setClientToArchive(null);
+        } catch (e) {
+            console.error(e);
+            alert("Erro ao arquivar cliente.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleUnarchiveClient = async (client: LavagemClient) => {
+        if (!confirm(`Deseja desarquivar o cliente "${client.name}"? Ele retornará para as listas ativas.`)) return;
+        setIsSaving(true);
+        try {
+            const updatedClient: LavagemClient = {
+                ...client,
+                is_archived: false
+            };
+            await dataService.save('lavagem_clients', updatedClient);
+            await loadData();
+        } catch (e) {
+            console.error(e);
+            alert("Erro ao desarquivar cliente.");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     if (isLoading) return <div className="flex justify-center p-20"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-600"></div></div>;
 
     const inputClass = "w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm";
@@ -564,7 +629,11 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
             </header>
 
             <div className="flex flex-col gap-4">
-                <div className="flex bg-white dark:bg-gray-800 p-1.5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 w-fit"><button onClick={() => setActiveTab('timeline')} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-black text-xs transition-all ${activeTab === 'timeline' ? 'bg-cyan-600 text-white shadow-lg' : 'text-gray-400 hover:text-gray-600'}`}><CalendarIcon className="w-4 h-4" /> Timeline de Serviços</button><button onClick={() => setActiveTab('oportunidades')} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-black text-xs transition-all relative ${activeTab === 'oportunidades' ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20' : 'text-gray-400 hover:text-gray-600'}`}><TrendUpIcon className="w-4 h-4" /> Carteira de Oportunidades {hotCount > 0 && (<span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-black text-white shadow-sm animate-bounce ring-2 ring-white">{hotCount}</span>)}</button></div>
+                <div className="flex bg-white dark:bg-gray-800 p-1.5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 w-fit">
+                    <button onClick={() => setActiveTab('timeline')} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-black text-xs transition-all ${activeTab === 'timeline' ? 'bg-cyan-600 text-white shadow-lg' : 'text-gray-400 hover:text-gray-600'}`}><CalendarIcon className="w-4 h-4" /> Timeline de Serviços</button>
+                    <button onClick={() => setActiveTab('oportunidades')} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-black text-xs transition-all relative ${activeTab === 'oportunidades' ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20' : 'text-gray-400 hover:text-gray-600'}`}><TrendUpIcon className="w-4 h-4" /> Carteira de Oportunidades {hotCount > 0 && (<span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-black text-white shadow-sm animate-bounce ring-2 ring-white">{hotCount}</span>)}</button>
+                    <button onClick={() => setActiveTab('arquivados')} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-black text-xs transition-all ${activeTab === 'arquivados' ? 'bg-slate-700 text-white shadow-lg' : 'text-gray-400 hover:text-gray-600'}`}><ArchiveIcon className="w-4 h-4" /> Arquivados {archivedCount > 0 && (<span className="ml-1 text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-full font-bold">{archivedCount}</span>)}</button>
+                </div>
                 <div className="bg-white dark:bg-gray-800 p-4 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col lg:flex-row items-center gap-4"><div className="relative flex-1 w-full"><SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" /><input type="text" placeholder="Buscar cliente por nome..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-11 pr-4 py-3 rounded-2xl bg-gray-50 dark:bg-gray-900 border-transparent text-sm font-bold outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all" /></div><div className="flex flex-wrap items-center gap-4 w-full lg:w-auto"><div className="min-w-[140px]"><FormLabel>Situação</FormLabel><select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="w-full bg-gray-50 dark:bg-gray-900 border-none rounded-xl p-2.5 text-[11px] font-bold dark:text-white outline-none appearance-none cursor-pointer"><option value="Todos">Todas situações</option><option value="Oportunidade 1 Ano">Oportunidade 1 Ano 🔥</option><option value="Atrasados">Em atraso ⚠️</option><option value="Com agendamentos">Com agendamentos</option><option value="Sem Agendamento">Sem agendamento</option><option value="Ciclo Finalizado">Ciclo Finalizado</option></select></div><div className="flex items-end gap-3 bg-gray-50 dark:bg-gray-900/40 p-2 rounded-2xl border border-gray-100 dark:border-gray-700"><div><FormLabel>Período</FormLabel><select value={usePeriodFilter ? 'enabled' : 'disabled'} onChange={e => setUsePeriodFilter(e.target.value === 'enabled')} className="bg-white dark:bg-gray-800 border-none rounded-lg px-3 py-1.5 text-[11px] font-bold outline-none cursor-pointer shadow-sm"><option value="disabled">Desativado</option><option value="enabled">Habilitado</option></select></div><div className={`flex items-center gap-2 transition-opacity ${usePeriodFilter ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}><div className="relative"><CalendarIcon className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" /><input type="date" value={periodStart} onChange={e => setPeriodStart(e.target.value)} className="bg-white dark:bg-gray-800 border-none rounded-lg pl-8 pr-2 py-1.5 text-[11px] font-bold outline-none shadow-sm" /></div><span className="text-gray-300 font-bold">-</span><div className="relative"><CalendarIcon className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" /><input type="date" value={periodEnd} onChange={e => setPeriodEnd(e.target.value)} className="bg-white dark:bg-gray-800 border-none rounded-lg pl-8 pr-2 py-1.5 text-[11px] font-bold outline-none shadow-sm" /></div></div></div></div></div>
             </div>
 
@@ -607,7 +676,10 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                                                     </div>
                                                     <p className="text-[10px] text-gray-400 font-black flex items-center gap-1"><MapPinIcon className="w-3 h-3" /> {client.city || 'S/ local'} • {client.plates_count} placas</p>
                                                 </div>
-                                                <button onClick={() => { setEditingClient(client); setClientForm({...client, installation_end_date: client.installation_end_date || ''}); setIsClientModalOpen(true); }} className="p-1.5 text-gray-300 hover:text-cyan-600"><EditIcon className="w-4 h-4" /></button>
+                                                <div className="flex items-center gap-1">
+                                                    <button onClick={() => handleOpenArchiveModal(client)} className="p-1.5 text-gray-300 hover:text-red-500 transition-colors" title="Arquivar cliente"><ArchiveIcon className="w-4 h-4" /></button>
+                                                    <button onClick={() => { setEditingClient(client); setClientForm({...client, installation_end_date: client.installation_end_date || ''}); setIsClientModalOpen(true); }} className="p-1.5 text-gray-300 hover:text-cyan-600"><EditIcon className="w-4 h-4" /></button>
+                                                </div>
                                             </div>
 
                                             <div className="flex-1 space-y-4">
@@ -675,7 +747,7 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                     ))}
                     {timelineGroups.length === 0 && <div className="py-20 text-center text-gray-400 italic">Nenhum cliente ativo para os filtros selecionados.</div>}
                 </div>
-            ) : (
+            ) : activeTab === 'oportunidades' ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-fade-in">
                     {visibleClientsWithInfo.map(({ client, info }) => {
                         const oneYearAgo = new Date(); oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
@@ -691,12 +763,67 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                         return (
                             <div key={client.id} className={`bg-white dark:bg-gray-800 rounded-3xl border-2 p-5 shadow-sm hover:shadow-xl transition-all flex flex-col relative ${isHot ? 'border-amber-400 dark:border-amber-600 ring-4 ring-amber-500/5' : 'border-gray-100 dark:border-gray-700'}`}>
                                 {isHot && (<div className="absolute top-0 right-0 bg-amber-500 text-white px-3 py-1 rounded-bl-xl text-[8px] font-black tracking-widest animate-pulse z-10">Venda reativada</div>)}
-                                <div className="flex justify-between items-start mb-4"><div className="space-y-1"><h4 className="font-black text-gray-800 dark:text-white text-base leading-tight">{client.name}</h4><p className="text-[10px] text-gray-400 font-black flex items-center gap-1"><MapPinIcon className="w-3 h-3" /> {client.city || 'S/ local'}</p></div><button onClick={() => { setEditingClient(client); setClientForm({...client, installation_end_date: client.installation_end_date || ''}); setIsClientModalOpen(true); }} className="p-1.5 text-gray-300 hover:text-cyan-600"><EditIcon className="w-4 h-4" /></button></div>
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="space-y-1">
+                                        <h4 className="font-black text-gray-800 dark:text-white text-base leading-tight">{client.name}</h4>
+                                        <p className="text-[10px] text-gray-400 font-black flex items-center gap-1"><MapPinIcon className="w-3 h-3" /> {client.city || 'S/ local'}</p>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <button onClick={() => handleOpenArchiveModal(client)} className="p-1.5 text-gray-300 hover:text-red-500 transition-colors" title="Arquivar cliente"><ArchiveIcon className="w-4 h-4" /></button>
+                                        <button onClick={() => { setEditingClient(client); setClientForm({...client, installation_end_date: client.installation_end_date || ''}); setIsClientModalOpen(true); }} className="p-1.5 text-gray-300 hover:text-cyan-600"><EditIcon className="w-4 h-4" /></button>
+                                    </div>
+                                </div>
                                 <div className="flex-1 space-y-4"><div className={`p-4 rounded-2xl border-2 border-dashed ${isHot ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-300' : 'bg-gray-50 dark:bg-gray-900/10 border-gray-200'} text-center`}><div className="flex items-center justify-center gap-2 mb-1"><ClockIcon className={`w-4 h-4 ${isHot ? 'text-amber-600' : 'text-gray-400'}`} /><span className={`text-[10px] font-black tracking-tighter ${isHot ? 'text-amber-600' : 'text-gray-500'}`}>Tempo de instalação</span></div><p className={`text-xl font-black ${isHot ? 'text-amber-700 dark:text-amber-400' : 'text-gray-600'}`}>{timeText}</p><p className="text-[9px] text-gray-400 font-bold mt-1">Data: {client.installation_end_date ? new Date(client.installation_end_date).toLocaleDateString('pt-BR', {timeZone:'UTC'}) : '---'}</p></div><div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl flex justify-between items-center border border-gray-100 dark:border-gray-700"><div className="flex flex-col"><span className="text-[9px] font-bold text-gray-400">Potencial</span><span className="text-xs font-black text-gray-700 dark:text-gray-200">{client.plates_count} Placas</span></div><div className="w-px h-6 bg-gray-200 dark:bg-gray-700"></div><div className="flex flex-col text-right"><span className="text-[9px] font-bold text-gray-400">Status</span><span className={`text-[10px] font-black ${isHot ? 'text-amber-600' : 'text-gray-500'}`}>{isHot ? 'Hot 🔥' : 'Holding ❄️'}</span></div></div><button onClick={() => handleOpenLaunchModal(client.id)} className={`w-full py-3 rounded-2xl font-black text-xs tracking-widest shadow-lg transition-all ${isHot ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/20' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>Lançar plano</button></div>
                             </div>
                         );
                     })}
                     {visibleClientsWithInfo.length === 0 && <div className="col-span-full py-20 text-center text-gray-400 italic">Nenhuma oportunidade nesta carteira com os filtros atuais.</div>}
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
+                    {visibleClientsWithInfo.map(({ client }) => (
+                        <div key={client.id} className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-200 dark:border-gray-700 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between relative">
+                            <div>
+                                <div className="flex justify-between items-start mb-3">
+                                    <div className="space-y-1">
+                                        <div className="flex items-center gap-2">
+                                            <h4 className="font-black text-gray-800 dark:text-white text-base leading-tight">{client.name}</h4>
+                                            <span className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider">Arquivado</span>
+                                        </div>
+                                        <p className="text-[10px] text-gray-400 font-black flex items-center gap-1"><MapPinIcon className="w-3 h-3" /> {client.city || 'S/ local'} • {client.plates_count} placas</p>
+                                    </div>
+                                </div>
+
+                                <div className="bg-slate-50 dark:bg-slate-900/50 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-2 mb-4">
+                                    <div className="flex justify-between items-center text-[10px] font-bold text-gray-400">
+                                        <span>Data do Arquivamento</span>
+                                        <span>{client.archived_at ? new Date(client.archived_at).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : '---'}</span>
+                                    </div>
+                                    <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
+                                        <p className="text-[10px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Justificativa / Motivo:</p>
+                                        <p className="text-xs font-semibold text-gray-700 dark:text-gray-200 italic bg-white dark:bg-gray-800 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700">
+                                            "{client.archived_reason || 'Sem justificativa informada.'}"
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex gap-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+                                <button
+                                    onClick={() => handleUnarchiveClient(client)}
+                                    disabled={isSaving}
+                                    className="w-full py-2.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2"
+                                >
+                                    <RefreshIcon className="w-4 h-4" /> Desarquivar / Restaurar
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                    {visibleClientsWithInfo.length === 0 && (
+                        <div className="col-span-full py-20 text-center text-gray-400 italic">
+                            Nenhum cliente arquivado.
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -1014,6 +1141,53 @@ const LavagemPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                         <div className="flex gap-3 pt-4 border-t">
                             <button type="button" onClick={() => setIsLaunchServiceModalOpen(false)} className="flex-1 py-3 bg-gray-100 text-gray-500 rounded-xl font-bold text-xs">Cancelar</button>
                             <button type="submit" disabled={isSaving || !launchServiceForm.packageId} className="flex-[2] py-3 bg-cyan-600 text-white rounded-xl font-black text-xs shadow-lg shadow-cyan-600/20 hover:bg-cyan-700 transition-all active:scale-95">Confirmar vínculo</button>
+                        </div>
+                    </form>
+                </Modal>
+            )}
+
+            {isArchiveModalOpen && clientToArchive && (
+                <Modal
+                    title="Arquivar Cliente / Cancelar Serviço"
+                    onClose={() => { setIsArchiveModalOpen(false); setClientToArchive(null); }}
+                    maxWidth="max-w-md"
+                >
+                    <form onSubmit={handleConfirmArchive} className="space-y-4 pt-2">
+                        <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl flex items-start gap-3">
+                            <ExclamationTriangleIcon className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                            <div>
+                                <p className="text-xs font-black text-amber-800 dark:text-amber-300">{clientToArchive.name}</p>
+                                <p className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">Ao arquivar, este cliente não aparecerá na Timeline de Serviços nem na Carteira de Oportunidades.</p>
+                            </div>
+                        </div>
+
+                        <div>
+                            <FormLabel>Justificativa do arquivamento / cancelamento *</FormLabel>
+                            <textarea
+                                required
+                                rows={3}
+                                value={archiveReason}
+                                onChange={e => setArchiveReason(e.target.value)}
+                                placeholder="Informe o motivo pelo qual o cliente não deseja mais o serviço de lavagem..."
+                                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-3 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
+                            />
+                        </div>
+
+                        <div className="flex gap-3 pt-3 border-t">
+                            <button
+                                type="button"
+                                onClick={() => { setIsArchiveModalOpen(false); setClientToArchive(null); }}
+                                className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl font-bold text-xs"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={isSaving || !archiveReason.trim()}
+                                className="flex-[2] py-3 bg-red-600 text-white rounded-xl font-black text-xs shadow-lg shadow-red-600/20 hover:bg-red-700 transition-all active:scale-95 disabled:opacity-50"
+                            >
+                                {isSaving ? 'Arquivando...' : 'Confirmar Arquivamento'}
+                            </button>
                         </div>
                     </form>
                 </Modal>

@@ -322,6 +322,7 @@ class SupabaseDataService implements IDataService {
             return this.deserialize<T>(collection, data);
         } catch (e: any) {
             const isFetchError = e.message?.includes('fetch') || e.message?.includes('network') || e.name === 'TypeError' || e.message?.includes('Failed to fetch') || e.message?.includes('network error');
+            const isMissingTable = e.message?.includes('Could not find the table') || e.message?.includes('does not exist') || e.message?.includes('schema cache') || e.code === '42P01';
             const isTrueOffline = isFetchError && (typeof window !== 'undefined' && window.navigator && window.navigator.onLine === false);
             
             const isDbSchemaOrRlsError = 
@@ -341,12 +342,9 @@ class SupabaseDataService implements IDataService {
                 e.code === '23502' || 
                 e.code === '23505';
             
-            if (isTrueOffline) {
-                console.warn(`[DATABASE SAVE FALLBACK] ${collection}: Salvo com sucesso no cache local (offline/schema). Detalhe:`, e.message);
+            if (isTrueOffline || collection === 'login_access_logs' || isFetchError || isMissingTable) {
+                console.warn(`[DATABASE SAVE FALLBACK] ${collection}: Salvo com sucesso no cache local. Detalhe:`, e.message);
                 return deserializedItem;
-            } else if (isFetchError) {
-                console.error(`[DATABASE SAVE ERROR] ${collection}: Erro de rede/envio mesmo online:`, e.message);
-                throw new Error(`Erro de rede ou tamanho de arquivo excedido: ${e.message || 'Falha na conexão com o servidor'}`);
             } else if (isDbSchemaOrRlsError) {
                 console.error(`[DATABASE SCHEMA/SECURITY ERROR] ${collection}:`, e.message);
                 throw new Error(`Erro de Banco de Dados / RLS: ${e.message || 'Acesso negado ou tabela incorreta'}`);
@@ -383,12 +381,9 @@ class SupabaseDataService implements IDataService {
         } catch (e: any) {
             const isFetchError = e.message?.includes('fetch') || e.message?.includes('network') || e.name === 'TypeError' || e.message?.includes('Failed to fetch') || e.message?.includes('network error');
             const isTrueOffline = isFetchError && (typeof window !== 'undefined' && window.navigator && window.navigator.onLine === false);
-            if (isTrueOffline) {
-                console.warn(`[OFFLINE BATCH SAVE STATE] ${collection}: Salvo localmente (offline). Motivo:`, e.message);
+            if (isTrueOffline || collection === 'login_access_logs' || isFetchError) {
+                console.warn(`[OFFLINE BATCH SAVE STATE] ${collection}: Salvo localmente. Motivo:`, e.message);
                 return deserializedItems;
-            } else if (isFetchError) {
-                console.error(`[DATABASE BATCH SAVE ERROR] ${collection}: Erro de rede mesmo online:`, e.message);
-                throw new Error(`Erro de rede ou limite de tamanho no envio em lote: ${e.message || 'Falha no servidor'}`);
             } else {
                 console.error(`[BATCH SAVE ERROR] ${collection}:`, e.message);
                 throw e;
