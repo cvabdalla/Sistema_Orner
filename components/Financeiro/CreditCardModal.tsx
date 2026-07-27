@@ -189,7 +189,7 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
                     type: 'despesa',
                     dueDate: dueDate,
                     bankId: selectedBankId, 
-                    launchDate: new Date().toISOString().split('T')[0],
+                    launchDate: item.date || new Date().toISOString().split('T')[0],
                     categoryId: item.categoryId,
                     status: 'pendente'
                 });
@@ -332,7 +332,7 @@ const CreditCardModal: React.FC<CreditCardModalProps> = ({ isOpen, onClose, onSa
                                     <table className="w-full text-left table-auto">
                                         <thead className="bg-gray-50/50 dark:bg-gray-900/40 border-b border-gray-100 dark:border-gray-700 sticky top-0 z-10 backdrop-blur-sm">
                                             <tr className="text-[9px] font-black text-gray-400 tracking-tighter">
-                                                <th className="py-2.5 pl-4 w-32">Data</th>
+                                                <th className="py-2.5 pl-4 w-32">Data do gasto</th>
                                                 <th className="py-2.5">Descrição</th>
                                                 <th className="py-2.5 w-40">Categoria</th>
                                                 <th className="py-2.5 w-32">Cobrança</th>

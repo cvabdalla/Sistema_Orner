@@ -18,6 +18,16 @@ const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 }).format(value);
 };
 
+const formatDate = (dateStr?: string) => {
+    if (!dateStr) return '---';
+    const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+    try {
+        return new Date(cleanDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+    } catch {
+        return '---';
+    }
+};
+
 const toSentenceCase = (str: string) => {
     if (!str) return '';
     // Remove o prefixo [Cartão (**** Digitos)] ou apenas [Cartão] da descrição se existir
@@ -150,7 +160,7 @@ const CreditCardDetailModal: React.FC<CreditCardDetailModalProps> = ({
                                                             <tr key={item.id} className="hover:bg-indigo-50/20 dark:hover:bg-gray-900/40 transition-colors">
                                                                 <td className="px-5 py-3">
                                                                     <p className="font-bold text-gray-800 dark:text-gray-200 text-[11px]">{toSentenceCase(item.description)}</p>
-                                                                    <p className="text-[8px] text-gray-400 font-bold tracking-tighter">Venc: {item.dueDate ? new Date(item.dueDate).toLocaleDateString('pt-BR', {timeZone:'UTC'}) : '---'}</p>
+                                                                    <p className="text-[8px] text-gray-400 font-bold tracking-tighter">Data do gasto: {formatDate(item.launchDate || item.dueDate)}</p>
                                                                 </td>
                                                                 <td className="px-5 py-3">
                                                                     <span className="text-[9px] font-black text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded">{getCategoryName(item.categoryId)}</span>

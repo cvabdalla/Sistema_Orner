@@ -192,15 +192,16 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                         </div>
                         <div>
                             <label htmlFor="launchDate" className={labelClasses}>
-                                <ClockIcon className="w-3.5 h-3.5" /> Data de lançamento
+                                <ClockIcon className="w-3.5 h-3.5" /> Data do gasto
                             </label>
                             <input 
                                 type="date" 
                                 name="launchDate" 
                                 id="launchDate" 
                                 value={formState.launchDate || ''} 
-                                disabled 
-                                className={`${inputClasses} opacity-60 cursor-not-allowed bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700`} 
+                                onChange={handleInputChange}
+                                disabled={isCancelled} 
+                                className={`${inputClasses} ${isCancelled ? 'opacity-70 grayscale' : ''}`} 
                             />
                         </div>
                     </div>
