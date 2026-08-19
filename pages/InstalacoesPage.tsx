@@ -2,11 +2,11 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
     CalendarIcon, ClipboardListIcon, PlusIcon, TrashIcon, 
     ArrowLeftIcon, ChevronDownIcon, CheckCircleIcon, 
-    EditIcon, MapIcon, BoltIcon, ClockIcon, UsersIcon, XCircleIcon, ExclamationTriangleIcon, CogIcon, TableIcon
+    EditIcon, MapIcon, BoltIcon, ClockIcon, UsersIcon, XCircleIcon, ExclamationTriangleIcon, CogIcon, TableIcon, SparklesIcon
 } from '../assets/icons';
 import Modal from '../components/Modal';
 import { dataService } from '../services/dataService';
-import type { InstalacoesPageProps, ActivityCatalogEntry, ActivityAppointment, SavedOrcamento, PainelConfig, User, AppointmentLogEntry, Instalador, LavagemClient } from '../types';
+import type { InstalacoesPageProps, ActivityCatalogEntry, ActivityAppointment, SavedOrcamento, PainelConfig, User, AppointmentLogEntry, Instalador, LavagemClient, LavagemRecord, LavagemPackage } from '../types';
 
 const TIME_OPTIONS = Array.from({ length: 33 }, (_, i) => {
     const hour = Math.floor(i / 2) + 7; // Começa às 07:00
@@ -75,6 +75,8 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
     const [users, setUsers] = useState<User[]>([]);
     const [instaladores, setInstaladores] = useState<Instalador[]>([]);
     const [lavagemClients, setLavagemClients] = useState<LavagemClient[]>([]);
+    const [lavagemRecords, setLavagemRecords] = useState<LavagemRecord[]>([]);
+    const [lavagemPackages, setLavagemPackages] = useState<LavagemPackage[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isLoadingCep, setIsLoadingCep] = useState(false);
@@ -114,14 +116,16 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
         setIsLoading(true);
         try {
             const isAdmin = String(currentUser.profileId) === '001';
-            const [catData, apptData, orcData, userData, logData, instaladoresData, lavagemClientsData] = await Promise.all([
+            const [catData, apptData, orcData, userData, logData, instaladoresData, lavagemClientsData, lavagemRecordsData, lavagemPackagesData] = await Promise.all([
                 dataService.getAll<ActivityCatalogEntry>('activity_catalog', currentUser.id, true),
                 dataService.getAll<ActivityAppointment>('activity_appointments', currentUser.id, isAdmin),
                 dataService.getAll<SavedOrcamento>('orcamentos', currentUser.id, true),
                 dataService.getAll<User>('system_users', undefined, true),
                 dataService.getAll<AppointmentLogEntry>('activity_appointments_log', currentUser.id, isAdmin),
                 dataService.getAll<Instalador>('instaladores', undefined, true),
-                dataService.getAll<LavagemClient>('lavagem_clients', currentUser.id, true)
+                dataService.getAll<LavagemClient>('lavagem_clients', currentUser.id, true),
+                dataService.getAll<LavagemRecord>('lavagem_records', currentUser.id, true),
+                dataService.getAll<LavagemPackage>('lavagem_packages', currentUser.id, true)
             ]);
             setCatalog(catData.sort((a,b) => a.title.localeCompare(b.title)));
             setAppointments(apptData);
@@ -130,6 +134,8 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
             setInstaladores((instaladoresData || []).filter((i: any) => i.ativo));
             setCancelLog((logData || []).sort((a, b) => b.deletedAt.localeCompare(a.deletedAt)));
             setLavagemClients(lavagemClientsData || []);
+            setLavagemRecords(lavagemRecordsData || []);
+            setLavagemPackages(lavagemPackagesData || []);
         } catch (e) { console.error(e); } finally { setIsLoading(false); }
     };
 
@@ -354,6 +360,25 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                 observations: matchingClient.observations || ''
             };
 
+            // Se nenhuma atividade estiver selecionada, tenta selecionar automaticamente a atividade de lavagem
+            if (!updatedForm.activityId) {
+                const washActivity = catalog.find(c => {
+                    const title = (c.title || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                    return title.includes('lavagem');
+                });
+                if (washActivity) {
+                    updatedForm.activityId = washActivity.id;
+                }
+            }
+
+            // Se houver lavagem agendada pendente para esse cliente, pré-carrega a data sugerida
+            const clientRecs = lavagemRecords.filter(r => r.client_id === matchingClient.id);
+            const pendingScheduled = clientRecs.find(r => r.status === 'scheduled');
+            if (pendingScheduled?.date && (!apptForm.startDate || apptForm.startDate === new Date().toISOString().split('T')[0])) {
+                updatedForm.startDate = pendingScheduled.date;
+                updatedForm.endDate = pendingScheduled.date;
+            }
+
             // Também procura pelo arranjo no orçamento aprovado se houver um correspondente para este cliente
             const matchingOrc = orcamentos.find(o => {
                 const v = o.variants?.find(x => x.isPrincipal) || o.variants?.[0] || { formState: o.formState };
@@ -454,15 +479,106 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
         return days;
     }, [currentDate, calendarViewMode, appointments]);
 
+    // Clientes com lavagens em aberto (ciclo ativo com lavagens restantes ou agendamentos em aberto)
+    const clientsWithOpenWashes = useMemo(() => {
+        return (lavagemClients || []).filter(client => {
+            if (client.is_archived) return false;
+            
+            const clientRecords = (lavagemRecords || []).filter(r => r.client_id === client.id);
+            const pkg = (lavagemPackages || []).find(p => p.id === client.package_id);
+            const washQtyLimit = client.contract_wash_qty || pkg?.wash_qty || 0;
+            const launchDate = client.package_launch_date || '1970-01-01';
+            const currentCycleRecords = clientRecords.filter(r => (r.created_at || r.date) >= launchDate);
+            const executedCount = currentCycleRecords.filter(r => r.status === 'executed').length;
+            const scheduledCount = currentCycleRecords.filter(r => r.status === 'scheduled').length;
+            
+            const hasScheduled = scheduledCount > 0;
+            // Tem contrato ativo com quantidade de lavagens contratadas e ainda faltam lavagens a serem executadas
+            const hasActivePendingContract = Boolean(client.package_id) && washQtyLimit > 0 && executedCount < washQtyLimit;
+
+            return hasScheduled || hasActivePendingContract;
+        });
+    }, [lavagemClients, lavagemRecords, lavagemPackages]);
+
+    // Opções de clientes filtradas estritamente conforme a atividade selecionada
+    const clientOptions = useMemo(() => {
+        const selectedActivity = catalog.find(c => c.id === apptForm.activityId);
+        const activityTitle = (selectedActivity?.title || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+        const isWash = activityTitle.includes('lavag') || activityTitle.includes('limpez') || activityTitle.includes('higieniz');
+        const isInstall = activityTitle.includes('instalac') || activityTitle.includes('instala') || activityTitle.includes('montag');
+
+        if (isWash) {
+            // Quando a atividade for lavagem: puxar ESTRITAMENTE os clientes que têm lavagens em aberto
+            return clientsWithOpenWashes.map(wc => {
+                const plates = wc.plates_count ? ` (${wc.plates_count} placas)` : '';
+                return {
+                    value: wc.name,
+                    label: `${wc.name}${plates}`
+                };
+            }).sort((a, b) => a.value.localeCompare(b.value));
+        }
+
+        if (isInstall) {
+            // Quando a atividade for instalação: puxar ESTRITAMENTE os clientes dos pedidos aprovados
+            const approvedOrcamentos = orcamentos.filter(o => o.status === 'Aprovado');
+            const clientsMap = new Map<string, string>();
+            approvedOrcamentos.forEach(o => {
+                const v = o.variants?.find(x => x.isPrincipal) || o.variants?.[0] || { formState: o.formState };
+                const name = v.formState?.nomeCliente?.trim();
+                if (name && !clientsMap.has(name)) {
+                    const plates = v.formState?.quantidadePlacas || v.formState?.qtdPlacas ? ` (${v.formState.quantidadePlacas || v.formState.qtdPlacas} placas)` : '';
+                    clientsMap.set(name, `${name}${plates}`);
+                }
+            });
+            return Array.from(clientsMap.entries()).map(([name, label]) => ({
+                value: name,
+                label
+            })).sort((a, b) => a.value.localeCompare(b.value));
+        }
+
+        // Outras atividades ou sem atividade selecionada: unifica os clientes relevantes com pedidos ou lavagens em aberto
+        const map = new Map<string, string>();
+        
+        // Clientes de orçamentos aprovados
+        const approvedOrcamentos = orcamentos.filter(o => o.status === 'Aprovado');
+        approvedOrcamentos.forEach(o => {
+            const v = o.variants?.find(x => x.isPrincipal) || o.variants?.[0] || { formState: o.formState };
+            const name = v.formState?.nomeCliente?.trim();
+            if (name && !map.has(name)) {
+                map.set(name, name);
+            }
+        });
+
+        // Clientes com lavagem em aberto
+        clientsWithOpenWashes.forEach(wc => {
+            if (wc.name && !map.has(wc.name)) {
+                map.set(wc.name, wc.name);
+            }
+        });
+
+        return Array.from(map.entries()).map(([name, label]) => ({
+            value: name,
+            label
+        })).sort((a, b) => a.value.localeCompare(b.value));
+    }, [catalog, apptForm.activityId, clientsWithOpenWashes, orcamentos]);
+
     const approvedClients = useMemo(() => {
         const approvedOrcamentos = orcamentos.filter(o => o.status === 'Aprovado');
         const fromOrcamentos = approvedOrcamentos.map(o => {
             const v = o.variants?.find(x => x.isPrincipal) || o.variants?.[0] || { formState: o.formState };
-            return v.formState?.nomeCliente;
-        });
-        const allClients = [...fromOrcamentos].filter(Boolean);
-        return Array.from(new Set(allClients));
-    }, [orcamentos]);
+            return v.formState?.nomeCliente?.trim();
+        }).filter(Boolean);
+
+        // Inclui todos os clientes ativos de lavagem
+        const fromLavagem = (lavagemClients || [])
+            .filter(c => !c.is_archived)
+            .map(c => c.name?.trim())
+            .filter(Boolean);
+
+        const allClients = [...fromLavagem, ...fromOrcamentos];
+        return Array.from(new Set(allClients)).sort((a, b) => a.localeCompare(b));
+    }, [orcamentos, lavagemClients]);
 
     const isPersonalForm = useMemo(() => {
         if (!apptForm.activityId) return false;
@@ -853,7 +969,25 @@ const InstalacoesPage: React.FC<InstalacoesPageProps> = ({ currentUser }) => {
                         {!isPersonalForm && (
                             <div className="bg-white dark:bg-gray-800 p-3.5 rounded-2xl border border-gray-100 dark:border-gray-700 space-y-3 shadow-sm">
                                 <SectionHeader icon={<MapIcon />} title="Localização do serviço" color="bg-teal-600" />
-                                <div><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Cliente</label><input required list="client-list" type="text" value={apptForm.clientName} onChange={e => handleClientNameChange(e.target.value)} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2.5 text-xs font-bold shadow-sm" placeholder="Nome do cliente..." /><datalist id="client-list">{approvedClients.map(c => <option key={c} value={c} />)}</datalist></div>
+                                <div>
+                                    <label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Cliente</label>
+                                    <select
+                                        required
+                                        value={apptForm.clientName || ''}
+                                        onChange={e => handleClientNameChange(e.target.value)}
+                                        className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2.5 text-xs font-bold text-gray-800 dark:text-white shadow-sm outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
+                                    >
+                                        <option value="">Selecione o cliente...</option>
+                                        {apptForm.clientName && !clientOptions.some(o => o.value === apptForm.clientName) && (
+                                            <option value={apptForm.clientName}>{apptForm.clientName}</option>
+                                        )}
+                                        {clientOptions.map(c => (
+                                            <option key={c.value} value={c.value}>
+                                                {c.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
                                 <div className="grid grid-cols-12 gap-2">
                                     <div className="col-span-4"><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">CEP</label><input type="text" value={apptForm.cep} onChange={e => setApptForm({...apptForm, cep: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2 text-xs font-bold shadow-sm" /></div>
                                     <div className="col-span-8"><label className="block text-[9px] font-bold text-gray-400 mb-1 ml-1">Endereço</label><input type="text" value={apptForm.address} onChange={e => setApptForm({...apptForm, address: e.target.value})} className="w-full rounded-xl border-transparent bg-gray-50 dark:bg-gray-700 p-2 text-xs font-bold shadow-sm" /></div>
