@@ -231,7 +231,7 @@ export interface HomologacaoEntry {
     id: string;
     owner_id: string;
     responsible_user_id?: string;
-    checkinId: string;
+    checkinId?: string;
     clientName: string;
     date: string;
     status: 'Em Análise' | 'Aprovada' | 'Pendente';

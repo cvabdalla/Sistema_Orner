@@ -91,6 +91,23 @@ class SupabaseDataService implements IDataService {
                 bairro: item.bairro || ''
             };
         }
+        if (collection === 'homologacao_entries' && item) {
+            return {
+                ...item,
+                owner_id: (typeof item.owner_id === 'string' && item.owner_id.trim()) 
+                    ? item.owner_id.trim() 
+                    : null,
+                responsible_user_id: (typeof item.responsible_user_id === 'string' && item.responsible_user_id.trim()) 
+                    ? item.responsible_user_id.trim() 
+                    : null,
+                checkinId: (typeof item.checkinId === 'string' && item.checkinId.trim()) 
+                    ? item.checkinId.trim() 
+                    : null,
+                observations: (typeof item.observations === 'string' && item.observations.trim()) 
+                    ? item.observations.trim() 
+                    : null
+            };
+        }
         return item;
     }
 
@@ -312,14 +329,26 @@ class SupabaseDataService implements IDataService {
                 Object.entries(dbItem).filter(([_, v]) => v !== undefined)
             );
 
-            const { data, error } = await supabase
-                .from(collection)
-                .upsert(cleanItem)
-                .select()
-                .single();
+            let resultData: any = null;
+            if (collection === 'homologacao_entries' || collection === 'checklist_checkin' || collection === 'checklist_checkout') {
+                const { error } = await supabase
+                    .from(collection)
+                    .upsert(cleanItem);
 
-            if (error) throw error;
-            return this.deserialize<T>(collection, data);
+                if (error) throw error;
+                resultData = cleanItem;
+            } else {
+                const { data, error } = await supabase
+                    .from(collection)
+                    .upsert(cleanItem)
+                    .select()
+                    .single();
+
+                if (error) throw error;
+                resultData = data;
+            }
+
+            return this.deserialize<T>(collection, resultData);
         } catch (e: any) {
             const isFetchError = e.message?.includes('fetch') || e.message?.includes('network') || e.name === 'TypeError' || e.message?.includes('Failed to fetch') || e.message?.includes('network error');
             const isMissingTable = e.message?.includes('Could not find the table') || e.message?.includes('does not exist') || e.message?.includes('schema cache') || e.code === '42P01';

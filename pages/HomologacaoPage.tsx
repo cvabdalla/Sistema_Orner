@@ -13,7 +13,7 @@ import {
 } from '../assets/icons';
 import Modal from '../components/Modal';
 import { dataService } from '../services/dataService';
-import type { HomologacaoEntry, ChecklistEntry, User, ExpenseAttachment, PainelConfig, UserProfile, LavagemClient } from '../types';
+import type { HomologacaoEntry, ChecklistEntry, User, ExpenseAttachment, PainelConfig, UserProfile, LavagemClient, SavedOrcamento } from '../types';
 
 const ADMIN_PROFILE_IDS = ['001', '00000000-0000-0000-0000-000000000001'];
 
@@ -119,7 +119,9 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
     const loadedKeysRef = useRef<Set<string>>(new Set());
 
     const [lavagemClients, setLavagemClients] = useState<LavagemClient[]>([]);
+    const [orcamentos, setOrcamentos] = useState<SavedOrcamento[]>([]);
     const [showClientSuggestions, setShowClientSuggestions] = useState(false);
+    const [nameError, setNameError] = useState(false);
     const clientSuggestionRef = useRef<HTMLDivElement>(null);
 
     const [form, setForm] = useState<Partial<HomologacaoEntry>>({
@@ -152,12 +154,13 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
             // Buscamos apenas os campos necessários para a listagem principal, excluindo 'files' que causa timeout
             const homoFields = 'id, owner_id, responsible_user_id, clientName, date, status, checkinId, observations';
             
-            const [homoData, checkinData, userData, profileData, lavagemData] = await Promise.all([
+            const [homoData, checkinData, userData, profileData, lavagemData, orcamentoData] = await Promise.all([
                 dataService.getPartial<HomologacaoEntry>('homologacao_entries', homoFields, currentUser.id, isMasterAdmin),
                 dataService.getPartial<ChecklistEntry>('checklist_checkin', 'id, project, status', undefined, true), 
                 dataService.getPartial<User>('system_users', 'id, name, avatar, profileId', undefined, true),
                 dataService.getAll<UserProfile>('system_profiles', undefined, true),
-                dataService.getAll<LavagemClient>('lavagem_clients', currentUser.id, isMasterAdmin)
+                dataService.getAll<LavagemClient>('lavagem_clients', currentUser.id, isMasterAdmin),
+                dataService.getPartial<SavedOrcamento>('orcamentos', 'id, status, formState, variants', currentUser.id, isMasterAdmin)
             ]);
 
             const loaded = (homoData || []).filter(e => e && e.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
@@ -165,6 +168,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
             setCheckins(checkinData || []);
             setSystemUsers(userData || []);
             setLavagemClients(lavagemData || []);
+            setOrcamentos(orcamentoData || []);
 
             const homologationProfiles = (profileData || []).filter(p => 
                 p.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('homologacao')
@@ -172,6 +176,14 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
 
             const hUsers = (userData || []).filter(u => homologationProfiles.includes(u.profileId));
             setHomologationUsers(hUsers);
+
+            // Pré-seleciona o primeiro responsável caso o formulário esteja sem responsável
+            setForm(prev => {
+                if (!prev.responsible_user_id && hUsers.length > 0) {
+                    return { ...prev, responsible_user_id: hUsers[0].id };
+                }
+                return prev;
+            });
 
             // Limpa o ref de controle de carregamento pois acabamos de recarregar a listagem e os arquivos podem ter mudado
             loadedKeysRef.current.clear();
@@ -217,28 +229,56 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
     }, [entries, searchTerm, activeMainTab, isMasterAdmin, currentUser.id]);
 
     const homologacaoClientSuggestions = useMemo(() => {
-        // 1. Get clients from lavagem_clients
-        const listFromLavagem = (lavagemClients || []).map(c => ({
-            id: c.id,
-            name: c.name,
-            phone: c.phone || '',
-            source: 'Lavagem' as const
-        }));
+        const result: Array<{ id: string; name: string; phone: string; source: 'Checkin' | 'Pedido Aprovado' | 'Lavagem' }> = [];
+        const seenNames = new Set<string>();
 
-        // 2. Get projects/clients from checklist_checkin
-        const existingNames = new Set(listFromLavagem.map(c => c.name.toLowerCase().trim()));
-        const listFromCheckins = (checkins || [])
-            .map(c => ({
-                id: `checkin-${c.id}`,
-                name: c.project || 'Sem nome',
-                phone: '',
-                source: 'Checkin' as const
-            }))
-            .filter(c => c.name !== 'Sem nome' && !existingNames.has(c.name.toLowerCase().trim()));
+        // 1. Clientes com Checkin de Obra
+        (checkins || []).forEach(c => {
+            const name = (c.project || '').trim();
+            if (name && name !== 'Sem nome' && !seenNames.has(name.toLowerCase())) {
+                seenNames.add(name.toLowerCase());
+                result.push({
+                    id: `checkin-${c.id}`,
+                    name,
+                    phone: '',
+                    source: 'Checkin'
+                });
+            }
+        });
 
-        const merged = [...listFromLavagem, ...listFromCheckins];
-        return merged.sort((a, b) => a.name.localeCompare(b.name));
-    }, [lavagemClients, checkins]);
+        // 2. Clientes de Pedidos Aprovados (Orçamentos com status 'Aprovado')
+        const approved = (orcamentos || []).filter(o => o.status === 'Aprovado');
+        approved.forEach(o => {
+            const v = o.variants?.find((x: any) => x.isPrincipal) || o.variants?.[0] || { formState: o.formState };
+            const name = (v?.formState?.nomeCliente || o.formState?.nomeCliente || '').trim();
+            const phone = (v?.formState?.telefone || o.formState?.telefone || '').trim();
+            if (name && !seenNames.has(name.toLowerCase())) {
+                seenNames.add(name.toLowerCase());
+                result.push({
+                    id: `orcamento-${o.id}`,
+                    name,
+                    phone,
+                    source: 'Pedido Aprovado'
+                });
+            }
+        });
+
+        // 3. Clientes de Lavagem
+        (lavagemClients || []).forEach(c => {
+            const name = (c.name || '').trim();
+            if (name && !seenNames.has(name.toLowerCase())) {
+                seenNames.add(name.toLowerCase());
+                result.push({
+                    id: `lavagem-${c.id}`,
+                    name,
+                    phone: c.phone || '',
+                    source: 'Lavagem'
+                });
+            }
+        });
+
+        return result.sort((a, b) => a.name.localeCompare(b.name));
+    }, [checkins, orcamentos, lavagemClients]);
 
     const filteredHomologacaoSuggestions = useMemo(() => {
         const search = (form.clientName || '').toLowerCase();
@@ -399,44 +439,88 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
     };
 
     const handleSelectCheckin = (checkinId: string) => {
+        if (!checkinId) {
+            setForm(prev => ({ ...prev, checkinId: '' }));
+            return;
+        }
         const checkin = checkins.find(c => String(c.id) === String(checkinId));
         if (checkin) {
             setForm(prev => ({
                 ...prev,
                 checkinId: String(checkin.id),
-                clientName: checkin.project 
+                clientName: checkin.project || prev.clientName || ''
             }));
+            setNameError(false);
         } else {
-            setForm(prev => ({ ...prev, checkinId: '', clientName: '' }));
+            setForm(prev => ({ ...prev, checkinId: '' }));
         }
     };
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!form.checkinId || !form.clientName || !form.responsible_user_id) {
-            alert("Por favor, preencha todos os campos obrigatórios.");
+        
+        const clientNameTrimmed = form.clientName?.trim();
+        if (!clientNameTrimmed) {
+            setNameError(true);
+            alert("Por favor, preencha o Nome do Titular (Concessionária) para iniciar a homologação.");
             return;
+        }
+        setNameError(false);
+
+        // Usuários válidos no banco de dados para evitar erro de Foreign Key
+        const validUserIds = systemUsers.map(u => String(u.id));
+
+        // Garante responsável selecionado existente no banco
+        let responsibleId = (form.responsible_user_id || '').trim();
+        if (!responsibleId || (validUserIds.length > 0 && !validUserIds.includes(responsibleId))) {
+            responsibleId = homologationUsers[0]?.id || systemUsers.find(u => u.name.toLowerCase().includes('romulo'))?.id || validUserIds[0] || '';
+        }
+
+        // Garante owner_id válido existente no banco
+        let ownerId = editingEntryId 
+            ? (entries.find(e => e.id === editingEntryId)?.owner_id || currentUser.id)
+            : currentUser.id;
+        
+        if (validUserIds.length > 0 && !validUserIds.includes(String(ownerId))) {
+            ownerId = validUserIds[0] || '';
+        }
+
+        // Se não tiver checkinId informado, busca automaticamente se já existe um checkin com o mesmo nome de cliente
+        let linkedCheckinId = form.checkinId || '';
+        if (!linkedCheckinId) {
+            const foundCheckin = checkins.find(c => c.project?.toLowerCase().trim() === clientNameTrimmed.toLowerCase());
+            if (foundCheckin) {
+                linkedCheckinId = String(foundCheckin.id);
+            }
         }
 
         setIsSaving(true);
         try {
             const entry: HomologacaoEntry = {
                 id: editingEntryId || `homo-${Date.now()}`,
-                owner_id: editingEntryId ? entries.find(e => e.id === editingEntryId)?.owner_id || currentUser.id : currentUser.id,
-                responsible_user_id: form.responsible_user_id,
-                checkinId: form.checkinId!,
-                clientName: form.clientName!,
+                owner_id: ownerId || currentUser.id,
+                responsible_user_id: responsibleId,
+                checkinId: linkedCheckinId,
+                clientName: clientNameTrimmed,
                 date: editingEntryId ? entries.find(e => e.id === editingEntryId)?.date || new Date().toISOString() : new Date().toISOString(),
                 status: (form.status as any) || 'Em Análise',
                 files: form.files as any,
-                observations: form.observations
+                observations: form.observations || ''
             };
 
             await dataService.save('homologacao_entries', entry);
             setModalOpen(false);
             setEditingEntryId(null);
-            setForm({ checkinId: '', clientName: '', responsible_user_id: '', status: 'Em Análise', files: { procuracao: [], contaEnergia: [], documentoFoto: [], outrosDocumentos: [] } });
-            setModalMessage(editingEntryId ? "Homologação atualizada!" : "Homologação registrada!");
+            setNameError(false);
+            setForm({ 
+                checkinId: '', 
+                clientName: '', 
+                responsible_user_id: homologationUsers[0]?.id || '', 
+                status: 'Em Análise', 
+                files: { procuracao: [], contaEnergia: [], documentoFoto: [], outrosDocumentos: [] },
+                observations: ''
+            });
+            setModalMessage(editingEntryId ? "Homologação atualizada com sucesso!" : "Homologação iniciada com sucesso!");
             setSuccessModalOpen(true);
             await loadData();
         } catch (e: any) {
@@ -478,26 +562,35 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
         }
     };
 
-    const handleViewCheckin = async (checkinId: string) => {
+    const handleViewCheckin = async (checkinId?: string, clientName?: string) => {
         setIsLoading(true);
         try {
-            // Buscamos o checkin completo apenas sob demanda
-            const checkin = await dataService.getById<ChecklistEntry>('checklist_checkin', checkinId);
+            let checkin: ChecklistEntry | null = null;
+            if (checkinId) {
+                checkin = await dataService.getById<ChecklistEntry>('checklist_checkin', checkinId);
+            }
+            if (!checkin && clientName) {
+                const found = checkins.find(c => c.project?.toLowerCase().trim() === clientName.toLowerCase().trim());
+                if (found) {
+                    checkin = await dataService.getById<ChecklistEntry>('checklist_checkin', found.id);
+                }
+            }
             if (checkin) {
                 setSelectedCheckin(checkin);
                 setActiveCheckinStep(1);
                 setViewCheckinModalOpen(true);
             } else {
-                alert("Dados técnicos do Check-in não encontrados ou indisponíveis.");
+                alert("Nenhum Check-in de Obra encontrado ou vinculado para este cliente.");
             }
         } catch (error) {
+            console.error("Erro ao carregar dados do Check-in:", error);
             alert("Erro ao carregar dados do Check-in.");
         } finally {
             setIsLoading(false);
         }
     };
 
-    const handleViewCheckout = async (checkinId: string, clientName: string) => {
+    const handleViewCheckout = async (checkinId?: string, clientName?: string) => {
         setIsLoading(true);
         try {
             // Buscamos todos os checklists de checkout usando campos parciais para fazer o cruzamento sem baixar imagens pesadas
@@ -507,9 +600,11 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
             );
             const foundCheckout = checkouts.find(c => {
                 if (!c) return false;
-                const matchesCheckinId = String(c.id) === String(checkinId) || String(c.originalCheckinId || '') === String(checkinId);
-                const matchesClientName = c.project?.toLowerCase().trim() === clientName?.toLowerCase().trim() || 
-                                          String(c.nomeCliente || '').toLowerCase().trim() === clientName?.toLowerCase().trim();
+                const matchesCheckinId = Boolean(checkinId) && (String(c.id) === String(checkinId) || String(c.originalCheckinId || '') === String(checkinId));
+                const matchesClientName = Boolean(clientName) && (
+                    c.project?.toLowerCase().trim() === clientName?.toLowerCase().trim() || 
+                    String(c.nomeCliente || '').toLowerCase().trim() === clientName?.toLowerCase().trim()
+                );
                 return matchesCheckinId || matchesClientName;
             });
 
@@ -708,7 +803,23 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                     </div>
                 </div>
                 <button 
-                    onClick={() => { setEditingEntryId(null); setForm({ checkinId: '', clientName: '', responsible_user_id: '', status: 'Em Análise', files: { procuracao: [], contaEnergia: [], documentoFoto: [], outrosDocumentos: [] } }); setModalOpen(true); }} 
+                    onClick={() => { 
+                        setEditingEntryId(null); 
+                        setIsViewOnly(false);
+                        setNameError(false);
+                        const defaultResp = homologationUsers.length > 0 
+                            ? homologationUsers[0].id 
+                            : (systemUsers.find(u => u.name.toLowerCase().includes('romulo'))?.id || systemUsers[0]?.id || currentUser.id || '');
+                        setForm({ 
+                            checkinId: '', 
+                            clientName: '', 
+                            responsible_user_id: defaultResp, 
+                            status: 'Em Análise', 
+                            files: { procuracao: [], contaEnergia: [], documentoFoto: [], outrosDocumentos: [] },
+                            observations: ''
+                        }); 
+                        setModalOpen(true); 
+                    }} 
                     className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs transition-all active:scale-95 flex items-center gap-2 shadow-sm"
                 >
                     <PlusIcon className="w-4 h-4" /> Nova Homologação
@@ -803,8 +914,9 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                                     <div className="grid grid-cols-2 gap-2 mt-2">
                                         <button 
                                             type="button"
-                                            onClick={(e) => { e.stopPropagation(); handleViewCheckin(entry.checkinId); }}
+                                            onClick={(e) => { e.stopPropagation(); handleViewCheckin(entry.checkinId, entry.clientName); }}
                                             className="flex items-center justify-center gap-2 py-2 px-3 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100/50 dark:border-indigo-900/35 hover:bg-indigo-100/50 dark:hover:bg-indigo-950/40 text-indigo-650 dark:text-indigo-400 rounded-xl text-xs font-black tracking-tight transition-all"
+                                            title="Ver Check-in de Obra vinculado ou correspondente"
                                         >
                                             <ClipboardCheckIcon className="w-4 h-4 text-indigo-500" />
                                             <span>Check-in</span>
@@ -874,15 +986,26 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                     <form onSubmit={handleSave} className="space-y-4 pt-2 animate-fade-in">
                         <div className="space-y-4">
                             <div>
-                                <FormLabel>Check-in (Projetos Efetivados ou Em Aberto)</FormLabel>
+                                <div className="flex justify-between items-center mb-1">
+                                    <FormLabel>Vincular a um Check-in de Obra (Opcional)</FormLabel>
+                                    {form.checkinId && !isViewOnly && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setForm(prev => ({ ...prev, checkinId: '' }))}
+                                            className="text-[10px] text-gray-400 hover:text-red-500 font-bold transition-colors"
+                                            title="Remover vínculo com check-in"
+                                        >
+                                            Desvincular
+                                        </button>
+                                    )}
+                                </div>
                                 <select 
-                                    required 
                                     disabled={isViewOnly}
-                                    value={form.checkinId} 
+                                    value={form.checkinId || ''} 
                                     onChange={e => handleSelectCheckin(e.target.value)} 
                                     className="w-full rounded-xl border-2 border-indigo-100 bg-gray-50 dark:bg-gray-800 p-2 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all disabled:opacity-70"
                                 >
-                                    <option value="">Selecione...</option>
+                                    <option value="">Nenhum check-in vinculado (avulso / prévio)</option>
                                     {checkins.filter(c => c.status === 'Aberto' || c.status === 'Efetivado' || c.status === 'Finalizado' || c.id === form.checkinId).map(c => (
                                         <option key={c.id} value={c.id}>
                                             {c.project} {c.status === 'Aberto' ? '(Em Aberto)' : ''}
@@ -894,17 +1017,18 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                                 <FormLabel>Nome do Titular (Concessionária) *</FormLabel>
                                 <div className="relative">
                                     <input 
-                                        required
                                         type="text"
                                         autoComplete="off"
                                         disabled={isViewOnly}
                                         value={form.clientName || ''}
+                                        placeholder="Digite ou selecione o nome do titular / cliente"
                                         onFocus={() => !isViewOnly && setShowClientSuggestions(true)}
                                         onChange={e => {
                                             setForm({...form, clientName: e.target.value});
+                                            if (nameError && e.target.value.trim()) setNameError(false);
                                             if (!isViewOnly) setShowClientSuggestions(true);
                                         }}
-                                        className="w-full rounded-xl border-2 border-indigo-50 bg-gray-50 dark:bg-gray-900 p-2 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm transition-all disabled:opacity-70 pr-10"
+                                        className={`w-full rounded-xl border-2 ${nameError ? 'border-red-500 ring-2 ring-red-500/20' : 'border-indigo-50'} bg-gray-50 dark:bg-gray-900 p-2 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm transition-all disabled:opacity-70 pr-10`}
                                     />
                                     {!isViewOnly && (
                                         <button 
@@ -916,6 +1040,9 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                                         </button>
                                     )}
                                 </div>
+                                {nameError && (
+                                    <p className="text-[10px] text-red-500 font-bold mt-1">Por favor, informe ou selecione o nome do titular (concessionária).</p>
+                                )}
 
                                 {showClientSuggestions && !isViewOnly && filteredHomologacaoSuggestions.length > 0 && (
                                     <div className="absolute top-full left-0 z-50 w-full bg-white dark:bg-gray-800 mt-1 rounded-xl shadow-2xl border border-indigo-50 dark:border-gray-700 py-2 max-h-52 overflow-y-auto custom-scrollbar animate-fade-in">
@@ -925,10 +1052,16 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                                                 key={idx}
                                                 type="button"
                                                 onClick={() => {
+                                                    // Procura se esse cliente possui um Check-in correspondente
+                                                    const matchingCheckin = checkins.find(c => c.project?.toLowerCase().trim() === client.name.toLowerCase().trim());
+                                                    const linkedCheckinId = client.source === 'Checkin' 
+                                                        ? client.id.replace('checkin-', '') 
+                                                        : (matchingCheckin ? String(matchingCheckin.id) : (form.checkinId || ''));
+
                                                     setForm(prev => ({
                                                         ...prev,
                                                         clientName: client.name,
-                                                        checkinId: client.source === 'Checkin' ? client.id.replace('checkin-', '') : prev.checkinId
+                                                        checkinId: linkedCheckinId
                                                     }));
                                                     setShowClientSuggestions(false);
                                                 }}
@@ -937,12 +1070,16 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                                                 <div>
                                                     <p className="text-[11px] font-bold text-gray-800 dark:text-white group-hover:text-indigo-700 transition-colors">
                                                         {client.name}
-                                                        <span className={`ml-2 text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide inline-block ${client.source === 'Lavagem' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'}`}>
-                                                            {client.source === 'Lavagem' ? 'Cadastrado' : 'Check-In'}
+                                                        <span className={`ml-2 text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide inline-block ${
+                                                            client.source === 'Checkin' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
+                                                            client.source === 'Pedido Aprovado' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300' :
+                                                            'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
+                                                        }`}>
+                                                            {client.source}
                                                         </span>
                                                     </p>
                                                     <p className="text-[9px] text-gray-400 font-medium">
-                                                        {client.phone ? `Whats: ${client.phone}` : 'Sem telefone'}
+                                                        {client.phone ? `Whats: ${client.phone}` : 'Cliente cadastrado'}
                                                     </p>
                                                 </div>
                                                 <CheckCircleIcon className="w-3.5 h-3.5 text-indigo-200 group-hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-all" />
@@ -1059,10 +1196,17 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                             {!isViewOnly && (
                                 <button 
                                     type="submit" 
-                                    disabled={isSaving || !form.checkinId || !form.clientName || !form.responsible_user_id} 
-                                    className="flex-[2] py-3 bg-indigo-600 text-white rounded-xl font-black text-xs shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 active:scale-95 disabled:opacity-50"
+                                    disabled={isSaving} 
+                                    className="flex-[2] py-3 bg-indigo-600 text-white rounded-xl font-black text-xs shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                                 >
-                                    {isSaving ? 'Gravando...' : editingEntryId ? 'Salvar' : 'Iniciar'}
+                                    {isSaving ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                            <span>Gravando...</span>
+                                        </>
+                                    ) : (
+                                        editingEntryId ? 'Salvar Homologação' : 'Iniciar Homologação'
+                                    )}
                                 </button>
                             )}
                         </div>
