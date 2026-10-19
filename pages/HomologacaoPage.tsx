@@ -122,6 +122,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
     const [orcamentos, setOrcamentos] = useState<SavedOrcamento[]>([]);
     const [showClientSuggestions, setShowClientSuggestions] = useState(false);
     const [nameError, setNameError] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
     const clientSuggestionRef = useRef<HTMLDivElement>(null);
 
     const [form, setForm] = useState<Partial<HomologacaoEntry>>({
@@ -458,22 +459,24 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
+        setSaveError(null);
         
         const clientNameTrimmed = form.clientName?.trim();
         if (!clientNameTrimmed) {
             setNameError(true);
-            alert("Por favor, preencha o Nome do Titular (Concessionária) para iniciar a homologação.");
+            setSaveError("Por favor, preencha o Nome do Titular (Concessionária) para iniciar a homologação.");
             return;
         }
         setNameError(false);
 
         // Usuários válidos no banco de dados para evitar erro de Foreign Key
-        const validUserIds = systemUsers.map(u => String(u.id));
+        const fallbackAdminIds = ['1767988420092', '1768353043957', '1767989463622', '001', '002', '1769110924790', '1783015057627'];
+        const validUserIds = Array.from(new Set([...systemUsers.map(u => String(u.id)), ...fallbackAdminIds]));
 
         // Garante responsável selecionado existente no banco
         let responsibleId = (form.responsible_user_id || '').trim();
-        if (!responsibleId || (validUserIds.length > 0 && !validUserIds.includes(responsibleId))) {
-            responsibleId = homologationUsers[0]?.id || systemUsers.find(u => u.name.toLowerCase().includes('romulo'))?.id || validUserIds[0] || '';
+        if (!responsibleId || !validUserIds.includes(responsibleId)) {
+            responsibleId = homologationUsers[0]?.id || systemUsers.find(u => u.name.toLowerCase().includes('romulo'))?.id || validUserIds[0] || '1768353043957';
         }
 
         // Garante owner_id válido existente no banco
@@ -481,8 +484,8 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
             ? (entries.find(e => e.id === editingEntryId)?.owner_id || currentUser.id)
             : currentUser.id;
         
-        if (validUserIds.length > 0 && !validUserIds.includes(String(ownerId))) {
-            ownerId = validUserIds[0] || '';
+        if (!validUserIds.includes(String(ownerId))) {
+            ownerId = validUserIds[0] || '1767988420092';
         }
 
         // Se não tiver checkinId informado, busca automaticamente se já existe um checkin com o mesmo nome de cliente
@@ -498,9 +501,9 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
         try {
             const entry: HomologacaoEntry = {
                 id: editingEntryId || `homo-${Date.now()}`,
-                owner_id: ownerId || currentUser.id,
+                owner_id: ownerId || '1767988420092',
                 responsible_user_id: responsibleId,
-                checkinId: linkedCheckinId,
+                checkinId: linkedCheckinId || undefined,
                 clientName: clientNameTrimmed,
                 date: editingEntryId ? entries.find(e => e.id === editingEntryId)?.date || new Date().toISOString() : new Date().toISOString(),
                 status: (form.status as any) || 'Em Análise',
@@ -512,6 +515,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
             setModalOpen(false);
             setEditingEntryId(null);
             setNameError(false);
+            setSaveError(null);
             setForm({ 
                 checkinId: '', 
                 clientName: '', 
@@ -525,7 +529,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
             await loadData();
         } catch (e: any) {
             console.error("Erro ao salvar homologação:", e);
-            alert(`Erro ao salvar: ${e?.message || 'Verifique o tamanho do anexo ou sua conexão com o banco de dados.'}`);
+            setSaveError(`Erro ao salvar: ${e?.message || 'Verifique sua conexão ou tente novamente.'}`);
         } finally {
             setIsSaving(false);
         }
@@ -807,6 +811,7 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                         setEditingEntryId(null); 
                         setIsViewOnly(false);
                         setNameError(false);
+                        setSaveError(null);
                         const defaultResp = homologationUsers.length > 0 
                             ? homologationUsers[0].id 
                             : (systemUsers.find(u => u.name.toLowerCase().includes('romulo'))?.id || systemUsers[0]?.id || currentUser.id || '');
@@ -1188,6 +1193,12 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
                                 {renderFileList(form.files?.outrosDocumentos, 'outrosDocumentos')}
                             </div>
                         </div>
+
+                        {saveError && (
+                            <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-xs font-bold rounded-xl animate-fade-in">
+                                {saveError}
+                            </div>
+                        )}
 
                         <div className="flex gap-3 pt-4 border-t dark:border-gray-700">
                             <button type="button" onClick={() => { setModalOpen(false); setEditingEntryId(null); setIsViewOnly(false); }} className="flex-1 py-3 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-300 rounded-xl font-bold text-xs">

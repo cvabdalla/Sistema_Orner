@@ -313,6 +313,26 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
                 await dataService.save('financial_transactions', updatedTx);
                 if (status === 'pago') {
                     await syncReportStatus(id, tx.relatedReportId);
+
+                    // Se for pagamento de instalação vinculada a um orçamento/obra, marca a etapa como paga
+                    if (id.startsWith('tx-inst-')) {
+                        const orcId = id.replace('tx-inst-', '');
+                        try {
+                            const orc = await dataService.getById<any>('orcamentos', orcId);
+                            if (orc) {
+                                await dataService.save('orcamentos', {
+                                    ...orc,
+                                    venda_etapas: {
+                                        ...(orc.venda_etapas || {}),
+                                        pag_instalacao: true,
+                                        pag_instalacao_data: today
+                                    }
+                                });
+                            }
+                        } catch (err) {
+                            console.warn("[SYNC] Erro ao sincronizar etapa pag_instalacao:", err);
+                        }
+                    }
                 }
             } catch (e) {
                 console.error("Erro ao atualizar status:", e);

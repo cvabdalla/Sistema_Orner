@@ -5,21 +5,44 @@ import {
     UploadIcon, TrashIcon, ExclamationTriangleIcon,
     TableIcon, SearchIcon, CalendarIcon, SaveIcon,
     ClockIcon, ArrowLeftIcon, DocumentReportIcon,
-    EyeIcon, XCircleIcon, ArrowDownIcon
+    EyeIcon, XCircleIcon, ArrowDownIcon, UsersIcon
 } from '../assets/icons';
 import { dataService } from '../services/dataService';
-import type { FinancialTransaction, FinancialCategory, ExpenseReport, User, ExpenseAttachment, InstalacaoLavagemPageProps } from '../types';
+import type { 
+    FinancialTransaction, FinancialCategory, ExpenseReport, 
+    User, ExpenseAttachment, InstalacaoLavagemPageProps, 
+    Instalador, SavedOrcamento 
+} from '../types';
 import Modal from '../components/Modal';
 
 const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
 };
 
+export interface TechnicalItem {
+    id: string;
+    description: string;
+    amount: number;
+    dueDate: string;
+    launchDate: string;
+    categoryId: string;
+    categoryName: string;
+    installerId?: string;
+    installerName?: string;
+    clientName?: string;
+    itemType: 'INSTALACAO' | 'LAVAGEM' | 'OUTRO';
+    isFromOrcamento?: boolean;
+    rawOrcamento?: SavedOrcamento;
+    rawTx?: FinancialTransaction;
+}
+
 const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUser, reportToEdit, onSave }) => {
-    const [pendingTransactions, setPendingTransactions] = useState<FinancialTransaction[]>([]);
+    const [pendingItems, setPendingItems] = useState<TechnicalItem[]>([]);
     const [allTransactions, setAllTransactions] = useState<FinancialTransaction[]>([]);
     const [categories, setCategories] = useState<FinancialCategory[]>([]);
+    const [installers, setInstallers] = useState<Instalador[]>([]);
     const [selectedTxIds, setSelectedTxIds] = useState<string[]>([]);
+    const [selectedInstallerFilter, setSelectedInstallerFilter] = useState<string>('ALL');
     const [attachments, setAttachments] = useState<ExpenseAttachment[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [configKmValue, setConfigKmValue] = useState(1.20);
@@ -38,11 +61,13 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
     const loadData = async () => {
         setIsLoading(true);
         try {
-            const [txs, cats, allReports, remoteConfigs] = await Promise.all([
+            const [txs, cats, allReports, remoteConfigs, insts, orcs] = await Promise.all([
                 dataService.getAll<FinancialTransaction>('financial_transactions', currentUser.id, true),
                 dataService.getAll<FinancialCategory>('financial_categories'),
                 dataService.getAll<ExpenseReport>('expense_reports', undefined, true),
-                dataService.getAll<any>('system_configs', undefined, true)
+                dataService.getAll<any>('system_configs', undefined, true),
+                dataService.getAll<Instalador>('instaladores'),
+                dataService.getAll<SavedOrcamento>('orcamentos', currentUser.id, true)
             ]);
 
             const remoteKm = (remoteConfigs || []).find((c: any) => c.id === 'km_value');
@@ -50,30 +75,117 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                 setConfigKmValue(parseFloat(remoteKm.value) || 1.20);
             }
 
+            const activeInstallers = (insts || []).filter(i => i && i.ativo !== false);
+            setInstallers(activeInstallers);
+            setCategories(cats || []);
+            setAllTransactions(txs || []);
+
             const usedTxIdsInOtherReports = new Set(
-                allReports
+                (allReports || [])
                     .filter(r => r.status !== 'Cancelado')
                     .filter(r => !reportToEdit || r.id !== reportToEdit.id)
                     .flatMap(r => (r.items || []).map(item => item.id))
             );
 
-            const targetCatIds = cats
+            // Categoria de instalação padrão
+            const instalacaoCat = (cats || []).find(c => {
+                const n = (c.name || '').toLowerCase();
+                return n === 'instalação' || n === 'instalacao';
+            }) || (cats || []).find(c => (c.name || '').toLowerCase().includes('instal')) || { id: 'instalação-1768270771212', name: 'Instalação' };
+
+            const items: TechnicalItem[] = [];
+
+            // 1. Instalações finalizadas a partir dos Orçamentos / Obras
+            (orcs || []).forEach(o => {
+                const etapas = o.venda_etapas || {};
+                // Verifica se a instalação foi finalizada e ainda não foi paga
+                if (etapas.instalacao_finalizada && !etapas.pag_instalacao) {
+                    const v: any = o.variants?.find((x: any) => x.isPrincipal) || o.variants?.[0] || {};
+                    const fs: any = { ...o.formState, ...(v.formState || {}) };
+                    const calc: any = v.calculated || {};
+
+                    const clientName = fs.nomeCliente || 'Cliente sem nome';
+                    const installerId = fs.instaladorId || '';
+                    const matchedInst = activeInstallers.find(i => String(i.id) === String(installerId));
+                    const installerName = matchedInst ? matchedInst.nome : (fs.instaladorNome || (installerId ? 'Instalador Parceiro' : 'Não Definido'));
+
+                    let amount = calc.totalInstalacao || 0;
+                    if (!amount || amount === 0) {
+                        const qtd = parseFloat(fs.terceiroInstalacaoQtd) || 0;
+                        const custo = parseFloat(fs.terceiroInstalacaoCusto) || 0;
+                        amount = qtd * custo;
+                    }
+                    if (!amount || amount === 0) {
+                        amount = parseFloat(fs.projetoInstalacaoCusto) || 0;
+                    }
+
+                    const rawEtapas: any = etapas;
+                    const rawOrc: any = o;
+                    const date = rawEtapas.instalacao_finalizada_data || rawEtapas.instalacao_data || (rawOrc.createdAt ? rawOrc.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]);
+                    const txId = `tx-inst-${o.id}`;
+
+                    if (!usedTxIdsInOtherReports.has(txId)) {
+                        items.push({
+                            id: txId,
+                            description: `Instalação - ${clientName}`,
+                            amount: Number(amount) || 0,
+                            dueDate: date,
+                            launchDate: date,
+                            categoryId: instalacaoCat.id,
+                            categoryName: 'Instalação',
+                            installerId: installerId,
+                            installerName: installerName,
+                            clientName: clientName,
+                            itemType: 'INSTALACAO',
+                            isFromOrcamento: true,
+                            rawOrcamento: o
+                        });
+                    }
+                }
+            });
+
+            // 2. Transações avulsas da tabela financial_transactions (Lavagens ou Instalações diretas)
+            const targetCatIds = (cats || [])
                 .filter(c => {
                     const name = (c.name || '').toLowerCase();
                     return name.includes('lavagem') || name.includes('instalação') || name.includes('instalacao');
                 })
                 .map(c => c.id);
 
-            const filteredTxs = txs.filter(t => 
-                t.type === 'despesa' && 
-                t.status === 'pendente' && 
-                targetCatIds.includes(t.categoryId) &&
-                !usedTxIdsInOtherReports.has(t.id)
-            );
+            (txs || []).forEach(t => {
+                if (
+                    t.type === 'despesa' && 
+                    t.status === 'pendente' && 
+                    targetCatIds.includes(t.categoryId) &&
+                    !usedTxIdsInOtherReports.has(t.id) &&
+                    !items.some(it => it.id === t.id)
+                ) {
+                    const cat = (cats || []).find(c => c.id === t.categoryId);
+                    const catName = cat?.name || 'Instalação / Lavagem';
+                    const isWash = catName.toLowerCase().includes('lavagem');
 
-            setPendingTransactions(filteredTxs.sort((a, b) => a.dueDate.localeCompare(b.dueDate)));
-            setAllTransactions(txs || []);
-            setCategories(cats);
+                    // Tenta identificar se o instalador está no texto da descrição
+                    let matchedInst = activeInstallers.find(i => 
+                        t.description.toLowerCase().includes(i.nome.toLowerCase().trim())
+                    );
+
+                    items.push({
+                        id: t.id,
+                        description: t.description,
+                        amount: t.amount,
+                        dueDate: t.dueDate,
+                        launchDate: t.launchDate,
+                        categoryId: t.categoryId,
+                        categoryName: catName,
+                        installerId: matchedInst ? matchedInst.id : undefined,
+                        installerName: matchedInst ? matchedInst.nome : undefined,
+                        itemType: isWash ? 'LAVAGEM' : 'INSTALACAO',
+                        rawTx: t
+                    });
+                }
+            });
+
+            setPendingItems(items.sort((a, b) => (b.dueDate || '').localeCompare(a.dueDate || '')));
 
             if (reportToEdit && reportToEdit.items) {
                 const draftIds = reportToEdit.items.map(i => i.id);
@@ -82,7 +194,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
             }
 
         } catch (e) {
-            console.error("Erro ao carregar dados:", e);
+            console.error("Erro ao carregar dados técnicos:", e);
         } finally {
             setIsLoading(false);
         }
@@ -92,20 +204,77 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
         loadData();
     }, [reportToEdit]);
 
+    // Contagem de itens por instalador
+    const installerCounts = useMemo(() => {
+        const counts: Record<string, number> = { ALL: pendingItems.length, UNASSIGNED: 0 };
+        installers.forEach(inst => {
+            counts[inst.id] = 0;
+        });
+
+        pendingItems.forEach(item => {
+            if (item.installerId && counts[item.installerId] !== undefined) {
+                counts[item.installerId] = (counts[item.installerId] || 0) + 1;
+            } else {
+                counts.UNASSIGNED = (counts.UNASSIGNED || 0) + 1;
+            }
+        });
+
+        return counts;
+    }, [pendingItems, installers]);
+
+    // Lista filtrada pelo instalador selecionado e busca
+    const filteredItems = useMemo(() => {
+        return pendingItems.filter(item => {
+            // Filtro por instalador
+            if (selectedInstallerFilter !== 'ALL') {
+                if (selectedInstallerFilter === 'UNASSIGNED') {
+                    if (item.installerId && installers.some(i => i.id === item.installerId)) {
+                        return false;
+                    }
+                } else if (item.installerId !== selectedInstallerFilter) {
+                    return false;
+                }
+            }
+
+            // Filtro por termo de busca
+            if (searchTerm) {
+                const term = searchTerm.toLowerCase();
+                const matchDesc = item.description.toLowerCase().includes(term);
+                const matchClient = (item.clientName || '').toLowerCase().includes(term);
+                const matchInst = (item.installerName || '').toLowerCase().includes(term);
+                if (!matchDesc && !matchClient && !matchInst) return false;
+            }
+
+            return true;
+        });
+    }, [pendingItems, selectedInstallerFilter, searchTerm, installers]);
+
     const selectedTotal = useMemo(() => {
         if (isReadOnly && reportToEdit) {
             return reportToEdit.totalValue || (reportToEdit.items || []).reduce((acc, i) => acc + (i.others || 0), 0);
         }
-        return pendingTransactions
+        return pendingItems
             .filter(t => selectedTxIds.includes(t.id))
             .reduce((acc, curr) => acc + curr.amount, 0);
-    }, [selectedTxIds, pendingTransactions, isReadOnly, reportToEdit]);
+    }, [selectedTxIds, pendingItems, isReadOnly, reportToEdit]);
 
     const toggleSelection = (id: string) => {
         if (isReadOnly) return;
         setSelectedTxIds(prev => 
             prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
         );
+    };
+
+    const handleSelectAllVisible = () => {
+        if (isReadOnly) return;
+        const visibleIds = filteredItems.map(i => i.id);
+        const allVisibleSelected = visibleIds.every(id => selectedTxIds.includes(id));
+
+        if (allVisibleSelected) {
+            setSelectedTxIds(prev => prev.filter(id => !visibleIds.includes(id)));
+        } else {
+            setSelectedTxIds(prev => Array.from(new Set([...prev, ...visibleIds])));
+        }
     };
 
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -175,13 +344,14 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                     setIsSaving(false);
                 }
             } else {
-                alert("Selecione pelo menos um lançamento.");
+                alert("Selecione pelo menos uma instalação ou serviço.");
+                return;
             }
             return;
         }
         
         if (status === 'Transferido' && attachments.length === 0) {
-            alert("A Nota Fiscal (NF) é obrigatória para enviar.");
+            alert("A Nota Fiscal (NF) ou comprovante é obrigatório para enviar para pagamento.");
             return;
         }
 
@@ -190,15 +360,60 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
         setIsConfirmDraftModalOpen(false);
 
         try {
-            const selectedItems = pendingTransactions.filter(t => selectedTxIds.includes(t.id));
+            const selectedItems = pendingItems.filter(t => selectedTxIds.includes(t.id));
             const reportId = reportToEdit ? reportToEdit.id : `tech-${Date.now()}`;
             
+            // 1. Para itens originados de Orçamentos, cria a transação financeira correspondente
+            // e vincula ao relatório para que o financeiro visualize
+            for (const item of selectedItems) {
+                if (item.isFromOrcamento && item.rawOrcamento) {
+                    const txPayload: FinancialTransaction = {
+                        id: item.id,
+                        owner_id: currentUser.id || '1767988420092',
+                        description: item.description,
+                        amount: item.amount,
+                        type: 'despesa',
+                        dueDate: item.dueDate,
+                        launchDate: item.launchDate,
+                        categoryId: item.categoryId,
+                        status: 'pendente',
+                        relatedReportId: reportId,
+                        invoiceSent: (status === 'Transferido')
+                    };
+                    await dataService.save('financial_transactions', txPayload);
+
+                    // Atualiza o orçamento com a informação de pagamento solicitado
+                    const updatedOrc = {
+                        ...item.rawOrcamento,
+                        venda_etapas: {
+                            ...(item.rawOrcamento.venda_etapas || {}),
+                            pag_instalacao_solicitado: true,
+                            pag_instalacao_report_id: reportId
+                        }
+                    };
+                    await dataService.save('orcamentos', updatedOrc);
+                } else if (item.rawTx) {
+                    // Atualiza transação avulsa existente com o relatedReportId
+                    await dataService.save('financial_transactions', {
+                        ...item.rawTx,
+                        relatedReportId: reportId,
+                        invoiceSent: (status === 'Transferido')
+                    });
+                }
+            }
+
+            // Identifica o instalador principal se houver
+            const uniqueInstallerNames = Array.from(new Set(selectedItems.map(i => i.installerName).filter(Boolean)));
+            const requesterLabel = uniqueInstallerNames.length === 1 
+                ? `Instalador: ${uniqueInstallerNames[0]}` 
+                : (reportToEdit ? reportToEdit.requester : currentUser.name);
+
             const finalReport: ExpenseReport = {
                 id: reportId,
-                owner_id: reportToEdit ? reportToEdit.owner_id : currentUser.id,
-                requester: reportToEdit ? reportToEdit.requester : currentUser.name,
+                owner_id: reportToEdit ? reportToEdit.owner_id : (currentUser.id || '1767988420092'),
+                requester: requesterLabel,
                 sector: 'Faturamento técnico',
-                period: 'Lançamentos técnicos',
+                period: 'Instalações / Lavagens',
                 periodStart: reportToEdit ? reportToEdit.periodStart : new Date().toISOString(),
                 periodEnd: reportToEdit ? reportToEdit.periodEnd : new Date().toISOString(),
                 items: selectedItems.map(t => ({
@@ -222,15 +437,15 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
             await dataService.save('expense_reports', finalReport);
 
             if (status === 'Transferido') {
-                setModalMessage("Solicitação enviada para auditoria! O financeiro será liberado assim que o administrativo aprovar o relatório.");
+                setModalMessage("Instalações enviadas com sucesso! As ordens foram liberadas para conferência e pagamento no Financeiro.");
             } else {
                 setModalMessage("Rascunho atualizado com sucesso.");
             }
 
             setSuccessModalOpen(true);
         } catch (e: any) {
-            console.error("Erro ao salvar:", e);
-            alert("Erro ao processar a operação: " + e.message);
+            console.error("Erro ao salvar faturamento de instalações:", e);
+            alert("Erro ao processar a operação: " + (e?.message || 'Verifique sua conexão.'));
         } finally {
             setIsSaving(false);
         }
@@ -240,10 +455,6 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
         setSuccessModalOpen(false);
         if (onSave) onSave();
     };
-
-    const filteredList = pendingTransactions.filter(t => 
-        t.description.toLowerCase().includes(searchTerm.toLowerCase())
-    );
 
     return (
         <div className="max-w-7xl mx-auto space-y-6 animate-fade-in pb-20">
@@ -263,6 +474,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                 </div>
             )}
 
+            {/* Cabeçalho */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700">
                 <div className="flex items-center gap-5">
                     <div className="w-16 h-16 bg-cyan-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-cyan-600/20">
@@ -270,10 +482,10 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                     </div>
                     <div>
                         <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight leading-none">
-                            {isReadOnly ? 'Visualizar faturamento' : reportToEdit ? 'Alterar Faturamento' : 'Instalações / Lavagens'}
+                            {isReadOnly ? 'Visualizar Faturamento' : reportToEdit ? 'Alterar Faturamento' : 'Faturamento de Instalações e Serviços'}
                         </h1>
                         <p className="text-sm text-gray-500 font-bold mt-2">
-                            {reportToEdit ? `Registro técnico: ${reportToEdit.id}` : 'Faturamento Técnico Independente'}
+                            {reportToEdit ? `Registro técnico: ${reportToEdit.id}` : 'Selecione as instalações finalizadas por instalador para enviar ao pagamento'}
                         </p>
                     </div>
                 </div>
@@ -283,19 +495,101 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                 </div>
             </div>
 
+            {/* Filtro por Instalador */}
+            {!isReadOnly && (
+                <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-3">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <UsersIcon className="w-4 h-4 text-cyan-600" />
+                            <span className="text-xs font-black text-gray-700 dark:text-gray-200 uppercase tracking-wider">
+                                Filtrar por Instalador
+                            </span>
+                        </div>
+                        {filteredItems.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={handleSelectAllVisible}
+                                className="text-[11px] font-black text-cyan-600 hover:text-cyan-700 dark:text-cyan-400 hover:underline"
+                            >
+                                {filteredItems.every(i => selectedTxIds.includes(i.id)) ? 'Desmarcar todos' : 'Selecionar todos visíveis'}
+                            </button>
+                        )}
+                    </div>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                        <button
+                            type="button"
+                            onClick={() => setSelectedInstallerFilter('ALL')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+                                selectedInstallerFilter === 'ALL'
+                                    ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
+                                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
+                            }`}
+                        >
+                            <span>Todos os Instaladores</span>
+                            <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${
+                                selectedInstallerFilter === 'ALL' ? 'bg-cyan-800 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200'
+                            }`}>
+                                {installerCounts.ALL || 0}
+                            </span>
+                        </button>
+
+                        {installers.map(inst => {
+                            const count = installerCounts[inst.id] || 0;
+                            const isSelected = selectedInstallerFilter === inst.id;
+                            return (
+                                <button
+                                    key={inst.id}
+                                    type="button"
+                                    onClick={() => setSelectedInstallerFilter(inst.id)}
+                                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+                                        isSelected
+                                            ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
+                                            : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    <span>{inst.nome}</span>
+                                    <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${
+                                        isSelected ? 'bg-cyan-800 text-white' : count > 0 ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/50 dark:text-cyan-300' : 'bg-gray-200 dark:bg-gray-600 text-gray-500'
+                                    }`}>
+                                        {count}
+                                    </span>
+                                </button>
+                            );
+                        })}
+
+                        {(installerCounts.UNASSIGNED > 0) && (
+                            <button
+                                type="button"
+                                onClick={() => setSelectedInstallerFilter('UNASSIGNED')}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+                                    selectedInstallerFilter === 'UNASSIGNED'
+                                        ? 'bg-cyan-600 text-white shadow-md'
+                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
+                                }`}
+                            >
+                                <span>Sem instalador</span>
+                                <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200">
+                                    {installerCounts.UNASSIGNED}
+                                </span>
+                            </button>
+                        )}
+                    </div>
+                </div>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                 <div className="lg:col-span-8 space-y-4">
                     <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-lg border border-gray-100 dark:border-gray-700 overflow-hidden">
                         <div className="p-6 border-b border-gray-50 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/20 flex flex-col sm:flex-row justify-between items-center gap-4">
                             <h3 className="text-xs font-black text-gray-500 flex items-center gap-2">
-                                <TableIcon className="w-4 h-4" /> {isReadOnly ? 'Itens do faturamento' : 'Lançamentos disponíveis'}
+                                <TableIcon className="w-4 h-4" /> {isReadOnly ? 'Itens do Faturamento' : 'Instalações Finalizadas Disponíveis'}
                             </h3>
                             {!isReadOnly && (
                                 <div className="relative w-full sm:w-64">
                                     <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                                     <input 
                                         type="text" 
-                                        placeholder="Filtrar lançamentos..." 
+                                        placeholder="Buscar por cliente ou instalador..." 
                                         value={searchTerm}
                                         onChange={e => setSearchTerm(e.target.value)}
                                         className="w-full pl-10 pr-4 py-2 rounded-xl bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-xs font-bold shadow-sm"
@@ -308,10 +602,11 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                             <table className="w-full text-left">
                                 <thead className="bg-gray-50 dark:bg-gray-900/50 text-[10px] font-black text-gray-400 border-b">
                                     <tr>
-                                        <th className="px-6 py-4 w-12"></th>
-                                        <th className="px-4 py-4">Descrição do débito</th>
-                                        <th className="px-4 py-4 text-center">Vencimento</th>
-                                        <th className="px-6 py-4 text-right">Valor</th>
+                                        <th className="px-6 py-4 w-12 text-center"></th>
+                                        <th className="px-4 py-4">Descrição da Instalação / Obra</th>
+                                        <th className="px-4 py-4">Instalador Responsável</th>
+                                        <th className="px-4 py-4 text-center">Data Conclusão</th>
+                                        <th className="px-6 py-4 text-right">Valor da Mão de Obra</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -319,7 +614,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                         (reportToEdit?.items || []).map(item => {
                                             const tx = allTransactions.find(t => t.id === item.id);
                                             const categoryName = tx 
-                                                ? (categories.find(c => c.id === tx.categoryId)?.name || 'Não informado') 
+                                                ? (categories.find(c => c.id === tx.categoryId)?.name || 'Instalação') 
                                                 : 'Instalação / Lavagem';
                                             
                                             if (searchTerm && !item.description.toLowerCase().includes(searchTerm.toLowerCase())) {
@@ -342,6 +637,11 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                                             {categoryName}
                                                         </p>
                                                     </td>
+                                                    <td className="px-4 py-5">
+                                                        <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300">
+                                                            {reportToEdit?.requester || 'Instalador'}
+                                                        </span>
+                                                    </td>
                                                     <td className="px-4 py-5 text-center">
                                                         <div className="flex flex-col items-center">
                                                             <CalendarIcon className="w-3.5 h-3.5 text-gray-300 mb-1" />
@@ -357,12 +657,12 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                             );
                                         })
                                     ) : (
-                                        filteredList.map(tx => {
-                                            const isSelected = selectedTxIds.includes(tx.id);
+                                        filteredItems.map(item => {
+                                            const isSelected = selectedTxIds.includes(item.id);
                                             return (
                                                 <tr 
-                                                    key={tx.id} 
-                                                    onClick={() => toggleSelection(tx.id)}
+                                                    key={item.id} 
+                                                    onClick={() => toggleSelection(item.id)}
                                                     className={`cursor-pointer transition-all ${isSelected ? 'bg-cyan-50 dark:bg-cyan-900/20 border-l-4 border-cyan-500' : 'hover:bg-gray-50/50 dark:hover:bg-gray-700/30'}`}
                                                 >
                                                     <td className="px-6 py-5 text-center">
@@ -371,30 +671,53 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                                         </div>
                                                     </td>
                                                     <td className="px-4 py-5">
-                                                        <p className={`text-xs font-black ${isSelected ? 'text-cyan-700 dark:text-cyan-400' : 'text-gray-800 dark:text-gray-200'}`}>{tx.description}</p>
-                                                        <p className="text-[9px] text-gray-400 font-bold mt-1 tracking-tighter">
-                                                            {categories.find(c => c.id === tx.categoryId)?.name || 'Não informado'}
+                                                        <p className={`text-xs font-black ${isSelected ? 'text-cyan-700 dark:text-cyan-400' : 'text-gray-800 dark:text-gray-200'}`}>
+                                                            {item.description}
                                                         </p>
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            <span className="text-[9px] text-gray-400 font-bold tracking-tighter">
+                                                                {item.categoryName}
+                                                            </span>
+                                                            {item.isFromOrcamento && (
+                                                                <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 text-[8px] font-black rounded uppercase">
+                                                                    Obra Concluída
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-5">
+                                                        {item.installerName ? (
+                                                            <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300 inline-flex items-center gap-1.5">
+                                                                <UsersIcon className="w-3 h-3 text-cyan-600" />
+                                                                {item.installerName}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-[10px] font-bold text-gray-400 italic">
+                                                                Sem instalador
+                                                            </span>
+                                                        )}
                                                     </td>
                                                     <td className="px-4 py-5 text-center">
                                                         <div className="flex flex-col items-center">
                                                             <CalendarIcon className="w-3.5 h-3.5 text-gray-300 mb-1" />
-                                                            <span className="text-[11px] font-black text-gray-500">{new Date(tx.dueDate).toLocaleDateString('pt-BR', {timeZone:'UTC'})}</span>
+                                                            <span className="text-[11px] font-black text-gray-500">
+                                                                {item.dueDate ? new Date(item.dueDate).toLocaleDateString('pt-BR', {timeZone:'UTC'}) : 'Sem data'}
+                                                            </span>
                                                         </div>
                                                     </td>
                                                     <td className={`px-6 py-5 text-right text-sm font-black ${isSelected ? 'text-cyan-700 dark:text-cyan-400' : 'text-indigo-600'}`}>
-                                                        {formatCurrency(tx.amount)}
+                                                        {formatCurrency(item.amount)}
                                                     </td>
                                                 </tr>
                                             );
                                         })
                                     )}
-                                    {((isReadOnly && (!reportToEdit?.items || reportToEdit.items.length === 0)) || (!isReadOnly && filteredList.length === 0)) && (
+                                    {((isReadOnly && (!reportToEdit?.items || reportToEdit.items.length === 0)) || (!isReadOnly && filteredItems.length === 0)) && (
                                         <tr>
-                                            <td colSpan={4} className="px-6 py-20 text-center space-y-4">
+                                            <td colSpan={5} className="px-6 py-20 text-center space-y-4">
                                                 <ExclamationTriangleIcon className="w-12 h-12 text-gray-200 mx-auto" />
                                                 <p className="text-gray-400 font-bold italic text-sm">
-                                                    {isReadOnly ? 'Nenhum item encontrado neste faturamento.' : 'Não há lançamentos técnicos pendentes.'}
+                                                    {isReadOnly ? 'Nenhum item encontrado neste faturamento.' : 'Não há instalações finalizadas pendentes para este instalador.'}
                                                 </p>
                                             </td>
                                         </tr>
@@ -408,32 +731,34 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                 <div className="lg:col-span-4 space-y-6">
                     <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 sticky top-8">
                         <div className="flex items-center gap-3 mb-6">
-                            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl"><UploadIcon className="w-5 h-5" /></div>
-                            <h3 className="text-sm font-black text-gray-800 dark:text-white">Anexo Obrigatório</h3>
+                            <DocumentReportIcon className="w-6 h-6 text-cyan-600" />
+                            <h3 className="text-base font-black text-gray-900 dark:text-white tracking-tight">Comprovantes e Notas Fiscais</h3>
                         </div>
 
+                        {/* Upload de Anexos */}
                         <div className="space-y-4">
-                            <p className="text-[11px] text-gray-500 font-bold leading-relaxed">Para solicitar o pagamento, anexe a Nota Fiscal ou comprovante (PDF ou Imagem).</p>
-                            
+                            <p className="text-xs text-gray-500 font-medium leading-relaxed">
+                                Anexe a Nota Fiscal ou Recibo emitido pelo instalador parceiro para liberação no contas a pagar:
+                            </p>
+
                             <div className="grid grid-cols-2 gap-3">
                                 {attachments.map((file, idx) => {
                                     const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.data.startsWith('data:application/pdf');
-                                    
                                     return (
-                                        <div key={idx} className="relative aspect-square rounded-2xl border-2 border-indigo-100 dark:border-indigo-900 overflow-hidden group shadow-sm bg-gray-50 flex items-center justify-center">
+                                        <div key={idx} className="relative group aspect-square rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex flex-col items-center justify-center p-2">
                                             {isPdf ? (
-                                                <div className="flex flex-col items-center text-center p-2">
-                                                    <DocumentReportIcon className="w-10 h-10 text-red-500 mb-1" />
-                                                    <span className="text-[8px] font-black text-gray-500 truncate max-w-full">{file.name}</span>
+                                                <div className="text-center">
+                                                    <DocumentReportIcon className="w-8 h-8 text-red-500 mx-auto mb-1" />
+                                                    <span className="text-[9px] font-bold text-gray-500 block truncate max-w-[80px]">{file.name}</span>
                                                 </div>
                                             ) : (
-                                                <img src={file.data} className="w-full h-full object-cover" alt="" />
+                                                <img src={file.data} alt="" className="w-full h-full object-cover" />
                                             )}
-                                            
-                                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 z-10">
+
+                                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                                                 <button 
                                                     onClick={() => handleViewFile(file)}
-                                                    className="p-1.5 bg-white text-gray-900 rounded-full hover:bg-indigo-50 shadow-lg"
+                                                    className="p-1.5 bg-white text-gray-900 rounded-full hover:bg-gray-100 shadow-lg"
                                                     title="Visualizar"
                                                 >
                                                     <EyeIcon className="w-4 h-4" />
@@ -474,7 +799,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
 
                         <div className="mt-10 pt-8 border-t border-gray-100 dark:border-gray-700 space-y-4">
                             <div className="flex justify-between items-end mb-2">
-                                <span className="text-[11px] font-black text-gray-400">Saldo Fechado</span>
+                                <span className="text-[11px] font-black text-gray-400">Total Selecionado</span>
                                 <span className="text-2xl font-black text-cyan-600 leading-none">{formatCurrency(selectedTotal)}</span>
                             </div>
                             
@@ -511,7 +836,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                     onClick={onSave}
                                     className="w-full py-4 bg-gray-100 text-gray-500 rounded-2xl font-black text-xs hover:bg-gray-200 transition-all flex items-center justify-center gap-3"
                                 >
-                                    <ArrowLeftIcon className="w-5 h-5" /> Voltar ao histórico
+                                    <ArrowLeftIcon className="w-5 h-5" /> Voltar ao Histórico
                                 </button>
                             )}
                         </div>
@@ -519,6 +844,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                 </div>
             </div>
 
+            {/* Modais de Confirmação */}
             {isConfirmDraftModalOpen && (
                 <Modal title={selectedTxIds.length === 0 && reportToEdit ? "Confirmar exclusão" : "Salvar Rascunho"} onClose={() => setIsConfirmDraftModalOpen(false)} maxWidth="max-w-sm">
                     <div className="text-center p-4 space-y-6">
