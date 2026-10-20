@@ -5,9 +5,10 @@ import {
     UploadIcon, TrashIcon, ExclamationTriangleIcon,
     TableIcon, SearchIcon, CalendarIcon, SaveIcon,
     ClockIcon, ArrowLeftIcon, DocumentReportIcon,
-    EyeIcon, XCircleIcon, ArrowDownIcon, UsersIcon
+    EyeIcon, XCircleIcon, ArrowDownIcon, UsersIcon, AddIcon
 } from '../assets/icons';
 import { dataService } from '../services/dataService';
+import { supabase } from '../supabaseClient';
 import type { 
     FinancialTransaction, FinancialCategory, ExpenseReport, 
     User, ExpenseAttachment, InstalacaoLavagemPageProps, 
@@ -19,30 +20,133 @@ const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
 };
 
+const cleanText = (s?: string) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+const parseSafeNumber = (val: any): number => {
+    if (typeof val === 'number') return isNaN(val) ? 0 : val;
+    if (!val) return 0;
+    const clean = String(val).trim().replace(/\./g, '').replace(',', '.');
+    const parsed = parseFloat(clean);
+    return isNaN(parsed) ? 0 : parsed;
+};
+
+export interface BreakdownItem {
+    label: string;
+    detail?: string;
+    value: number;
+    isIncluded: boolean;
+    reason?: string;
+}
+
 export interface TechnicalItem {
     id: string;
     description: string;
     amount: number;
+    baseAmount?: number;
     dueDate: string;
     launchDate: string;
     categoryId: string;
     categoryName: string;
     installerId?: string;
-    installerName?: string;
-    clientName?: string;
+    installerName: string;
+    clientName: string;
     itemType: 'INSTALACAO' | 'LAVAGEM' | 'OUTRO';
+    statusPagamento: 'pendente' | 'solicitado' | 'pago';
     isFromOrcamento?: boolean;
     rawOrcamento?: SavedOrcamento;
     rawTx?: FinancialTransaction;
+    breakdown?: BreakdownItem[];
+    extraDesc?: string;
+    extraValor?: number;
 }
 
+export const computeCostBreakdown = (fs?: any, rawTx?: any, customExtraDesc?: string, customExtraValor?: number): BreakdownItem[] => {
+    if (!fs && rawTx) {
+        return [
+            {
+                label: rawTx.description || 'Serviço de Lavagem Técnica de Módulos',
+                detail: 'Lançamento financeiro direto de lavagem',
+                value: rawTx.amount || 0,
+                isIncluded: true
+            }
+        ];
+    }
+    if (!fs) return [];
+
+    const qtd = parseSafeNumber(fs.terceiroInstalacaoQtd);
+    const custo = parseSafeNumber(fs.terceiroInstalacaoCusto);
+    const instalacaoMaoDeObra = qtd * custo;
+    const adequacaoLocal = parseSafeNumber(fs.adequacaoLocalCusto);
+    const projInst = parseSafeNumber(fs.projetoInstalacaoCusto);
+
+    const extraDesc = customExtraDesc !== undefined ? customExtraDesc : (fs.instalacao_servico_extra_desc || fs.instalacaoServicoExtraDesc || '');
+    const extraValor = customExtraValor !== undefined ? customExtraValor : parseSafeNumber(fs.instalacao_servico_extra_valor || fs.instalacaoServicoExtraValor || 0);
+
+    const breakdown: BreakdownItem[] = [];
+
+    // 1. Mão de Obra de Instalação (INCLUÍDO)
+    if (qtd > 0 && custo > 0) {
+        breakdown.push({
+            label: 'Mão de Obra de Instalação (Terceirizada)',
+            detail: `${qtd} módulos / placas × ${formatCurrency(custo)}`,
+            value: instalacaoMaoDeObra,
+            isIncluded: true
+        });
+    } else if (projInst > 0) {
+        breakdown.push({
+            label: 'Instalação (Custo Direto do Projeto)',
+            detail: 'Valor direto configurado no orçamento',
+            value: projInst,
+            isIncluded: true
+        });
+    } else if (instalacaoMaoDeObra > 0) {
+        breakdown.push({
+            label: 'Mão de Obra de Instalação',
+            detail: `${qtd} un. × ${formatCurrency(custo)}`,
+            value: instalacaoMaoDeObra,
+            isIncluded: true
+        });
+    } else {
+        breakdown.push({
+            label: 'Mão de Obra de Instalação',
+            detail: '0 módulos ou valor zerado',
+            value: 0,
+            isIncluded: true
+        });
+    }
+
+    // 2. Adequação de Local / Padrão (INCLUÍDO)
+    if (adequacaoLocal > 0 || fs.adequacaoLocalCusto !== undefined) {
+        breakdown.push({
+            label: 'Adequação do Local / Padrão de Entrada',
+            detail: 'Adequação técnica informada no orçamento',
+            value: adequacaoLocal,
+            isIncluded: true
+        });
+    }
+
+    // 3. Serviço Extra Identificado na Instalação (INCLUÍDO)
+    if (extraValor > 0) {
+        breakdown.push({
+            label: `Serviço Extra: ${extraDesc || 'Identificado na Instalação'}`,
+            detail: 'Serviço adicional identificado e aprovado na obra',
+            value: extraValor,
+            isIncluded: true
+        });
+    }
+
+    return breakdown;
+};
+
 const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUser, reportToEdit, onSave }) => {
-    const [pendingItems, setPendingItems] = useState<TechnicalItem[]>([]);
+    const [allItems, setAllItems] = useState<TechnicalItem[]>([]);
+    const [rawOrcamentos, setRawOrcamentos] = useState<SavedOrcamento[]>([]);
     const [allTransactions, setAllTransactions] = useState<FinancialTransaction[]>([]);
     const [categories, setCategories] = useState<FinancialCategory[]>([]);
     const [installers, setInstallers] = useState<Instalador[]>([]);
     const [selectedTxIds, setSelectedTxIds] = useState<string[]>([]);
     const [selectedInstallerFilter, setSelectedInstallerFilter] = useState<string>('ALL');
+    const [statusFilter, setStatusFilter] = useState<'pendentes' | 'todas'>('pendentes');
     const [attachments, setAttachments] = useState<ExpenseAttachment[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [configKmValue, setConfigKmValue] = useState(1.20);
@@ -53,22 +157,319 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
     const [isConfirmSubmitModalOpen, setIsConfirmSubmitModalOpen] = useState(false);
     const [modalMessage, setModalMessage] = useState('');
     const [hdPhoto, setHdPhoto] = useState<string | null>(null);
+
+    // Hover and Modal Breakdown inspection states
+    const [hoveredItemInfo, setHoveredItemInfo] = useState<{ item: TechnicalItem; rect: DOMRect } | null>(null);
+    const [modalDetailItem, setModalDetailItem] = useState<TechnicalItem | null>(null);
+    const hoverTimeoutRef = useRef<any>(null);
+
+    const handleMouseEnterItem = (item: TechnicalItem, e: React.MouseEvent<HTMLElement>) => {
+        if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+        const rect = e.currentTarget.getBoundingClientRect();
+        setHoveredItemInfo({ item, rect });
+    };
+
+    const handleMouseLeaveItem = () => {
+        hoverTimeoutRef.current = setTimeout(() => {
+            setHoveredItemInfo(null);
+        }, 300);
+    };
+
+    const handlePopoverMouseEnter = () => {
+        if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    };
+
+    const handlePopoverMouseLeave = () => {
+        setHoveredItemInfo(null);
+    };
+    
+    // Extra Service Modal state
+    const [extraServiceModalItem, setExtraServiceModalItem] = useState<TechnicalItem | null>(null);
+    const [extraDescInput, setExtraDescInput] = useState<string>('');
+    const [extraValorInput, setExtraValorInput] = useState<string>('');
+    const [isSavingExtraService, setIsSavingExtraService] = useState<boolean>(false);
+
+    const handleOpenExtraServiceModal = (item: TechnicalItem) => {
+        setExtraServiceModalItem(item);
+        setExtraDescInput(item.extraDesc || '');
+        setExtraValorInput(item.extraValor && item.extraValor > 0 ? String(item.extraValor).replace('.', ',') : '');
+    };
+
+    const handleSaveExtraService = async () => {
+        if (!extraServiceModalItem) return;
+        setIsSavingExtraService(true);
+        try {
+            const valNum = parseSafeNumber(extraValorInput);
+            const descTrim = extraDescInput.trim();
+            const orcId = extraServiceModalItem.id.replace('tx-inst-', '');
+
+            const foundOrc = rawOrcamentos.find(o => String(o.id) === String(orcId));
+            if (foundOrc) {
+                const v: any = foundOrc.variants?.find((x: any) => x.isPrincipal) || foundOrc.variants?.[0] || {};
+                const baseFs: any = { ...foundOrc.formState, ...(v.formState || {}) };
+
+                const updatedFormState = {
+                    ...(foundOrc.formState || {}),
+                    instalacao_servico_extra_desc: descTrim,
+                    instalacao_servico_extra_valor: valNum
+                };
+
+                const updatedVariants = (foundOrc.variants || []).map((vari: any, idx: number) => {
+                    if (idx === 0 || vari.isPrincipal) {
+                        return {
+                            ...vari,
+                            formState: {
+                                ...(vari.formState || {}),
+                                instalacao_servico_extra_desc: descTrim,
+                                instalacao_servico_extra_valor: valNum
+                            }
+                        };
+                    }
+                    return vari;
+                });
+
+                // Persiste no Supabase: tenta atualizar colunas dedicadas e o JSONB formState
+                try {
+                    const { error: colErr } = await supabase.from('orcamentos').update({
+                        formState: updatedFormState,
+                        variants: updatedVariants,
+                        instalacao_servico_extra_desc: descTrim,
+                        instalacao_servico_extra_valor: valNum
+                    }).eq('id', orcId);
+
+                    if (colErr) {
+                        await supabase.from('orcamentos').update({
+                            formState: updatedFormState,
+                            variants: updatedVariants
+                        }).eq('id', orcId);
+                    }
+                } catch (err) {
+                    await supabase.from('orcamentos').update({
+                        formState: updatedFormState,
+                        variants: updatedVariants
+                    }).eq('id', orcId);
+                }
+
+                const updatedOrc: SavedOrcamento = {
+                    ...foundOrc,
+                    formState: updatedFormState,
+                    variants: updatedVariants,
+                    instalacao_servico_extra_desc: descTrim,
+                    instalacao_servico_extra_valor: valNum
+                };
+
+                setRawOrcamentos(prev => prev.map(o => String(o.id) === String(orcId) ? updatedOrc : o));
+
+                // Recalcula o item e reflete imediatamente na tela e no total
+                const qtd = parseSafeNumber(baseFs.terceiroInstalacaoQtd);
+                const custo = parseSafeNumber(baseFs.terceiroInstalacaoCusto);
+                const instalacaoMaoDeObra = qtd * custo;
+                const adequacaoLocal = parseSafeNumber(baseFs.adequacaoLocalCusto);
+                let baseAmount = instalacaoMaoDeObra + adequacaoLocal;
+                if (baseAmount === 0) {
+                    baseAmount = parseSafeNumber(baseFs.projetoInstalacaoCusto);
+                }
+                const newAmount = baseAmount + valNum;
+                const newBreakdown = computeCostBreakdown(baseFs, undefined, descTrim, valNum);
+
+                setAllItems(prev => prev.map(it => {
+                    if (it.id === extraServiceModalItem.id) {
+                        return {
+                            ...it,
+                            amount: newAmount,
+                            baseAmount,
+                            extraDesc: descTrim,
+                            extraValor: valNum,
+                            rawOrcamento: updatedOrc,
+                            breakdown: newBreakdown
+                        };
+                    }
+                    return it;
+                }));
+
+                // Se o modal de detalhamento estiver aberto com este item, atualiza também
+                setModalDetailItem(prev => {
+                    if (prev && prev.id === extraServiceModalItem.id) {
+                        return {
+                            ...prev,
+                            amount: newAmount,
+                            baseAmount,
+                            extraDesc: descTrim,
+                            extraValor: valNum,
+                            rawOrcamento: updatedOrc,
+                            breakdown: newBreakdown
+                        };
+                    }
+                    return prev;
+                });
+
+                setExtraServiceModalItem(null);
+            }
+        } catch (e: any) {
+            alert("Erro ao salvar serviço extra: " + (e?.message || "Tente novamente"));
+        } finally {
+            setIsSavingExtraService(false);
+        }
+    };
+
+    const handleRemoveExtraService = async () => {
+        if (!extraServiceModalItem) return;
+        setIsSavingExtraService(true);
+        try {
+            const orcId = extraServiceModalItem.id.replace('tx-inst-', '');
+            const foundOrc = rawOrcamentos.find(o => String(o.id) === String(orcId));
+            if (foundOrc) {
+                const v: any = foundOrc.variants?.find((x: any) => x.isPrincipal) || foundOrc.variants?.[0] || {};
+                const baseFs: any = { ...foundOrc.formState, ...(v.formState || {}) };
+
+                const updatedFormState = {
+                    ...(foundOrc.formState || {}),
+                    instalacao_servico_extra_desc: '',
+                    instalacao_servico_extra_valor: 0
+                };
+
+                const updatedVariants = (foundOrc.variants || []).map((vari: any, idx: number) => {
+                    if (idx === 0 || vari.isPrincipal) {
+                        return {
+                            ...vari,
+                            formState: {
+                                ...(vari.formState || {}),
+                                instalacao_servico_extra_desc: '',
+                                instalacao_servico_extra_valor: 0
+                            }
+                        };
+                    }
+                    return vari;
+                });
+
+                try {
+                    const { error: colErr } = await supabase.from('orcamentos').update({
+                        formState: updatedFormState,
+                        variants: updatedVariants,
+                        instalacao_servico_extra_desc: null,
+                        instalacao_servico_extra_valor: 0
+                    }).eq('id', orcId);
+
+                    if (colErr) {
+                        await supabase.from('orcamentos').update({
+                            formState: updatedFormState,
+                            variants: updatedVariants
+                        }).eq('id', orcId);
+                    }
+                } catch (err) {
+                    await supabase.from('orcamentos').update({
+                        formState: updatedFormState,
+                        variants: updatedVariants
+                    }).eq('id', orcId);
+                }
+
+                const updatedOrc: SavedOrcamento = {
+                    ...foundOrc,
+                    formState: updatedFormState,
+                    variants: updatedVariants,
+                    instalacao_servico_extra_desc: '',
+                    instalacao_servico_extra_valor: 0
+                };
+
+                setRawOrcamentos(prev => prev.map(o => String(o.id) === String(orcId) ? updatedOrc : o));
+
+                const qtd = parseSafeNumber(baseFs.terceiroInstalacaoQtd);
+                const custo = parseSafeNumber(baseFs.terceiroInstalacaoCusto);
+                const instalacaoMaoDeObra = qtd * custo;
+                const adequacaoLocal = parseSafeNumber(baseFs.adequacaoLocalCusto);
+                let baseAmount = instalacaoMaoDeObra + adequacaoLocal;
+                if (baseAmount === 0) {
+                    baseAmount = parseSafeNumber(baseFs.projetoInstalacaoCusto);
+                }
+                const newBreakdown = computeCostBreakdown(baseFs, undefined, '', 0);
+
+                setAllItems(prev => prev.map(it => {
+                    if (it.id === extraServiceModalItem.id) {
+                        return {
+                            ...it,
+                            amount: baseAmount,
+                            baseAmount,
+                            extraDesc: '',
+                            extraValor: 0,
+                            rawOrcamento: updatedOrc,
+                            breakdown: newBreakdown
+                        };
+                    }
+                    return it;
+                }));
+
+                setModalDetailItem(prev => {
+                    if (prev && prev.id === extraServiceModalItem.id) {
+                        return {
+                            ...prev,
+                            amount: baseAmount,
+                            baseAmount,
+                            extraDesc: '',
+                            extraValor: 0,
+                            rawOrcamento: updatedOrc,
+                            breakdown: newBreakdown
+                        };
+                    }
+                    return prev;
+                });
+
+                setExtraServiceModalItem(null);
+            }
+        } catch (e: any) {
+            alert("Erro ao remover serviço extra: " + (e?.message || "Tente novamente"));
+        } finally {
+            setIsSavingExtraService(false);
+        }
+    };
     
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const isReadOnly = useMemo(() => reportToEdit ? reportToEdit.status !== 'Rascunho' : false, [reportToEdit]);
+    // Valida se o relatório fornecido é de fato um faturamento técnico de Instalação/Lavagem
+    const activeReport = useMemo(() => {
+        if (!reportToEdit) return null;
+        const isTech = Boolean(
+            reportToEdit.isInstallmentWash || 
+            (reportToEdit.id && String(reportToEdit.id).startsWith('tech-')) ||
+            (reportToEdit.items && reportToEdit.items.some(i => String(i.id).startsWith('tx-inst-')))
+        );
+        return isTech ? reportToEdit : null;
+    }, [reportToEdit]);
+
+    const isReadOnly = useMemo(() => activeReport ? activeReport.status !== 'Rascunho' : false, [activeReport]);
 
     const loadData = async () => {
         setIsLoading(true);
         try {
+            const currentUserId = currentUser?.id || '1767988420092';
+
             const [txs, cats, allReports, remoteConfigs, insts, orcs] = await Promise.all([
-                dataService.getAll<FinancialTransaction>('financial_transactions', currentUser.id, true),
+                dataService.getAll<FinancialTransaction>('financial_transactions', currentUserId, true),
                 dataService.getAll<FinancialCategory>('financial_categories'),
                 dataService.getAll<ExpenseReport>('expense_reports', undefined, true),
                 dataService.getAll<any>('system_configs', undefined, true),
                 dataService.getAll<Instalador>('instaladores'),
-                dataService.getAll<SavedOrcamento>('orcamentos', currentUser.id, true)
+                dataService.getPartial<SavedOrcamento>('orcamentos', 'id, status, formState, variants, venda_etapas', undefined, true)
             ]);
+
+            setRawOrcamentos(orcs || []);
+
+            // Tenta consultar colunas dedicadas caso já criadas no Supabase
+            let extraColsMap: Record<string, { desc: string; valor: number }> = {};
+            try {
+                const { data: extrasData } = await supabase
+                    .from('orcamentos')
+                    .select('id, instalacao_servico_extra_desc, instalacao_servico_extra_valor');
+                if (extrasData) {
+                    extrasData.forEach((row: any) => {
+                        extraColsMap[String(row.id)] = {
+                            desc: row.instalacao_servico_extra_desc || '',
+                            valor: parseSafeNumber(row.instalacao_servico_extra_valor)
+                        };
+                    });
+                }
+            } catch (e) {
+                // Colunas ainda não criadas no Supabase SQL, formState será utilizado
+            }
 
             const remoteKm = (remoteConfigs || []).find((c: any) => c.id === 'km_value');
             if (remoteKm) {
@@ -83,7 +484,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
             const usedTxIdsInOtherReports = new Set(
                 (allReports || [])
                     .filter(r => r.status !== 'Cancelado')
-                    .filter(r => !reportToEdit || r.id !== reportToEdit.id)
+                    .filter(r => !activeReport || r.id !== activeReport.id)
                     .flatMap(r => (r.items || []).map(item => item.id))
             );
 
@@ -95,74 +496,104 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
 
             const items: TechnicalItem[] = [];
 
-            // 1. Instalações finalizadas a partir dos Orçamentos / Obras
+            // 1. Processa somente Orçamentos APROVADOS e com a flag "Instalação Finalizada" marcada
             (orcs || []).forEach(o => {
-                const etapas = o.venda_etapas || {};
-                // Verifica se a instalação foi finalizada e ainda não foi paga
-                if (etapas.instalacao_finalizada && !etapas.pag_instalacao) {
+                const statusClean = (o.status || '').trim().toLowerCase();
+                const etapas = (o.venda_etapas || {}) as any;
+                const isApproved = statusClean === 'aprovado';
+                const isFinalizada = Boolean(etapas.instalacao_finalizada);
+                const isPaid = Boolean(etapas.pag_instalacao);
+
+                // Regra estrita: Somente orçamentos classificados como Aprovados na lista de orçamentos,
+                // com a flag de "Instalação Finalizada" assinalada e que ainda não foram pagos
+                if (isApproved && isFinalizada && !isPaid) {
                     const v: any = o.variants?.find((x: any) => x.isPrincipal) || o.variants?.[0] || {};
                     const fs: any = { ...o.formState, ...(v.formState || {}) };
-                    const calc: any = v.calculated || {};
 
-                    const clientName = fs.nomeCliente || 'Cliente sem nome';
-                    const installerId = fs.instaladorId || '';
-                    const matchedInst = activeInstallers.find(i => String(i.id) === String(installerId));
-                    const installerName = matchedInst ? matchedInst.nome : (fs.instaladorNome || (installerId ? 'Instalador Parceiro' : 'Não Definido'));
+                    const clientName = (fs.nomeCliente || 'Cliente sem nome').trim();
 
-                    let amount = calc.totalInstalacao || 0;
-                    if (!amount || amount === 0) {
-                        const qtd = parseFloat(fs.terceiroInstalacaoQtd) || 0;
-                        const custo = parseFloat(fs.terceiroInstalacaoCusto) || 0;
-                        amount = qtd * custo;
+                    let installerId = fs.instaladorId || '';
+                    let installerName = '';
+
+                    if (installerId) {
+                        const found = activeInstallers.find(i => String(i.id) === String(installerId));
+                        if (found) installerName = found.nome.trim();
                     }
-                    if (!amount || amount === 0) {
-                        amount = parseFloat(fs.projetoInstalacaoCusto) || 0;
+                    if (!installerName && fs.instaladorNome) {
+                        installerName = fs.instaladorNome.trim();
                     }
+                    if (!installerName) {
+                        installerName = 'Não Definido';
+                    }
+
+                    // Regra: Considera somente Instalação (terceiroInstalacaoQtd * terceiroInstalacaoCusto) e Adequação (adequacaoLocalCusto).
+                    // Projeto/homologação, deslocamento, pedágio e visita técnica não são considerados nesta soma.
+                    const qtd = parseSafeNumber(fs.terceiroInstalacaoQtd);
+                    const custo = parseSafeNumber(fs.terceiroInstalacaoCusto);
+                    const instalacaoMaoDeObra = qtd * custo;
+                    const adequacaoLocal = parseSafeNumber(fs.adequacaoLocalCusto);
+
+                    let baseAmount = instalacaoMaoDeObra + adequacaoLocal;
+                    if (baseAmount === 0) {
+                        baseAmount = parseSafeNumber(fs.projetoInstalacaoCusto);
+                    }
+
+                    // Extra Service
+                    const extraCol = extraColsMap[String(o.id)];
+                    const extraDesc = (extraCol?.desc || fs.instalacao_servico_extra_desc || fs.instalacaoServicoExtraDesc || (o as any).instalacao_servico_extra_desc || '').trim();
+                    const extraValor = (extraCol && extraCol.valor > 0)
+                        ? extraCol.valor
+                        : parseSafeNumber(fs.instalacao_servico_extra_valor || fs.instalacaoServicoExtraValor || (o as any).instalacao_servico_extra_valor || 0);
+
+                    const amount = baseAmount + extraValor;
 
                     const rawEtapas: any = etapas;
-                    const rawOrc: any = o;
-                    const date = rawEtapas.instalacao_finalizada_data || rawEtapas.instalacao_data || (rawOrc.createdAt ? rawOrc.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]);
+                    const date = rawEtapas.instalacao_finalizada_data || rawEtapas.instalacao_data || new Date().toISOString().split('T')[0];
                     const txId = `tx-inst-${o.id}`;
 
-                    if (!usedTxIdsInOtherReports.has(txId)) {
-                        items.push({
-                            id: txId,
-                            description: `Instalação - ${clientName}`,
-                            amount: Number(amount) || 0,
-                            dueDate: date,
-                            launchDate: date,
-                            categoryId: instalacaoCat.id,
-                            categoryName: 'Instalação',
-                            installerId: installerId,
-                            installerName: installerName,
-                            clientName: clientName,
-                            itemType: 'INSTALACAO',
-                            isFromOrcamento: true,
-                            rawOrcamento: o
-                        });
-                    }
+                    const isSolicitado = Boolean(etapas.pag_instalacao_solicitado) || usedTxIdsInOtherReports.has(txId);
+
+                    items.push({
+                        id: txId,
+                        description: `Instalação - ${clientName}`,
+                        amount: Number(amount) || 0,
+                        baseAmount,
+                        dueDate: date,
+                        launchDate: date,
+                        categoryId: instalacaoCat.id,
+                        categoryName: 'Instalação',
+                        installerId: installerId || undefined,
+                        installerName,
+                        clientName,
+                        itemType: 'INSTALACAO',
+                        statusPagamento: isSolicitado ? 'solicitado' : 'pendente',
+                        isFromOrcamento: true,
+                        rawOrcamento: o,
+                        extraDesc,
+                        extraValor,
+                        breakdown: computeCostBreakdown(fs, undefined, extraDesc, extraValor)
+                    });
                 }
             });
 
-            // 2. Transações avulsas da tabela financial_transactions (Lavagens ou Instalações diretas)
+            // 2. Processa Transações Financeiras diretas pendentes de Lavagem
             const targetCatIds = (cats || [])
                 .filter(c => {
                     const name = (c.name || '').toLowerCase();
-                    return name.includes('lavagem') || name.includes('instalação') || name.includes('instalacao');
+                    return name.includes('lavagem');
                 })
                 .map(c => c.id);
 
             (txs || []).forEach(t => {
                 if (
                     t.type === 'despesa' && 
-                    t.status === 'pendente' && 
+                    t.status === 'pendente' &&
                     targetCatIds.includes(t.categoryId) &&
                     !usedTxIdsInOtherReports.has(t.id) &&
                     !items.some(it => it.id === t.id)
                 ) {
                     const cat = (cats || []).find(c => c.id === t.categoryId);
-                    const catName = cat?.name || 'Instalação / Lavagem';
-                    const isWash = catName.toLowerCase().includes('lavagem');
+                    const catName = cat?.name || 'Lavagem';
 
                     // Tenta identificar se o instalador está no texto da descrição
                     let matchedInst = activeInstallers.find(i => 
@@ -178,19 +609,22 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                         categoryId: t.categoryId,
                         categoryName: catName,
                         installerId: matchedInst ? matchedInst.id : undefined,
-                        installerName: matchedInst ? matchedInst.nome : undefined,
-                        itemType: isWash ? 'LAVAGEM' : 'INSTALACAO',
-                        rawTx: t
+                        installerName: matchedInst ? matchedInst.nome.trim() : 'Equipe Técnica',
+                        clientName: t.description.replace('Instalação - ', '').replace('Lavagem - ', ''),
+                        itemType: 'LAVAGEM',
+                        statusPagamento: 'pendente',
+                        rawTx: t,
+                        breakdown: computeCostBreakdown(undefined, t)
                     });
                 }
             });
 
-            setPendingItems(items.sort((a, b) => (b.dueDate || '').localeCompare(a.dueDate || '')));
+            setAllItems(items.sort((a, b) => (b.dueDate || '').localeCompare(a.dueDate || '')));
 
-            if (reportToEdit && reportToEdit.items) {
-                const draftIds = reportToEdit.items.map(i => i.id);
+            if (activeReport && activeReport.items) {
+                const draftIds = activeReport.items.map(i => i.id);
                 setSelectedTxIds(draftIds);
-                setAttachments(reportToEdit.attachments || []);
+                setAttachments(activeReport.attachments || []);
             }
 
         } catch (e) {
@@ -202,36 +636,69 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
 
     useEffect(() => {
         loadData();
-    }, [reportToEdit]);
+    }, [activeReport, currentUser?.id]);
+
+    // Lista única de nomes de instaladores presentes nos dados
+    const distinctInstallers = useMemo(() => {
+        const set = new Set<string>();
+        // Adiciona instaladores cadastrados
+        installers.forEach(i => set.add(i.nome.trim()));
+        // Adiciona nomes que aparecem nos itens
+        allItems.forEach(i => {
+            if (i.installerName && i.installerName !== 'Não Definido') {
+                set.add(i.installerName.trim());
+            }
+        });
+        return Array.from(set).sort((a, b) => a.localeCompare(b));
+    }, [installers, allItems]);
 
     // Contagem de itens por instalador
     const installerCounts = useMemo(() => {
-        const counts: Record<string, number> = { ALL: pendingItems.length, UNASSIGNED: 0 };
-        installers.forEach(inst => {
-            counts[inst.id] = 0;
+        const counts: Record<string, { pendentes: number; total: number }> = {
+            ALL: { pendentes: 0, total: 0 },
+            UNASSIGNED: { pendentes: 0, total: 0 }
+        };
+
+        distinctInstallers.forEach(name => {
+            counts[name] = { pendentes: 0, total: 0 };
         });
 
-        pendingItems.forEach(item => {
-            if (item.installerId && counts[item.installerId] !== undefined) {
-                counts[item.installerId] = (counts[item.installerId] || 0) + 1;
+        allItems.forEach(item => {
+            const isPendente = item.statusPagamento === 'pendente';
+            const name = item.installerName ? item.installerName.trim() : 'Não Definido';
+
+            counts.ALL.total += 1;
+            if (isPendente) counts.ALL.pendentes += 1;
+
+            if (name !== 'Não Definido' && counts[name]) {
+                counts[name].total += 1;
+                if (isPendente) counts[name].pendentes += 1;
             } else {
-                counts.UNASSIGNED = (counts.UNASSIGNED || 0) + 1;
+                counts.UNASSIGNED.total += 1;
+                if (isPendente) counts.UNASSIGNED.pendentes += 1;
             }
         });
 
         return counts;
-    }, [pendingItems, installers]);
+    }, [allItems, distinctInstallers]);
 
-    // Lista filtrada pelo instalador selecionado e busca
+    // Lista filtrada pelo instalador selecionado, status e busca
     const filteredItems = useMemo(() => {
-        return pendingItems.filter(item => {
+        return allItems.filter(item => {
+            // Filtro por status
+            if (statusFilter === 'pendentes' && item.statusPagamento !== 'pendente') {
+                // Em modo edição de rascunho, permite ver os itens já selecionados
+                if (!reportToEdit || !selectedTxIds.includes(item.id)) {
+                    return false;
+                }
+            }
+
             // Filtro por instalador
             if (selectedInstallerFilter !== 'ALL') {
+                const name = item.installerName ? item.installerName.trim() : 'Não Definido';
                 if (selectedInstallerFilter === 'UNASSIGNED') {
-                    if (item.installerId && installers.some(i => i.id === item.installerId)) {
-                        return false;
-                    }
-                } else if (item.installerId !== selectedInstallerFilter) {
+                    if (name !== 'Não Definido') return false;
+                } else if (name !== selectedInstallerFilter) {
                     return false;
                 }
             }
@@ -247,19 +714,22 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
 
             return true;
         });
-    }, [pendingItems, selectedInstallerFilter, searchTerm, installers]);
+    }, [allItems, selectedInstallerFilter, statusFilter, searchTerm, activeReport, selectedTxIds]);
 
     const selectedTotal = useMemo(() => {
-        if (isReadOnly && reportToEdit) {
-            return reportToEdit.totalValue || (reportToEdit.items || []).reduce((acc, i) => acc + (i.others || 0), 0);
+        if (isReadOnly && activeReport) {
+            return activeReport.totalValue || (activeReport.items || []).reduce((acc, i) => acc + (i.others || 0), 0);
         }
-        return pendingItems
+        return allItems
             .filter(t => selectedTxIds.includes(t.id))
             .reduce((acc, curr) => acc + curr.amount, 0);
-    }, [selectedTxIds, pendingItems, isReadOnly, reportToEdit]);
+    }, [selectedTxIds, allItems, isReadOnly, activeReport]);
 
     const toggleSelection = (id: string) => {
         if (isReadOnly) return;
+        const item = allItems.find(i => i.id === id);
+        if (item && item.statusPagamento === 'pago') return;
+
         setSelectedTxIds(prev => 
             prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
         );
@@ -267,13 +737,13 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
 
     const handleSelectAllVisible = () => {
         if (isReadOnly) return;
-        const visibleIds = filteredItems.map(i => i.id);
-        const allVisibleSelected = visibleIds.every(id => selectedTxIds.includes(id));
+        const selectableIds = filteredItems.filter(i => i.statusPagamento !== 'pago').map(i => i.id);
+        const allSelected = selectableIds.length > 0 && selectableIds.every(id => selectedTxIds.includes(id));
 
-        if (allVisibleSelected) {
-            setSelectedTxIds(prev => prev.filter(id => !visibleIds.includes(id)));
+        if (allSelected) {
+            setSelectedTxIds(prev => prev.filter(id => !selectableIds.includes(id)));
         } else {
-            setSelectedTxIds(prev => Array.from(new Set([...prev, ...visibleIds])));
+            setSelectedTxIds(prev => Array.from(new Set([...prev, ...selectableIds])));
         }
     };
 
@@ -330,10 +800,10 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
 
     const handleSaveAction = async (status: 'Transferido' | 'Rascunho') => {
         if (selectedTxIds.length === 0) {
-            if (reportToEdit && reportToEdit.status === 'Rascunho') {
+            if (activeReport && activeReport.status === 'Rascunho') {
                 setIsSaving(true);
                 try {
-                    await dataService.delete('expense_reports', reportToEdit.id);
+                    await dataService.delete('expense_reports', activeReport.id);
                     setModalMessage("Rascunho excluído com sucesso.");
                     setIsConfirmDraftModalOpen(false);
                     setSuccessModalOpen(true);
@@ -351,7 +821,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
         }
         
         if (status === 'Transferido' && attachments.length === 0) {
-            alert("A Nota Fiscal (NF) ou comprovante é obrigatório para enviar para pagamento.");
+            alert("A Nota Fiscal (NF) ou comprovante é obrigatório para solicitar pagamento.");
             return;
         }
 
@@ -360,16 +830,16 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
         setIsConfirmDraftModalOpen(false);
 
         try {
-            const selectedItems = pendingItems.filter(t => selectedTxIds.includes(t.id));
-            const reportId = reportToEdit ? reportToEdit.id : `tech-${Date.now()}`;
+            const selectedItems = allItems.filter(t => selectedTxIds.includes(t.id));
+            const reportId = activeReport ? activeReport.id : `tech-${Date.now()}`;
+            const currentUserId = currentUser?.id || '1767988420092';
             
-            // 1. Para itens originados de Orçamentos, cria a transação financeira correspondente
-            // e vincula ao relatório para que o financeiro visualize
+            // 1. Garante que cada item selecionado possua uma transação financeira gravada
             for (const item of selectedItems) {
                 if (item.isFromOrcamento && item.rawOrcamento) {
                     const txPayload: FinancialTransaction = {
                         id: item.id,
-                        owner_id: currentUser.id || '1767988420092',
+                        owner_id: currentUserId,
                         description: item.description,
                         amount: item.amount,
                         type: 'despesa',
@@ -382,7 +852,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                     };
                     await dataService.save('financial_transactions', txPayload);
 
-                    // Atualiza o orçamento com a informação de pagamento solicitado
+                    // Atualiza o orçamento com a solicitação de faturamento
                     const updatedOrc = {
                         ...item.rawOrcamento,
                         venda_etapas: {
@@ -393,7 +863,6 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                     };
                     await dataService.save('orcamentos', updatedOrc);
                 } else if (item.rawTx) {
-                    // Atualiza transação avulsa existente com o relatedReportId
                     await dataService.save('financial_transactions', {
                         ...item.rawTx,
                         relatedReportId: reportId,
@@ -403,19 +872,19 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
             }
 
             // Identifica o instalador principal se houver
-            const uniqueInstallerNames = Array.from(new Set(selectedItems.map(i => i.installerName).filter(Boolean)));
+            const uniqueInstallerNames = Array.from(new Set(selectedItems.map(i => i.installerName).filter(n => n && n !== 'Não Definido')));
             const requesterLabel = uniqueInstallerNames.length === 1 
                 ? `Instalador: ${uniqueInstallerNames[0]}` 
-                : (reportToEdit ? reportToEdit.requester : currentUser.name);
+                : (activeReport ? activeReport.requester : (currentUser?.name || 'Administrador'));
 
             const finalReport: ExpenseReport = {
                 id: reportId,
-                owner_id: reportToEdit ? reportToEdit.owner_id : (currentUser.id || '1767988420092'),
+                owner_id: activeReport ? activeReport.owner_id : currentUserId,
                 requester: requesterLabel,
                 sector: 'Faturamento técnico',
-                period: 'Instalações / Lavagens',
-                periodStart: reportToEdit ? reportToEdit.periodStart : new Date().toISOString(),
-                periodEnd: reportToEdit ? reportToEdit.periodEnd : new Date().toISOString(),
+                period: 'Instalações Finalizadas',
+                periodStart: activeReport ? activeReport.periodStart : new Date().toISOString(),
+                periodEnd: activeReport ? activeReport.periodEnd : new Date().toISOString(),
                 items: selectedItems.map(t => ({
                     id: t.id,
                     date: t.dueDate,
@@ -429,7 +898,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                 attachments: attachments,
                 kmValueUsed: configKmValue,
                 status: status,
-                createdAt: reportToEdit ? reportToEdit.createdAt : new Date().toISOString(),
+                createdAt: activeReport ? activeReport.createdAt : new Date().toISOString(),
                 totalValue: selectedTotal,
                 isInstallmentWash: true
             };
@@ -437,7 +906,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
             await dataService.save('expense_reports', finalReport);
 
             if (status === 'Transferido') {
-                setModalMessage("Instalações enviadas com sucesso! As ordens foram liberadas para conferência e pagamento no Financeiro.");
+                setModalMessage("Instalações enviadas com sucesso! As ordens foram liberadas para auditoria e pagamento no Financeiro.");
             } else {
                 setModalMessage("Rascunho atualizado com sucesso.");
             }
@@ -459,7 +928,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
     return (
         <div className="max-w-7xl mx-auto space-y-6 animate-fade-in pb-20">
             {/* Banner de Cancelamento */}
-            {reportToEdit?.status === 'Cancelado' && reportToEdit.cancelReason && (
+            {activeReport?.status === 'Cancelado' && activeReport.cancelReason && (
                 <div className="bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-900/50 p-6 rounded-3xl flex items-start gap-5 shadow-sm animate-fade-in">
                     <div className="p-3 bg-red-600 text-white rounded-2xl shadow-lg shrink-0">
                         <ExclamationTriangleIcon className="w-8 h-8" />
@@ -467,9 +936,9 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                     <div>
                         <h4 className="text-base font-black text-red-700 dark:text-red-400 tracking-tight">Faturamento Rejeitado</h4>
                         <p className="text-sm font-bold text-red-600 dark:text-red-500/80 mt-1 leading-relaxed">
-                            Motivo do Administrativo: <span className="text-gray-800 dark:text-gray-100 font-black">"{reportToEdit.cancelReason}"</span>
+                            Motivo do Administrativo: <span className="text-gray-800 dark:text-gray-100 font-black">"{activeReport.cancelReason}"</span>
                         </p>
-                        <p className="text-[10px] font-black text-red-400 uppercase tracking-widest mt-3 opacity-70">Verifique as notas e reenvie se necessário</p>
+                        <p className="text-xs font-bold text-red-400 mt-2 opacity-80">Verifique as notas e reenvie se necessário</p>
                     </div>
                 </div>
             )}
@@ -482,10 +951,10 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                     </div>
                     <div>
                         <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight leading-none">
-                            {isReadOnly ? 'Visualizar Faturamento' : reportToEdit ? 'Alterar Faturamento' : 'Faturamento de Instalações e Serviços'}
+                            {isReadOnly ? 'Visualizar Faturamento' : activeReport ? 'Alterar Faturamento' : 'Faturamento de Instalações'}
                         </h1>
                         <p className="text-sm text-gray-500 font-bold mt-2">
-                            {reportToEdit ? `Registro técnico: ${reportToEdit.id}` : 'Selecione as instalações finalizadas por instalador para enviar ao pagamento'}
+                            {activeReport ? `Registro técnico: ${activeReport.id}` : 'Instalações finalizadas agrupadas por instalador parceiro'}
                         </p>
                     </div>
                 </div>
@@ -495,84 +964,129 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                 </div>
             </div>
 
-            {/* Filtro por Instalador */}
+            {/* Filtros Superiores: Abas de Status e Filtro por Instalador */}
             {!isReadOnly && (
-                <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-3">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <UsersIcon className="w-4 h-4 text-cyan-600" />
-                            <span className="text-xs font-black text-gray-700 dark:text-gray-200 uppercase tracking-wider">
-                                Filtrar por Instalador
-                            </span>
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-5">
+                    {/* Linha 1: Abas de Status (Aguardando Pagamento vs Todas) */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-gray-100 dark:border-gray-700">
+                        <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-900/60 p-1.5 rounded-2xl">
+                            <button
+                                type="button"
+                                onClick={() => setStatusFilter('pendentes')}
+                                className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+                                    statusFilter === 'pendentes'
+                                        ? 'bg-white dark:bg-gray-800 text-cyan-600 shadow-sm'
+                                        : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
+                                }`}
+                            >
+                                <ClockIcon className="w-4 h-4" />
+                                <span>Aguardando Pagamento</span>
+                                <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300">
+                                    {installerCounts.ALL?.pendentes || 0}
+                                </span>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => setStatusFilter('todas')}
+                                className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+                                    statusFilter === 'todas'
+                                        ? 'bg-white dark:bg-gray-800 text-cyan-600 shadow-sm'
+                                        : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
+                                }`}
+                            >
+                                <TableIcon className="w-4 h-4" />
+                                <span>Todas / Histórico</span>
+                                <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                                    {installerCounts.ALL?.total || 0}
+                                </span>
+                            </button>
                         </div>
-                        {filteredItems.length > 0 && (
+
+                        {filteredItems.filter(i => i.statusPagamento !== 'pago').length > 0 && (
                             <button
                                 type="button"
                                 onClick={handleSelectAllVisible}
-                                className="text-[11px] font-black text-cyan-600 hover:text-cyan-700 dark:text-cyan-400 hover:underline"
+                                className="px-4 py-2 bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-900/20 dark:hover:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300 rounded-xl text-xs font-black transition-all border border-cyan-200 dark:border-cyan-800"
                             >
-                                {filteredItems.every(i => selectedTxIds.includes(i.id)) ? 'Desmarcar todos' : 'Selecionar todos visíveis'}
+                                {filteredItems.filter(i => i.statusPagamento !== 'pago').every(i => selectedTxIds.includes(i.id))
+                                    ? 'Desmarcar todos'
+                                    : 'Selecionar todos disponíveis'}
                             </button>
                         )}
                     </div>
-                    <div className="flex flex-wrap gap-2 pt-1">
-                        <button
-                            type="button"
-                            onClick={() => setSelectedInstallerFilter('ALL')}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
-                                selectedInstallerFilter === 'ALL'
-                                    ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
-                                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
-                            }`}
-                        >
-                            <span>Todos os Instaladores</span>
-                            <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${
-                                selectedInstallerFilter === 'ALL' ? 'bg-cyan-800 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200'
-                            }`}>
-                                {installerCounts.ALL || 0}
+
+                    {/* Linha 2: Seletor de Instaladores */}
+                    <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                            <UsersIcon className="w-4 h-4 text-cyan-600" />
+                            <span className="text-xs font-black text-gray-500 dark:text-gray-400">
+                                Filtrar por Instalador:
                             </span>
-                        </button>
-
-                        {installers.map(inst => {
-                            const count = installerCounts[inst.id] || 0;
-                            const isSelected = selectedInstallerFilter === inst.id;
-                            return (
-                                <button
-                                    key={inst.id}
-                                    type="button"
-                                    onClick={() => setSelectedInstallerFilter(inst.id)}
-                                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
-                                        isSelected
-                                            ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30'
-                                            : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
-                                    }`}
-                                >
-                                    <span>{inst.nome}</span>
-                                    <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${
-                                        isSelected ? 'bg-cyan-800 text-white' : count > 0 ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/50 dark:text-cyan-300' : 'bg-gray-200 dark:bg-gray-600 text-gray-500'
-                                    }`}>
-                                        {count}
-                                    </span>
-                                </button>
-                            );
-                        })}
-
-                        {(installerCounts.UNASSIGNED > 0) && (
+                        </div>
+                        <div className="flex flex-wrap gap-2">
                             <button
                                 type="button"
-                                onClick={() => setSelectedInstallerFilter('UNASSIGNED')}
-                                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
-                                    selectedInstallerFilter === 'UNASSIGNED'
-                                        ? 'bg-cyan-600 text-white shadow-md'
+                                onClick={() => setSelectedInstallerFilter('ALL')}
+                                className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+                                    selectedInstallerFilter === 'ALL'
+                                        ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30 scale-[1.02]'
                                         : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
                                 }`}
                             >
-                                <span>Sem instalador</span>
-                                <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200">
-                                    {installerCounts.UNASSIGNED}
+                                <span>Todos os Instaladores</span>
+                                <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${
+                                    selectedInstallerFilter === 'ALL' ? 'bg-cyan-800 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200'
+                                }`}>
+                                    {statusFilter === 'pendentes' ? installerCounts.ALL?.pendentes || 0 : installerCounts.ALL?.total || 0}
                                 </span>
                             </button>
-                        )}
+
+                            {distinctInstallers.map(name => {
+                                const count = statusFilter === 'pendentes' ? installerCounts[name]?.pendentes || 0 : installerCounts[name]?.total || 0;
+                                const isSelected = selectedInstallerFilter === name;
+                                return (
+                                    <button
+                                        key={name}
+                                        type="button"
+                                        onClick={() => setSelectedInstallerFilter(name)}
+                                        className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+                                            isSelected
+                                                ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30 scale-[1.02]'
+                                                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
+                                        }`}
+                                    >
+                                        <span>{name}</span>
+                                        <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${
+                                            isSelected 
+                                                ? 'bg-cyan-800 text-white' 
+                                                : count > 0 
+                                                    ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/50 dark:text-cyan-300' 
+                                                    : 'bg-gray-200 dark:bg-gray-600 text-gray-400'
+                                        }`}>
+                                            {count}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+
+                            {(installerCounts.UNASSIGNED?.total > 0) && (
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedInstallerFilter('UNASSIGNED')}
+                                    className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+                                        selectedInstallerFilter === 'UNASSIGNED'
+                                            ? 'bg-cyan-600 text-white shadow-md'
+                                            : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    <span>Não atribuído</span>
+                                    <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200">
+                                        {statusFilter === 'pendentes' ? installerCounts.UNASSIGNED?.pendentes || 0 : installerCounts.UNASSIGNED?.total || 0}
+                                    </span>
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
@@ -582,14 +1096,15 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                     <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-lg border border-gray-100 dark:border-gray-700 overflow-hidden">
                         <div className="p-6 border-b border-gray-50 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/20 flex flex-col sm:flex-row justify-between items-center gap-4">
                             <h3 className="text-xs font-black text-gray-500 flex items-center gap-2">
-                                <TableIcon className="w-4 h-4" /> {isReadOnly ? 'Itens do Faturamento' : 'Instalações Finalizadas Disponíveis'}
+                                <TableIcon className="w-4 h-4" /> 
+                                {isReadOnly ? 'Itens do Faturamento' : `Instalações (${filteredItems.length} registros)`}
                             </h3>
                             {!isReadOnly && (
                                 <div className="relative w-full sm:w-64">
                                     <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                                     <input 
                                         type="text" 
-                                        placeholder="Buscar por cliente ou instalador..." 
+                                        placeholder="Buscar por cliente ou obra..." 
                                         value={searchTerm}
                                         onChange={e => setSearchTerm(e.target.value)}
                                         className="w-full pl-10 pr-4 py-2 rounded-xl bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-xs font-bold shadow-sm"
@@ -603,15 +1118,28 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                 <thead className="bg-gray-50 dark:bg-gray-900/50 text-[10px] font-black text-gray-400 border-b">
                                     <tr>
                                         <th className="px-6 py-4 w-12 text-center"></th>
-                                        <th className="px-4 py-4">Descrição da Instalação / Obra</th>
-                                        <th className="px-4 py-4">Instalador Responsável</th>
+                                        <th className="px-4 py-4">Instalação / Obra</th>
+                                        <th className="px-4 py-4">Instalador</th>
                                         <th className="px-4 py-4 text-center">Data Conclusão</th>
-                                        <th className="px-6 py-4 text-right">Valor da Mão de Obra</th>
+                                        <th className="px-4 py-4 text-center">Status</th>
+                                        <th className="px-6 py-4 text-right">
+                                            <div className="inline-flex items-center gap-1.5 justify-end">
+                                                <span>Valor Mão de Obra</span>
+                                                <span 
+                                                    className="p-0.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 hover:text-cyan-600 transition-colors cursor-help" 
+                                                    title="Soma de Instalação e Adequação. Passe o mouse sobre o valor de cada linha para ver o detalhamento individual."
+                                                >
+                                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                </span>
+                                            </div>
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                                     {isReadOnly ? (
-                                        (reportToEdit?.items || []).map(item => {
+                                        (activeReport?.items || []).map(item => {
                                             const tx = allTransactions.find(t => t.id === item.id);
                                             const categoryName = tx 
                                                 ? (categories.find(c => c.id === tx.categoryId)?.name || 'Instalação') 
@@ -620,6 +1148,52 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                             if (searchTerm && !item.description.toLowerCase().includes(searchTerm.toLowerCase())) {
                                                 return null;
                                             }
+
+                                            const orcId = item.id.replace('tx-inst-', '');
+                                            const matchingTechnicalItem: TechnicalItem = allItems.find(it => it.id === item.id) || (() => {
+                                                const foundOrc = rawOrcamentos.find(o => String(o.id) === String(orcId));
+                                                if (foundOrc) {
+                                                    const v: any = foundOrc.variants?.find((x: any) => x.isPrincipal) || foundOrc.variants?.[0] || {};
+                                                    const fs: any = { ...foundOrc.formState, ...(v.formState || {}) };
+                                                    return {
+                                                        id: item.id,
+                                                        description: item.description,
+                                                        amount: Number(item.others) || 0,
+                                                        dueDate: item.date,
+                                                        launchDate: item.date,
+                                                        categoryId: '',
+                                                        categoryName: 'Instalação',
+                                                        installerName: reportToEdit?.requester || 'Instalador',
+                                                        clientName: item.description.replace('Instalação - ', ''),
+                                                        itemType: 'INSTALACAO' as const,
+                                                        statusPagamento: 'pago' as const,
+                                                        isFromOrcamento: true,
+                                                        rawOrcamento: foundOrc,
+                                                        breakdown: computeCostBreakdown(fs)
+                                                    };
+                                                }
+                                                return {
+                                                    id: item.id,
+                                                    description: item.description,
+                                                    amount: Number(item.others) || 0,
+                                                    dueDate: item.date,
+                                                    launchDate: item.date,
+                                                    categoryId: '',
+                                                    categoryName: 'Instalação / Lavagem',
+                                                    installerName: reportToEdit?.requester || 'Instalador',
+                                                    clientName: item.description.replace('Instalação - ', '').replace('Lavagem - ', ''),
+                                                    itemType: 'INSTALACAO' as const,
+                                                    statusPagamento: 'pago' as const,
+                                                    breakdown: [
+                                                        {
+                                                            label: item.description,
+                                                            detail: 'Valor faturado no relatório técnico',
+                                                            value: Number(item.others) || 0,
+                                                            isIncluded: true
+                                                        }
+                                                    ]
+                                                };
+                                            })();
 
                                             return (
                                                 <tr 
@@ -650,8 +1224,46 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                                             </span>
                                                         </div>
                                                     </td>
-                                                    <td className="px-6 py-5 text-right text-sm font-black text-cyan-700 dark:text-cyan-400">
-                                                        {formatCurrency(item.others)}
+                                                    <td className="px-4 py-5 text-center">
+                                                        <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                                            Faturado
+                                                        </span>
+                                                    </td>
+                                                    <td 
+                                                        className="px-6 py-5 text-right relative cursor-pointer"
+                                                        onMouseEnter={(e) => handleMouseEnterItem(matchingTechnicalItem, e)}
+                                                        onMouseLeave={handleMouseLeaveItem}
+                                                        onClick={() => setModalDetailItem(matchingTechnicalItem)}
+                                                    >
+                                                        <div className="flex flex-col items-end">
+                                                            <div className="flex items-center gap-1.5 justify-end">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setModalDetailItem(matchingTechnicalItem);
+                                                                    }}
+                                                                    className="p-1 rounded-lg text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 dark:hover:bg-cyan-900/30 transition-all"
+                                                                    title="Ver itens considerados neste total"
+                                                                >
+                                                                    <EyeIcon className="w-3.5 h-3.5" />
+                                                                </button>
+                                                                <span className="text-sm font-black text-cyan-700 dark:text-cyan-400">
+                                                                    {formatCurrency(item.others)}
+                                                                </span>
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setModalDetailItem(matchingTechnicalItem);
+                                                                }}
+                                                                className="text-[9px] font-bold text-gray-400 hover:text-cyan-600 transition-colors tracking-tight flex items-center gap-0.5 mt-0.5"
+                                                            >
+                                                                <span>Ver itens</span>
+                                                                <span>▾</span>
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             );
@@ -659,41 +1271,79 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                     ) : (
                                         filteredItems.map(item => {
                                             const isSelected = selectedTxIds.includes(item.id);
+                                            const isPaid = item.statusPagamento === 'pago';
+                                            const isSolicitado = item.statusPagamento === 'solicitado';
+
                                             return (
                                                 <tr 
                                                     key={item.id} 
-                                                    onClick={() => toggleSelection(item.id)}
-                                                    className={`cursor-pointer transition-all ${isSelected ? 'bg-cyan-50 dark:bg-cyan-900/20 border-l-4 border-cyan-500' : 'hover:bg-gray-50/50 dark:hover:bg-gray-700/30'}`}
+                                                    onClick={() => !isPaid && toggleSelection(item.id)}
+                                                    className={`transition-all ${
+                                                        isPaid 
+                                                            ? 'opacity-60 bg-gray-50/40 dark:bg-gray-800/20 cursor-not-allowed' 
+                                                            : isSelected 
+                                                                ? 'bg-cyan-50 dark:bg-cyan-900/20 border-l-4 border-cyan-500 cursor-pointer' 
+                                                                : 'hover:bg-gray-50/50 dark:hover:bg-gray-700/30 cursor-pointer'
+                                                    }`}
                                                 >
                                                     <td className="px-6 py-5 text-center">
-                                                        <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-cyan-600 border-cyan-600 shadow-md' : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700'}`}>
+                                                        <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
+                                                            isPaid 
+                                                                ? 'bg-gray-200 border-gray-300 dark:bg-gray-700 dark:border-gray-600'
+                                                                : isSelected 
+                                                                    ? 'bg-cyan-600 border-cyan-600 shadow-md' 
+                                                                    : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700'
+                                                        }`}>
                                                             {isSelected && <CheckCircleIcon className="w-4 h-4 text-white" />}
+                                                            {isPaid && !isSelected && <CheckCircleIcon className="w-4 h-4 text-gray-400" />}
                                                         </div>
                                                     </td>
                                                     <td className="px-4 py-5">
                                                         <p className={`text-xs font-black ${isSelected ? 'text-cyan-700 dark:text-cyan-400' : 'text-gray-800 dark:text-gray-200'}`}>
                                                             {item.description}
                                                         </p>
-                                                        <div className="flex items-center gap-2 mt-1">
+                                                        <div className="flex flex-wrap items-center gap-2 mt-1.5">
                                                             <span className="text-[9px] text-gray-400 font-bold tracking-tighter">
                                                                 {item.categoryName}
                                                             </span>
                                                             {item.isFromOrcamento && (
-                                                                <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 text-[8px] font-black rounded uppercase">
-                                                                    Obra Concluída
+                                                                <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 text-[9px] font-black rounded">
+                                                                    Obra Aprovada
                                                                 </span>
+                                                            )}
+                                                            {item.itemType === 'INSTALACAO' && !isPaid && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleOpenExtraServiceModal(item);
+                                                                    }}
+                                                                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[9px] font-black border transition-all ${
+                                                                        item.extraValor && item.extraValor > 0
+                                                                            ? 'bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-700 hover:bg-amber-100 shadow-xs'
+                                                                            : 'bg-cyan-50 text-cyan-800 border-cyan-200 dark:bg-cyan-950/40 dark:text-cyan-300 dark:border-cyan-800 hover:bg-cyan-100 hover:border-cyan-400'
+                                                                    }`}
+                                                                    title="Clique para adicionar ou editar serviço extra identificado na instalação"
+                                                                >
+                                                                    <span className="text-[10px] leading-none">{item.extraValor && item.extraValor > 0 ? '✎' : '+'}</span>
+                                                                    <span>
+                                                                        {item.extraValor && item.extraValor > 0
+                                                                            ? `Extra: ${item.extraDesc || 'Identificado'} (+${formatCurrency(item.extraValor)})`
+                                                                            : '+ Serviço Extra'}
+                                                                    </span>
+                                                                </button>
                                                             )}
                                                         </div>
                                                     </td>
                                                     <td className="px-4 py-5">
-                                                        {item.installerName ? (
-                                                            <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300 inline-flex items-center gap-1.5">
+                                                        {item.installerName && item.installerName !== 'Não Definido' ? (
+                                                            <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300 inline-flex items-center gap-1.5 shadow-sm">
                                                                 <UsersIcon className="w-3 h-3 text-cyan-600" />
                                                                 {item.installerName}
                                                             </span>
                                                         ) : (
                                                             <span className="text-[10px] font-bold text-gray-400 italic">
-                                                                Sem instalador
+                                                                Não atribuído
                                                             </span>
                                                         )}
                                                     </td>
@@ -705,20 +1355,83 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                                             </span>
                                                         </div>
                                                     </td>
-                                                    <td className={`px-6 py-5 text-right text-sm font-black ${isSelected ? 'text-cyan-700 dark:text-cyan-400' : 'text-indigo-600'}`}>
-                                                        {formatCurrency(item.amount)}
+                                                    <td className="px-4 py-5 text-center">
+                                                        {isPaid ? (
+                                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                                                Pago
+                                                            </span>
+                                                        ) : isSolicitado ? (
+                                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                                                                Em Auditoria
+                                                            </span>
+                                                        ) : (
+                                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                                                                Pronto p/ Faturar
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                    <td 
+                                                        className="px-6 py-5 text-right relative"
+                                                        onMouseEnter={(e) => handleMouseEnterItem(item, e)}
+                                                        onMouseLeave={handleMouseLeaveItem}
+                                                    >
+                                                        <div className="flex flex-col items-end">
+                                                            <div className="flex items-center gap-1.5 justify-end">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setModalDetailItem(item);
+                                                                    }}
+                                                                    className="p-1 rounded-lg text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 dark:hover:bg-cyan-900/30 transition-all"
+                                                                    title="Passe o mouse ou clique para ver itens considerados neste total"
+                                                                >
+                                                                    <EyeIcon className="w-3.5 h-3.5" />
+                                                                </button>
+                                                                <span className={`text-sm font-black transition-colors ${isSelected ? 'text-cyan-700 dark:text-cyan-400' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                                                                    {formatCurrency(item.amount)}
+                                                                </span>
+                                                            </div>
+                                                            {item.extraValor && item.extraValor > 0 ? (
+                                                                <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400">
+                                                                    +{formatCurrency(item.extraValor)} extra
+                                                                </span>
+                                                            ) : null}
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setModalDetailItem(item);
+                                                                }}
+                                                                className="text-[9px] font-bold text-gray-400 hover:text-cyan-600 transition-colors tracking-tight flex items-center gap-0.5 mt-0.5"
+                                                            >
+                                                                <span>Ver itens</span>
+                                                                <span>▾</span>
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             );
                                         })
                                     )}
-                                    {((isReadOnly && (!reportToEdit?.items || reportToEdit.items.length === 0)) || (!isReadOnly && filteredItems.length === 0)) && (
+                                    {((isReadOnly && (!activeReport?.items || activeReport.items.length === 0)) || (!isReadOnly && filteredItems.length === 0)) && (
                                         <tr>
-                                            <td colSpan={5} className="px-6 py-20 text-center space-y-4">
+                                            <td colSpan={6} className="px-6 py-20 text-center space-y-4">
                                                 <ExclamationTriangleIcon className="w-12 h-12 text-gray-200 mx-auto" />
                                                 <p className="text-gray-400 font-bold italic text-sm">
-                                                    {isReadOnly ? 'Nenhum item encontrado neste faturamento.' : 'Não há instalações finalizadas pendentes para este instalador.'}
+                                                    {statusFilter === 'pendentes'
+                                                        ? 'Não há instalações finalizadas aguardando pagamento para este instalador.'
+                                                        : 'Nenhuma instalação finalizada encontrada para este instalador.'}
                                                 </p>
+                                                {statusFilter === 'pendentes' && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setStatusFilter('todas')}
+                                                        className="text-xs font-bold text-cyan-600 hover:underline mt-2 inline-block"
+                                                    >
+                                                        Visualizar todas as obras / histórico concluído
+                                                    </button>
+                                                )}
                                             </td>
                                         </tr>
                                     )}
@@ -738,7 +1451,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                         {/* Upload de Anexos */}
                         <div className="space-y-4">
                             <p className="text-xs text-gray-500 font-medium leading-relaxed">
-                                Anexe a Nota Fiscal ou Recibo emitido pelo instalador parceiro para liberação no contas a pagar:
+                                Anexe a Nota Fiscal (NF) ou recibo emitido pelo instalador parceiro para liberação no contas a pagar:
                             </p>
 
                             <div className="grid grid-cols-2 gap-3">
@@ -815,7 +1528,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                         }`}
                                     >
                                         <SaveIcon className="w-5 h-5" /> 
-                                        {isSaving ? 'Salvando...' : (reportToEdit ? 'Finalizar e Enviar' : 'Solicitar Pagamento')}
+                                        {isSaving ? 'Salvando...' : (activeReport ? 'Finalizar e Enviar' : 'Solicitar Pagamento')}
                                     </button>
 
                                     <button 
@@ -828,7 +1541,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                         }`}
                                     >
                                         <ClockIcon className="w-4 h-4" /> 
-                                        {selectedTxIds.length === 0 && reportToEdit ? 'Excluir Rascunho' : 'Salvar Rascunho'}
+                                        {selectedTxIds.length === 0 && activeReport ? 'Excluir Rascunho' : 'Salvar Rascunho'}
                                     </button>
                                 </div>
                             ) : (
@@ -929,6 +1642,343 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                     </div>
                 </div>
             )}
+
+            {/* Popover flutuante ao passar o mouse sobre Valor Mão de Obra */}
+            {hoveredItemInfo && (
+                <div 
+                    style={{
+                        position: 'fixed',
+                        top: Math.max(16, Math.min(window.innerHeight - 380, hoveredItemInfo.rect.bottom + 8 + 360 > window.innerHeight ? hoveredItemInfo.rect.top - 360 : hoveredItemInfo.rect.bottom + 8)),
+                        left: Math.max(16, Math.min(window.innerWidth - 396, hoveredItemInfo.rect.right - 380)),
+                        width: '380px',
+                        zIndex: 9999
+                    }}
+                    className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl border-2 border-cyan-500/50 p-5 text-left animate-fade-in pointer-events-auto backdrop-blur-md"
+                    onMouseEnter={handlePopoverMouseEnter}
+                    onMouseLeave={handlePopoverMouseLeave}
+                >
+                    {/* Header Popover */}
+                    <div className="flex items-start justify-between pb-3 border-b border-gray-100 dark:border-gray-700">
+                        <div>
+                            <span className="text-xs font-black text-cyan-600 dark:text-cyan-400 flex items-center gap-1.5">
+                                <SparklesIcon className="w-3.5 h-3.5" />
+                                Composição da Mão de Obra
+                            </span>
+                            <h4 className="text-sm font-black text-gray-900 dark:text-white mt-0.5 leading-snug">
+                                {hoveredItemInfo.item.clientName}
+                            </h4>
+                            {hoveredItemInfo.item.installerName && (
+                                <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
+                                    Instalador: <strong className="text-gray-700 dark:text-gray-200">{hoveredItemInfo.item.installerName}</strong>
+                                </p>
+                            )}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const it = hoveredItemInfo.item;
+                                setHoveredItemInfo(null);
+                                setModalDetailItem(it);
+                            }}
+                            className="px-2 py-1 rounded-lg text-cyan-700 dark:text-cyan-300 bg-cyan-50 dark:bg-cyan-900/30 hover:bg-cyan-100 text-[10px] font-black transition-colors"
+                            title="Abrir tela cheia"
+                        >
+                            ⛶ Abrir tela
+                        </button>
+                    </div>
+
+                    {/* Itens Considerados */}
+                    <div className="mt-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs font-black text-gray-500 dark:text-gray-400">
+                                Itens Considerados no Total:
+                            </span>
+                            <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                Soma Considerada
+                            </span>
+                        </div>
+
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                            {hoveredItemInfo.item.breakdown?.filter(b => b.isIncluded).map((b, idx) => (
+                                <div key={idx} className="flex justify-between items-center p-2.5 rounded-xl bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700/60">
+                                    <div className="pr-2">
+                                        <p className="text-xs font-bold text-gray-800 dark:text-gray-200 leading-tight">
+                                            {b.label}
+                                        </p>
+                                        {b.detail && (
+                                            <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium mt-0.5">
+                                                {b.detail}
+                                            </p>
+                                        )}
+                                    </div>
+                                    <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 shrink-0">
+                                        {formatCurrency(b.value)}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Total Highlight */}
+                        <div className="pt-2.5 border-t border-gray-100 dark:border-gray-700 flex justify-between items-center">
+                            <span className="text-xs font-black text-gray-700 dark:text-gray-300">Total da Mão de Obra</span>
+                            <span className="text-base font-black text-indigo-600 dark:text-indigo-400">
+                                {formatCurrency(hoveredItemInfo.item.amount)}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="mt-3 pt-2 text-center border-t border-gray-100 dark:border-gray-700">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const it = hoveredItemInfo.item;
+                                setHoveredItemInfo(null);
+                                setModalDetailItem(it);
+                            }}
+                            className="text-[10px] font-black text-cyan-600 hover:text-cyan-700 dark:text-cyan-400 hover:underline flex items-center justify-center gap-1 mx-auto"
+                        >
+                            <span>Clique para abrir tela completa com todos os itens</span>
+                            <span>→</span>
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Detalhamento Completo dos Itens da Mão de Obra */}
+            {modalDetailItem && (
+                <Modal 
+                    title="Detalhamento dos Itens da Mão de Obra" 
+                    onClose={() => setModalDetailItem(null)} 
+                    maxWidth="max-w-2xl"
+                >
+                    <div className="space-y-6 p-2">
+                        {/* Card Topo com Destaque do Cliente e Total */}
+                        <div className="bg-gradient-to-r from-cyan-500/10 via-indigo-500/10 to-transparent p-5 rounded-3xl border border-cyan-100 dark:border-cyan-900/40">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                <div>
+                                    <span className="text-xs font-bold text-cyan-700 dark:text-cyan-400">
+                                        Instalação / Obra
+                                    </span>
+                                    <h3 className="text-xl font-black text-gray-900 dark:text-white leading-tight">
+                                        {modalDetailItem.clientName}
+                                    </h3>
+                                    <p className="text-xs text-gray-500 font-bold mt-1">
+                                        Instalador: <span className="text-gray-800 dark:text-gray-200">{modalDetailItem.installerName || 'Não Definido'}</span> • Conclusão: {modalDetailItem.dueDate ? new Date(modalDetailItem.dueDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : 'Sem data'}
+                                    </p>
+                                </div>
+                                <div className="text-right sm:border-l sm:border-gray-200 dark:sm:border-gray-700 sm:pl-6 shrink-0">
+                                    <span className="text-xs font-bold text-gray-400 block">
+                                        Valor Total Mão de Obra
+                                    </span>
+                                    <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
+                                        {formatCurrency(modalDetailItem.amount)}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Itens Considerados */}
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <h4 className="text-sm font-black text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                                    Itens Considerados no Total ({formatCurrency(modalDetailItem.amount)})
+                                </h4>
+                                <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                    Somados na Mão de Obra
+                                </span>
+                            </div>
+
+                            <div className="border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden divide-y divide-gray-100 dark:divide-gray-700 bg-white dark:bg-gray-800 shadow-sm">
+                                {modalDetailItem.breakdown?.filter(b => b.isIncluded).map((b, idx) => (
+                                    <div key={idx} className="p-4 flex items-center justify-between hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors">
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm font-black text-gray-900 dark:text-white">
+                                                    {b.label}
+                                                </span>
+                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                                                    Considerado
+                                                </span>
+                                            </div>
+                                            {b.detail && (
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
+                                                    {b.detail}
+                                                </p>
+                                            )}
+                                        </div>
+                                        <span className="text-base font-black text-emerald-600 dark:text-emerald-400 shrink-0">
+                                            {formatCurrency(b.value)}
+                                        </span>
+                                    </div>
+                                ))}
+
+                                {/* Linha de Total */}
+                                <div className="p-4 bg-gray-50 dark:bg-gray-900/50 flex justify-between items-center font-black">
+                                    <span className="text-sm text-gray-700 dark:text-gray-300">Total Somado (Mão de Obra)</span>
+                                    <span className="text-lg text-indigo-600 dark:text-indigo-400">{formatCurrency(modalDetailItem.amount)}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="pt-2 flex justify-between items-center">
+                            {modalDetailItem.itemType === 'INSTALACAO' && !isReadOnly ? (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const it = modalDetailItem;
+                                        setModalDetailItem(null);
+                                        handleOpenExtraServiceModal(it);
+                                    }}
+                                    className="px-4 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl font-bold text-xs transition-colors inline-flex items-center gap-1.5"
+                                >
+                                    <span>✎</span>
+                                    <span>{modalDetailItem.extraValor && modalDetailItem.extraValor > 0 ? 'Editar Serviço Extra' : 'Incluir Serviço Extra'}</span>
+                                </button>
+                            ) : <div />}
+                            <button
+                                type="button"
+                                onClick={() => setModalDetailItem(null)}
+                                className="px-6 py-2.5 bg-gray-900 text-white rounded-xl font-bold text-xs hover:bg-black transition-colors"
+                            >
+                                Fechar
+                            </button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
+            {/* Modal de Inclusão de Serviço Extra na Instalação */}
+            {extraServiceModalItem && (() => {
+                const baseVal = extraServiceModalItem.baseAmount !== undefined 
+                    ? extraServiceModalItem.baseAmount 
+                    : Math.max(0, extraServiceModalItem.amount - (extraServiceModalItem.extraValor || 0));
+                const typedExtraVal = parseSafeNumber(extraValorInput);
+                const simulatedTotal = baseVal + typedExtraVal;
+                const hasExistingExtra = Boolean(extraServiceModalItem.extraValor && extraServiceModalItem.extraValor > 0);
+
+                return (
+                    <Modal
+                        title="Serviço Extra na Instalação"
+                        onClose={() => setExtraServiceModalItem(null)}
+                        maxWidth="max-w-lg"
+                    >
+                        <div className="space-y-5 p-2">
+                            {/* Identificação da Obra e Cliente */}
+                            <div className="bg-gradient-to-r from-cyan-50 to-indigo-50 dark:from-cyan-950/40 dark:to-indigo-950/40 p-4 rounded-2xl border border-cyan-100 dark:border-cyan-900/40">
+                                <span className="text-[10px] font-black tracking-wider text-cyan-700 dark:text-cyan-400">
+                                    Instalação / Obra
+                                </span>
+                                <h3 className="text-base font-black text-gray-900 dark:text-white leading-tight mt-0.5">
+                                    {extraServiceModalItem.clientName}
+                                </h3>
+                                <p className="text-xs text-gray-500 font-bold mt-1">
+                                    Instalador: <strong className="text-gray-700 dark:text-gray-200">{extraServiceModalItem.installerName || 'Não Definido'}</strong>
+                                </p>
+                            </div>
+
+                            {/* Campos Simples: Descrição e Valor */}
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-black text-gray-700 dark:text-gray-300 mb-1">
+                                        Descrição do Serviço Extra
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={extraDescInput}
+                                        onChange={(e) => setExtraDescInput(e.target.value)}
+                                        placeholder="Ex: Passagem de tubulação subterrânea, reforço de suporte..."
+                                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-bold text-gray-900 dark:text-white placeholder:text-gray-400 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 shadow-sm"
+                                        autoFocus
+                                    />
+                                    <p className="text-[10px] text-gray-400 mt-1">
+                                        Informe a descrição do serviço adicional ou imprevisto identificado durante a instalação.
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-black text-gray-700 dark:text-gray-300 mb-1">
+                                        Valor do Serviço Extra (R$)
+                                    </label>
+                                    <div className="relative">
+                                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-black text-gray-400">
+                                            R$
+                                        </span>
+                                        <input
+                                            type="text"
+                                            value={extraValorInput}
+                                            onChange={(e) => setExtraValorInput(e.target.value)}
+                                            placeholder="0,00"
+                                            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-black text-gray-900 dark:text-white placeholder:text-gray-400 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 shadow-sm"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Destaque do Somatório em Tempo Real */}
+                            <div className="p-4 rounded-2xl bg-gray-50 dark:bg-gray-900/60 border border-gray-200/80 dark:border-gray-700/80 space-y-2">
+                                <div className="flex justify-between items-center text-xs font-bold text-gray-600 dark:text-gray-400">
+                                    <span>Mão de Obra Base (Instalação + Adequação):</span>
+                                    <span>{formatCurrency(baseVal)}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                                    <span>+ Serviço Extra Informado:</span>
+                                    <span>{formatCurrency(typedExtraVal)}</span>
+                                </div>
+                                <div className="pt-2 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                                    <span className="text-xs font-black text-gray-900 dark:text-white">
+                                        Novo Total da Mão de Obra:
+                                    </span>
+                                    <span className="text-base font-black text-indigo-600 dark:text-indigo-400">
+                                        {formatCurrency(simulatedTotal)}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Botões de Ação */}
+                            <div className="flex items-center justify-between pt-2">
+                                {hasExistingExtra ? (
+                                    <button
+                                        type="button"
+                                        disabled={isSavingExtraService}
+                                        onClick={handleRemoveExtraService}
+                                        className="px-4 py-2.5 text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors inline-flex items-center gap-1.5"
+                                    >
+                                        <TrashIcon className="w-4 h-4" />
+                                        <span>Remover Extra</span>
+                                    </button>
+                                ) : <div />}
+
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        disabled={isSavingExtraService}
+                                        onClick={() => setExtraServiceModalItem(null)}
+                                        className="px-4 py-2.5 text-xs font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={isSavingExtraService}
+                                        onClick={handleSaveExtraService}
+                                        className="px-5 py-2.5 text-xs font-black text-white bg-cyan-600 hover:bg-cyan-700 active:scale-95 rounded-xl shadow-md transition-all inline-flex items-center gap-1.5"
+                                    >
+                                        {isSavingExtraService ? (
+                                            <span>Salvando...</span>
+                                        ) : (
+                                            <>
+                                                <CheckCircleIcon className="w-4 h-4" />
+                                                <span>Salvar e Somar no Total</span>
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </Modal>
+                );
+            })()}
         </div>
     );
 };

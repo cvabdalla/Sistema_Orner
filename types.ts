@@ -161,6 +161,8 @@ export interface SavedOrcamento {
         comissao?: boolean;
     };
     motivo_perda?: string;
+    instalacao_servico_extra_desc?: string;
+    instalacao_servico_extra_valor?: number;
 }
 
 export interface SalesSummaryItem {

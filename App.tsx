@@ -214,11 +214,9 @@ const App: React.FC = () => {
   };
 
   const handleSetCurrentPage = (page: Page) => {
-    if (page !== 'NOVO_ORCAMENTO') {
-      setEditingOrcamento(null);
-      setIsReadOnlyOrcamento(false);
-    }
-    if (page !== 'RELATORIOS_NOVO' && page !== 'INSTALACAO_LAVAGEM_SOLIC') setEditingReport(null);
+    setEditingOrcamento(null);
+    setIsReadOnlyOrcamento(false);
+    setEditingReport(null);
     setCurrentPage(page);
   };
 
