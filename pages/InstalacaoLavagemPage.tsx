@@ -25,8 +25,13 @@ const cleanText = (s?: string) => (s || '').toLowerCase().normalize('NFD').repla
 const parseSafeNumber = (val: any): number => {
     if (typeof val === 'number') return isNaN(val) ? 0 : val;
     if (!val) return 0;
-    const clean = String(val).trim().replace(/\./g, '').replace(',', '.');
-    const parsed = parseFloat(clean);
+    let s = String(val).trim();
+    s = s.replace(/[^\d.,-]/g, '');
+    if (!s) return 0;
+    if (s.includes(',')) {
+        s = s.replace(/\./g, '').replace(',', '.');
+    }
+    const parsed = parseFloat(s);
     return isNaN(parsed) ? 0 : parsed;
 };
 
@@ -116,7 +121,7 @@ export const computeCostBreakdown = (fs?: any, rawTx?: any, customExtraDesc?: st
     }
 
     // 2. Adequação de Local / Padrão (INCLUÍDO)
-    if (adequacaoLocal > 0 || fs.adequacaoLocalCusto !== undefined) {
+    if (adequacaoLocal > 0) {
         breakdown.push({
             label: 'Adequação do Local / Padrão de Entrada',
             detail: 'Adequação técnica informada no orçamento',
@@ -125,12 +130,18 @@ export const computeCostBreakdown = (fs?: any, rawTx?: any, customExtraDesc?: st
         });
     }
 
-    // 3. Serviço Extra Identificado na Instalação (INCLUÍDO)
-    if (extraValor > 0) {
+    // 3. Serviço Extra ou Ajuste Identificado na Instalação (INCLUÍDO)
+    const hasExtra = (extraValor !== undefined && Math.abs(extraValor) > 0.001) || Boolean(extraDesc && extraDesc.trim().length > 0);
+    if (hasExtra) {
+        const isNegative = (extraValor || 0) < 0;
         breakdown.push({
-            label: `Serviço Extra: ${extraDesc || 'Identificado na Instalação'}`,
-            detail: 'Serviço adicional identificado e aprovado na obra',
-            value: extraValor,
+            label: isNegative 
+                ? `Ajuste / Dedução Extra: ${extraDesc || 'Desconto / Ajuste'}`
+                : `Serviço Extra: ${extraDesc || 'Identificado na Instalação'}`,
+            detail: isNegative
+                ? 'Dedução ou acerto identificado na instalação'
+                : 'Serviço adicional identificado e aprovado na obra',
+            value: extraValor || 0,
             isIncluded: true
         });
     }
@@ -192,7 +203,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
     const handleOpenExtraServiceModal = (item: TechnicalItem) => {
         setExtraServiceModalItem(item);
         setExtraDescInput(item.extraDesc || '');
-        setExtraValorInput(item.extraValor && item.extraValor > 0 ? String(item.extraValor).replace('.', ',') : '');
+        setExtraValorInput(item.extraValor !== undefined && Math.abs(item.extraValor) > 0.001 ? String(item.extraValor).replace('.', ',') : '');
     };
 
     const handleSaveExtraService = async () => {
@@ -200,13 +211,34 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
         setIsSavingExtraService(true);
         try {
             const valNum = parseSafeNumber(extraValorInput);
-            const descTrim = extraDescInput.trim();
+            const descTrim = extraDescInput.trim() || (valNum < 0 ? 'Dedução / Ajuste na Instalação' : 'Serviço Extra na Instalação');
             const orcId = extraServiceModalItem.id.replace('tx-inst-', '');
 
-            const foundOrc = rawOrcamentos.find(o => String(o.id) === String(orcId));
+            // 1. Localiza o orçamento (em rawOrcamentos ou na referência direta do item)
+            const foundOrc = rawOrcamentos.find(o => String(o.id) === String(orcId)) || extraServiceModalItem.rawOrcamento;
+            
+            // 2. Grava no storage local persistente específico de serviços extras (à prova de falhas)
+            try {
+                const localMapStr = localStorage.getItem('orner_servicos_extras') || '{}';
+                const localMap = JSON.parse(localMapStr);
+                if (Math.abs(valNum) > 0.001 || (descTrim && valNum !== 0)) {
+                    localMap[extraServiceModalItem.id] = { desc: descTrim, valor: valNum };
+                    localMap[String(orcId)] = { desc: descTrim, valor: valNum };
+                } else {
+                    delete localMap[extraServiceModalItem.id];
+                    delete localMap[String(orcId)];
+                }
+                localStorage.setItem('orner_servicos_extras', JSON.stringify(localMap));
+            } catch (e) {
+                console.warn('Erro ao atualizar localStorage orner_servicos_extras:', e);
+            }
+
+            let updatedOrc: SavedOrcamento | undefined;
+            let baseFs: any = {};
+
             if (foundOrc) {
                 const v: any = foundOrc.variants?.find((x: any) => x.isPrincipal) || foundOrc.variants?.[0] || {};
-                const baseFs: any = { ...foundOrc.formState, ...(v.formState || {}) };
+                baseFs = { ...foundOrc.formState, ...(v.formState || {}) };
 
                 const updatedFormState = {
                     ...(foundOrc.formState || {}),
@@ -214,7 +246,11 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                     instalacao_servico_extra_valor: valNum
                 };
 
-                const updatedVariants = (foundOrc.variants || []).map((vari: any, idx: number) => {
+                const variantsToUpdate = (foundOrc.variants && foundOrc.variants.length > 0)
+                    ? foundOrc.variants
+                    : [{ id: 'default', name: 'Principal', isPrincipal: true, formState: {}, calculated: {} }];
+
+                const updatedVariants = variantsToUpdate.map((vari: any, idx: number) => {
                     if (idx === 0 || vari.isPrincipal) {
                         return {
                             ...vari,
@@ -228,7 +264,22 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                     return vari;
                 });
 
-                // Persiste no Supabase: tenta atualizar colunas dedicadas e o JSONB formState
+                updatedOrc = {
+                    ...foundOrc,
+                    formState: updatedFormState,
+                    variants: updatedVariants,
+                    instalacao_servico_extra_desc: descTrim,
+                    instalacao_servico_extra_valor: valNum
+                } as any;
+
+                // Salva via dataService (atualiza cache do sistema e banco)
+                try {
+                    await dataService.save('orcamentos', updatedOrc!);
+                } catch (saveErr) {
+                    console.warn('dataService.save orcamentos warning:', saveErr);
+                }
+
+                // Tenta atualizar colunas dedicadas no Supabase (se já criadas via SQL)
                 try {
                     const { error: colErr } = await supabase.from('orcamentos').update({
                         formState: updatedFormState,
@@ -243,68 +294,88 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                             variants: updatedVariants
                         }).eq('id', orcId);
                     }
-                } catch (err) {
-                    await supabase.from('orcamentos').update({
-                        formState: updatedFormState,
-                        variants: updatedVariants
-                    }).eq('id', orcId);
+                } catch (colErr) {
+                    console.warn('Supabase update colunas warning:', colErr);
                 }
 
-                const updatedOrc: SavedOrcamento = {
-                    ...foundOrc,
-                    formState: updatedFormState,
-                    variants: updatedVariants,
+                setRawOrcamentos(prev => prev.map(o => String(o.id) === String(orcId) ? updatedOrc! : o));
+            } else {
+                baseFs = {
                     instalacao_servico_extra_desc: descTrim,
                     instalacao_servico_extra_valor: valNum
                 };
-
-                setRawOrcamentos(prev => prev.map(o => String(o.id) === String(orcId) ? updatedOrc : o));
-
-                // Recalcula o item e reflete imediatamente na tela e no total
-                const qtd = parseSafeNumber(baseFs.terceiroInstalacaoQtd);
-                const custo = parseSafeNumber(baseFs.terceiroInstalacaoCusto);
-                const instalacaoMaoDeObra = qtd * custo;
-                const adequacaoLocal = parseSafeNumber(baseFs.adequacaoLocalCusto);
-                let baseAmount = instalacaoMaoDeObra + adequacaoLocal;
-                if (baseAmount === 0) {
-                    baseAmount = parseSafeNumber(baseFs.projetoInstalacaoCusto);
-                }
-                const newAmount = baseAmount + valNum;
-                const newBreakdown = computeCostBreakdown(baseFs, undefined, descTrim, valNum);
-
-                setAllItems(prev => prev.map(it => {
-                    if (it.id === extraServiceModalItem.id) {
-                        return {
-                            ...it,
-                            amount: newAmount,
-                            baseAmount,
-                            extraDesc: descTrim,
-                            extraValor: valNum,
-                            rawOrcamento: updatedOrc,
-                            breakdown: newBreakdown
-                        };
-                    }
-                    return it;
-                }));
-
-                // Se o modal de detalhamento estiver aberto com este item, atualiza também
-                setModalDetailItem(prev => {
-                    if (prev && prev.id === extraServiceModalItem.id) {
-                        return {
-                            ...prev,
-                            amount: newAmount,
-                            baseAmount,
-                            extraDesc: descTrim,
-                            extraValor: valNum,
-                            rawOrcamento: updatedOrc,
-                            breakdown: newBreakdown
-                        };
-                    }
-                    return prev;
-                });
-
-                setExtraServiceModalItem(null);
             }
+
+            // 3. Recalcula o item e reflete imediatamente na tela, detalhamento e no somatório
+            const qtd = parseSafeNumber(baseFs.terceiroInstalacaoQtd);
+            const custo = parseSafeNumber(baseFs.terceiroInstalacaoCusto);
+            const instalacaoMaoDeObra = qtd * custo;
+            const adequacaoLocal = parseSafeNumber(baseFs.adequacaoLocalCusto);
+            
+            let baseAmount = extraServiceModalItem.baseAmount !== undefined 
+                ? extraServiceModalItem.baseAmount 
+                : (instalacaoMaoDeObra + adequacaoLocal);
+            if (baseAmount === 0) {
+                baseAmount = parseSafeNumber(baseFs.projetoInstalacaoCusto);
+            }
+            if (baseAmount === 0 && extraServiceModalItem.amount > 0) {
+                baseAmount = Math.max(0, extraServiceModalItem.amount - (extraServiceModalItem.extraValor || 0));
+            }
+
+            const newAmount = baseAmount + valNum;
+            const newBreakdown = computeCostBreakdown(baseFs, undefined, descTrim, valNum);
+
+            setAllItems(prev => prev.map(it => {
+                if (it.id === extraServiceModalItem.id) {
+                    return {
+                        ...it,
+                        amount: newAmount,
+                        baseAmount,
+                        extraDesc: descTrim,
+                        extraValor: valNum,
+                        rawOrcamento: updatedOrc || it.rawOrcamento,
+                        breakdown: newBreakdown
+                    };
+                }
+                return it;
+            }));
+
+            // Atualiza modal de detalhamento se estiver aberto
+            setModalDetailItem(prev => {
+                if (prev && prev.id === extraServiceModalItem.id) {
+                    return {
+                        ...prev,
+                        amount: newAmount,
+                        baseAmount,
+                        extraDesc: descTrim,
+                        extraValor: valNum,
+                        rawOrcamento: updatedOrc || prev.rawOrcamento,
+                        breakdown: newBreakdown
+                    };
+                }
+                return prev;
+            });
+
+            // Atualiza popover se ativo
+            setHoveredItemInfo(prev => {
+                if (prev && prev.item.id === extraServiceModalItem.id) {
+                    return {
+                        ...prev,
+                        item: {
+                            ...prev.item,
+                            amount: newAmount,
+                            baseAmount,
+                            extraDesc: descTrim,
+                            extraValor: valNum,
+                            rawOrcamento: updatedOrc || prev.item.rawOrcamento,
+                            breakdown: newBreakdown
+                        }
+                    };
+                }
+                return prev;
+            });
+
+            setExtraServiceModalItem(null);
         } catch (e: any) {
             alert("Erro ao salvar serviço extra: " + (e?.message || "Tente novamente"));
         } finally {
@@ -312,15 +383,31 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
         }
     };
 
-    const handleRemoveExtraService = async () => {
-        if (!extraServiceModalItem) return;
+    const handleRemoveExtraService = async (itemToRemove?: TechnicalItem) => {
+        const targetItem = itemToRemove || extraServiceModalItem;
+        if (!targetItem) return;
         setIsSavingExtraService(true);
         try {
-            const orcId = extraServiceModalItem.id.replace('tx-inst-', '');
-            const foundOrc = rawOrcamentos.find(o => String(o.id) === String(orcId));
+            const orcId = targetItem.id.replace('tx-inst-', '');
+            const foundOrc = rawOrcamentos.find(o => String(o.id) === String(orcId)) || targetItem.rawOrcamento;
+
+            // 1. Limpa do storage local persistente
+            try {
+                const localMapStr = localStorage.getItem('orner_servicos_extras') || '{}';
+                const localMap = JSON.parse(localMapStr);
+                delete localMap[targetItem.id];
+                delete localMap[String(orcId)];
+                localStorage.setItem('orner_servicos_extras', JSON.stringify(localMap));
+            } catch (e) {
+                console.warn('Erro ao limpar localStorage orner_servicos_extras:', e);
+            }
+
+            let updatedOrc: SavedOrcamento | undefined;
+            let baseFs: any = {};
+
             if (foundOrc) {
                 const v: any = foundOrc.variants?.find((x: any) => x.isPrincipal) || foundOrc.variants?.[0] || {};
-                const baseFs: any = { ...foundOrc.formState, ...(v.formState || {}) };
+                baseFs = { ...foundOrc.formState, ...(v.formState || {}) };
 
                 const updatedFormState = {
                     ...(foundOrc.formState || {}),
@@ -328,7 +415,11 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                     instalacao_servico_extra_valor: 0
                 };
 
-                const updatedVariants = (foundOrc.variants || []).map((vari: any, idx: number) => {
+                const variantsToUpdate = (foundOrc.variants && foundOrc.variants.length > 0)
+                    ? foundOrc.variants
+                    : [{ id: 'default', name: 'Principal', isPrincipal: true, formState: {}, calculated: {} }];
+
+                const updatedVariants = variantsToUpdate.map((vari: any, idx: number) => {
                     if (idx === 0 || vari.isPrincipal) {
                         return {
                             ...vari,
@@ -341,6 +432,20 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                     }
                     return vari;
                 });
+
+                updatedOrc = {
+                    ...foundOrc,
+                    formState: updatedFormState,
+                    variants: updatedVariants,
+                    instalacao_servico_extra_desc: '',
+                    instalacao_servico_extra_valor: 0
+                } as any;
+
+                try {
+                    await dataService.save('orcamentos', updatedOrc!);
+                } catch (saveErr) {
+                    console.warn('dataService.save orcamentos warning:', saveErr);
+                }
 
                 try {
                     const { error: colErr } = await supabase.from('orcamentos').update({
@@ -357,64 +462,78 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                         }).eq('id', orcId);
                     }
                 } catch (err) {
-                    await supabase.from('orcamentos').update({
-                        formState: updatedFormState,
-                        variants: updatedVariants
-                    }).eq('id', orcId);
+                    console.warn('Supabase colunas remove warning:', err);
                 }
 
-                const updatedOrc: SavedOrcamento = {
-                    ...foundOrc,
-                    formState: updatedFormState,
-                    variants: updatedVariants,
-                    instalacao_servico_extra_desc: '',
-                    instalacao_servico_extra_valor: 0
-                };
-
-                setRawOrcamentos(prev => prev.map(o => String(o.id) === String(orcId) ? updatedOrc : o));
-
-                const qtd = parseSafeNumber(baseFs.terceiroInstalacaoQtd);
-                const custo = parseSafeNumber(baseFs.terceiroInstalacaoCusto);
-                const instalacaoMaoDeObra = qtd * custo;
-                const adequacaoLocal = parseSafeNumber(baseFs.adequacaoLocalCusto);
-                let baseAmount = instalacaoMaoDeObra + adequacaoLocal;
-                if (baseAmount === 0) {
-                    baseAmount = parseSafeNumber(baseFs.projetoInstalacaoCusto);
-                }
-                const newBreakdown = computeCostBreakdown(baseFs, undefined, '', 0);
-
-                setAllItems(prev => prev.map(it => {
-                    if (it.id === extraServiceModalItem.id) {
-                        return {
-                            ...it,
-                            amount: baseAmount,
-                            baseAmount,
-                            extraDesc: '',
-                            extraValor: 0,
-                            rawOrcamento: updatedOrc,
-                            breakdown: newBreakdown
-                        };
-                    }
-                    return it;
-                }));
-
-                setModalDetailItem(prev => {
-                    if (prev && prev.id === extraServiceModalItem.id) {
-                        return {
-                            ...prev,
-                            amount: baseAmount,
-                            baseAmount,
-                            extraDesc: '',
-                            extraValor: 0,
-                            rawOrcamento: updatedOrc,
-                            breakdown: newBreakdown
-                        };
-                    }
-                    return prev;
-                });
-
-                setExtraServiceModalItem(null);
+                setRawOrcamentos(prev => prev.map(o => String(o.id) === String(orcId) ? updatedOrc! : o));
             }
+
+            const qtd = parseSafeNumber(baseFs.terceiroInstalacaoQtd);
+            const custo = parseSafeNumber(baseFs.terceiroInstalacaoCusto);
+            const instalacaoMaoDeObra = qtd * custo;
+            const adequacaoLocal = parseSafeNumber(baseFs.adequacaoLocalCusto);
+            
+            let baseAmount = targetItem.baseAmount !== undefined 
+                ? targetItem.baseAmount 
+                : (instalacaoMaoDeObra + adequacaoLocal);
+            if (baseAmount === 0) {
+                baseAmount = parseSafeNumber(baseFs.projetoInstalacaoCusto);
+            }
+            if (baseAmount === 0 && targetItem.amount > 0) {
+                baseAmount = Math.max(0, targetItem.amount - (targetItem.extraValor || 0));
+            }
+
+            const newBreakdown = computeCostBreakdown(baseFs, undefined, '', 0);
+
+            setAllItems(prev => prev.map(it => {
+                if (it.id === targetItem.id) {
+                    return {
+                        ...it,
+                        amount: baseAmount,
+                        baseAmount,
+                        extraDesc: '',
+                        extraValor: 0,
+                        rawOrcamento: updatedOrc || it.rawOrcamento,
+                        breakdown: newBreakdown
+                    };
+                }
+                return it;
+            }));
+
+            setModalDetailItem(prev => {
+                if (prev && prev.id === targetItem.id) {
+                    return {
+                        ...prev,
+                        amount: baseAmount,
+                        baseAmount,
+                        extraDesc: '',
+                        extraValor: 0,
+                        rawOrcamento: updatedOrc || prev.rawOrcamento,
+                        breakdown: newBreakdown
+                    };
+                }
+                return prev;
+            });
+
+            setHoveredItemInfo(prev => {
+                if (prev && prev.item.id === targetItem.id) {
+                    return {
+                        ...prev,
+                        item: {
+                            ...prev.item,
+                            amount: baseAmount,
+                            baseAmount,
+                            extraDesc: '',
+                            extraValor: 0,
+                            rawOrcamento: updatedOrc || prev.item.rawOrcamento,
+                            breakdown: newBreakdown
+                        }
+                    };
+                }
+                return prev;
+            });
+
+            setExtraServiceModalItem(null);
         } catch (e: any) {
             alert("Erro ao remover serviço extra: " + (e?.message || "Tente novamente"));
         } finally {
@@ -468,8 +587,17 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                     });
                 }
             } catch (e) {
-                // Colunas ainda não criadas no Supabase SQL, formState será utilizado
+                // Colunas ainda não criadas no Supabase SQL, formState/localStorage será utilizado
             }
+
+            // Fallback em LocalStorage para garantir persistência total mesmo antes de executar migration no Supabase
+            let localExtrasMap: Record<string, { desc: string; valor: number }> = {};
+            try {
+                const rawLocal = localStorage.getItem('orner_servicos_extras');
+                if (rawLocal) {
+                    localExtrasMap = JSON.parse(rawLocal);
+                }
+            } catch (e) {}
 
             const remoteKm = (remoteConfigs || []).find((c: any) => c.id === 'km_value');
             if (remoteKm) {
@@ -540,10 +668,24 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
 
                     // Extra Service
                     const extraCol = extraColsMap[String(o.id)];
-                    const extraDesc = (extraCol?.desc || fs.instalacao_servico_extra_desc || fs.instalacaoServicoExtraDesc || (o as any).instalacao_servico_extra_desc || '').trim();
-                    const extraValor = (extraCol && extraCol.valor > 0)
+                    const localExtra = localExtrasMap[`tx-inst-${o.id}`] || localExtrasMap[String(o.id)];
+                    const extraDesc = (
+                        extraCol?.desc || 
+                        fs.instalacao_servico_extra_desc || 
+                        fs.instalacaoServicoExtraDesc || 
+                        (o as any).instalacao_servico_extra_desc || 
+                        localExtra?.desc || 
+                        ''
+                    ).trim();
+                    const extraValor = (extraCol && Math.abs(extraCol.valor) > 0.001)
                         ? extraCol.valor
-                        : parseSafeNumber(fs.instalacao_servico_extra_valor || fs.instalacaoServicoExtraValor || (o as any).instalacao_servico_extra_valor || 0);
+                        : parseSafeNumber(
+                            fs.instalacao_servico_extra_valor ?? 
+                            fs.instalacaoServicoExtraValor ?? 
+                            (o as any).instalacao_servico_extra_valor ?? 
+                            localExtra?.valor ?? 
+                            0
+                        );
 
                     const amount = baseAmount + extraValor;
 
@@ -1155,6 +1297,8 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                                 if (foundOrc) {
                                                     const v: any = foundOrc.variants?.find((x: any) => x.isPrincipal) || foundOrc.variants?.[0] || {};
                                                     const fs: any = { ...foundOrc.formState, ...(v.formState || {}) };
+                                                    const roExtraDesc = (foundOrc as any).instalacao_servico_extra_desc || fs.instalacao_servico_extra_desc || '';
+                                                    const roExtraValor = parseSafeNumber((foundOrc as any).instalacao_servico_extra_valor ?? fs.instalacao_servico_extra_valor ?? 0);
                                                     return {
                                                         id: item.id,
                                                         description: item.description,
@@ -1169,7 +1313,9 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                                         statusPagamento: 'pago' as const,
                                                         isFromOrcamento: true,
                                                         rawOrcamento: foundOrc,
-                                                        breakdown: computeCostBreakdown(fs)
+                                                        extraDesc: roExtraDesc,
+                                                        extraValor: roExtraValor,
+                                                        breakdown: computeCostBreakdown(fs, undefined, roExtraDesc, roExtraValor)
                                                     };
                                                 }
                                                 return {
@@ -1311,28 +1457,64 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                                                     Obra Aprovada
                                                                 </span>
                                                             )}
-                                                            {item.itemType === 'INSTALACAO' && !isPaid && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        handleOpenExtraServiceModal(item);
-                                                                    }}
-                                                                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[9px] font-black border transition-all ${
-                                                                        item.extraValor && item.extraValor > 0
-                                                                            ? 'bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-700 hover:bg-amber-100 shadow-xs'
-                                                                            : 'bg-cyan-50 text-cyan-800 border-cyan-200 dark:bg-cyan-950/40 dark:text-cyan-300 dark:border-cyan-800 hover:bg-cyan-100 hover:border-cyan-400'
-                                                                    }`}
-                                                                    title="Clique para adicionar ou editar serviço extra identificado na instalação"
-                                                                >
-                                                                    <span className="text-[10px] leading-none">{item.extraValor && item.extraValor > 0 ? '✎' : '+'}</span>
-                                                                    <span>
-                                                                        {item.extraValor && item.extraValor > 0
-                                                                            ? `Extra: ${item.extraDesc || 'Identificado'} (+${formatCurrency(item.extraValor)})`
-                                                                            : '+ Serviço Extra'}
-                                                                    </span>
-                                                                </button>
-                                                            )}
+                                                            {item.itemType === 'INSTALACAO' && !isPaid && (() => {
+                                                                const hasExtra = (item.extraValor !== undefined && Math.abs(item.extraValor) > 0.001) || Boolean(item.extraDesc && item.extraDesc.trim());
+                                                                const isNegative = (item.extraValor || 0) < 0;
+
+                                                                return hasExtra ? (
+                                                                    <div className={`inline-flex items-center gap-1 p-0.5 rounded-lg border shadow-xs ${
+                                                                        isNegative 
+                                                                            ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-700' 
+                                                                            : 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700'
+                                                                    }`}>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handleOpenExtraServiceModal(item);
+                                                                            }}
+                                                                            className={`inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-black transition-colors ${
+                                                                                isNegative 
+                                                                                    ? 'text-rose-900 dark:text-rose-300 hover:text-rose-700' 
+                                                                                    : 'text-amber-900 dark:text-amber-300 hover:text-amber-700'
+                                                                            }`}
+                                                                            title="Clique para editar este serviço extra ou ajuste"
+                                                                        >
+                                                                            <span>✎</span>
+                                                                            <span className="max-w-[260px] truncate">
+                                                                                {isNegative ? 'Ajuste: ' : 'Extra: '}
+                                                                                {item.extraDesc || 'Identificado'} ({item.extraValor && item.extraValor > 0 ? `+${formatCurrency(item.extraValor)}` : formatCurrency(item.extraValor || 0)})
+                                                                            </span>
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                if (window.confirm(`Deseja remover o serviço extra "${item.extraDesc || 'Identificado'}" (${formatCurrency(item.extraValor || 0)})?`)) {
+                                                                                    handleRemoveExtraService(item);
+                                                                                }
+                                                                            }}
+                                                                            className="p-1 rounded-md text-red-500 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
+                                                                            title="Excluir este serviço extra"
+                                                                        >
+                                                                            <TrashIcon className="w-3 h-3" />
+                                                                        </button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleOpenExtraServiceModal(item);
+                                                                        }}
+                                                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black border bg-cyan-50 text-cyan-800 border-cyan-200 dark:bg-cyan-950/40 dark:text-cyan-300 dark:border-cyan-800 hover:bg-cyan-100 hover:border-cyan-400 transition-all shadow-2xs"
+                                                                        title="Clique para adicionar serviço extra identificado na instalação"
+                                                                    >
+                                                                        <span className="text-[11px] leading-none font-bold">+</span>
+                                                                        <span>Serviço Extra</span>
+                                                                    </button>
+                                                                );
+                                                            })()}
                                                         </div>
                                                     </td>
                                                     <td className="px-4 py-5">
@@ -1392,9 +1574,9 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                                                     {formatCurrency(item.amount)}
                                                                 </span>
                                                             </div>
-                                                            {item.extraValor && item.extraValor > 0 ? (
-                                                                <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400">
-                                                                    +{formatCurrency(item.extraValor)} extra
+                                                            {item.extraValor !== undefined && Math.abs(item.extraValor) > 0.001 ? (
+                                                                <span className={`text-[9px] font-bold ${item.extraValor < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                                                                    {item.extraValor > 0 ? `+${formatCurrency(item.extraValor)} extra` : `${formatCurrency(item.extraValor)} ajuste`}
                                                                 </span>
                                                             ) : null}
                                                             <button
@@ -1699,30 +1881,35 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                         </div>
 
                         <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                            {hoveredItemInfo.item.breakdown?.filter(b => b.isIncluded).map((b, idx) => (
-                                <div key={idx} className="flex justify-between items-center p-2.5 rounded-xl bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700/60">
-                                    <div className="pr-2">
-                                        <p className="text-xs font-bold text-gray-800 dark:text-gray-200 leading-tight">
-                                            {b.label}
-                                        </p>
-                                        {b.detail && (
-                                            <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium mt-0.5">
-                                                {b.detail}
+                            {hoveredItemInfo.item.breakdown?.filter(b => b.isIncluded).map((b, idx) => {
+                                const isNeg = b.value < 0;
+                                return (
+                                    <div key={idx} className={`flex justify-between items-center p-2.5 rounded-xl border ${isNeg ? 'bg-rose-50/60 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800/40' : 'bg-gray-50 dark:bg-gray-900/50 border-gray-100 dark:border-gray-700/60'}`}>
+                                        <div className="pr-2">
+                                            <p className={`text-xs font-bold leading-tight ${isNeg ? 'text-rose-800 dark:text-rose-300' : 'text-gray-800 dark:text-gray-200'}`}>
+                                                {b.label}
                                             </p>
-                                        )}
+                                            {b.detail && (
+                                                <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium mt-0.5">
+                                                    {b.detail}
+                                                </p>
+                                            )}
+                                        </div>
+                                        <span className={`text-xs font-black shrink-0 ${isNeg ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                            {formatCurrency(b.value)}
+                                        </span>
                                     </div>
-                                    <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 shrink-0">
-                                        {formatCurrency(b.value)}
-                                    </span>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
 
                         {/* Total Highlight */}
                         <div className="pt-2.5 border-t border-gray-100 dark:border-gray-700 flex justify-between items-center">
                             <span className="text-xs font-black text-gray-700 dark:text-gray-300">Total da Mão de Obra</span>
                             <span className="text-base font-black text-indigo-600 dark:text-indigo-400">
-                                {formatCurrency(hoveredItemInfo.item.amount)}
+                                {formatCurrency(
+                                    (hoveredItemInfo.item.breakdown || []).filter(b => b.isIncluded).reduce((acc, b) => acc + (b.value || 0), 0)
+                                )}
                             </span>
                         </div>
                     </div>
@@ -1745,121 +1932,148 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
             )}
 
             {/* Modal de Detalhamento Completo dos Itens da Mão de Obra */}
-            {modalDetailItem && (
-                <Modal 
-                    title="Detalhamento dos Itens da Mão de Obra" 
-                    onClose={() => setModalDetailItem(null)} 
-                    maxWidth="max-w-2xl"
-                >
-                    <div className="space-y-6 p-2">
-                        {/* Card Topo com Destaque do Cliente e Total */}
-                        <div className="bg-gradient-to-r from-cyan-500/10 via-indigo-500/10 to-transparent p-5 rounded-3xl border border-cyan-100 dark:border-cyan-900/40">
-                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                                <div>
-                                    <span className="text-xs font-bold text-cyan-700 dark:text-cyan-400">
-                                        Instalação / Obra
-                                    </span>
-                                    <h3 className="text-xl font-black text-gray-900 dark:text-white leading-tight">
-                                        {modalDetailItem.clientName}
-                                    </h3>
-                                    <p className="text-xs text-gray-500 font-bold mt-1">
-                                        Instalador: <span className="text-gray-800 dark:text-gray-200">{modalDetailItem.installerName || 'Não Definido'}</span> • Conclusão: {modalDetailItem.dueDate ? new Date(modalDetailItem.dueDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : 'Sem data'}
-                                    </p>
-                                </div>
-                                <div className="text-right sm:border-l sm:border-gray-200 dark:sm:border-gray-700 sm:pl-6 shrink-0">
-                                    <span className="text-xs font-bold text-gray-400 block">
-                                        Valor Total Mão de Obra
-                                    </span>
-                                    <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
-                                        {formatCurrency(modalDetailItem.amount)}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
+            {modalDetailItem && (() => {
+                const modalCalculatedTotal = (modalDetailItem.breakdown || [])
+                    .filter(b => b.isIncluded)
+                    .reduce((acc, b) => acc + (b.value || 0), 0);
+                const hasModalExtra = (modalDetailItem.extraValor !== undefined && Math.abs(modalDetailItem.extraValor) > 0.001) || Boolean(modalDetailItem.extraDesc && modalDetailItem.extraDesc.trim());
 
-                        {/* Itens Considerados */}
-                        <div className="space-y-3">
-                            <div className="flex items-center justify-between">
-                                <h4 className="text-sm font-black text-gray-800 dark:text-gray-200 flex items-center gap-2">
-                                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                                    Itens Considerados no Total ({formatCurrency(modalDetailItem.amount)})
-                                </h4>
-                                <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
-                                    Somados na Mão de Obra
-                                </span>
-                            </div>
-
-                            <div className="border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden divide-y divide-gray-100 dark:divide-gray-700 bg-white dark:bg-gray-800 shadow-sm">
-                                {modalDetailItem.breakdown?.filter(b => b.isIncluded).map((b, idx) => (
-                                    <div key={idx} className="p-4 flex items-center justify-between hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors">
-                                        <div className="space-y-1">
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-sm font-black text-gray-900 dark:text-white">
-                                                    {b.label}
-                                                </span>
-                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
-                                                    Considerado
-                                                </span>
-                                            </div>
-                                            {b.detail && (
-                                                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                                                    {b.detail}
-                                                </p>
-                                            )}
-                                        </div>
-                                        <span className="text-base font-black text-emerald-600 dark:text-emerald-400 shrink-0">
-                                            {formatCurrency(b.value)}
+                return (
+                    <Modal 
+                        title="Detalhamento dos Itens da Mão de Obra" 
+                        onClose={() => setModalDetailItem(null)} 
+                        maxWidth="max-w-2xl"
+                    >
+                        <div className="space-y-6 p-2">
+                            {/* Card Topo com Destaque do Cliente e Total */}
+                            <div className="bg-gradient-to-r from-cyan-500/10 via-indigo-500/10 to-transparent p-5 rounded-3xl border border-cyan-100 dark:border-cyan-900/40">
+                                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                    <div>
+                                        <span className="text-xs font-bold text-cyan-700 dark:text-cyan-400">
+                                            Instalação / Obra
+                                        </span>
+                                        <h3 className="text-xl font-black text-gray-900 dark:text-white leading-tight">
+                                            {modalDetailItem.clientName}
+                                        </h3>
+                                        <p className="text-xs text-gray-500 font-bold mt-1">
+                                            Instalador: <span className="text-gray-800 dark:text-gray-200">{modalDetailItem.installerName || 'Não Definido'}</span> • Conclusão: {modalDetailItem.dueDate ? new Date(modalDetailItem.dueDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : 'Sem data'}
+                                        </p>
+                                    </div>
+                                    <div className="text-right sm:border-l sm:border-gray-200 dark:sm:border-gray-700 sm:pl-6 shrink-0">
+                                        <span className="text-xs font-bold text-gray-400 block">
+                                            Valor Total Mão de Obra
+                                        </span>
+                                        <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
+                                            {formatCurrency(modalCalculatedTotal)}
                                         </span>
                                     </div>
-                                ))}
-
-                                {/* Linha de Total */}
-                                <div className="p-4 bg-gray-50 dark:bg-gray-900/50 flex justify-between items-center font-black">
-                                    <span className="text-sm text-gray-700 dark:text-gray-300">Total Somado (Mão de Obra)</span>
-                                    <span className="text-lg text-indigo-600 dark:text-indigo-400">{formatCurrency(modalDetailItem.amount)}</span>
                                 </div>
                             </div>
-                        </div>
 
-                        <div className="pt-2 flex justify-between items-center">
-                            {modalDetailItem.itemType === 'INSTALACAO' && !isReadOnly ? (
+                            {/* Itens Considerados */}
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <h4 className="text-sm font-black text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                                        Itens Considerados no Total ({formatCurrency(modalCalculatedTotal)})
+                                    </h4>
+                                    <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                        Somados na Mão de Obra
+                                    </span>
+                                </div>
+
+                                <div className="border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden divide-y divide-gray-100 dark:divide-gray-700 bg-white dark:bg-gray-800 shadow-sm">
+                                    {modalDetailItem.breakdown?.filter(b => b.isIncluded).map((b, idx) => {
+                                        const isNeg = b.value < 0;
+                                        return (
+                                            <div key={idx} className={`p-4 flex items-center justify-between transition-colors ${isNeg ? 'bg-rose-50/40 dark:bg-rose-950/20 hover:bg-rose-50/70' : 'hover:bg-gray-50/50 dark:hover:bg-gray-700/30'}`}>
+                                                <div className="space-y-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`text-sm font-black ${isNeg ? 'text-rose-900 dark:text-rose-200' : 'text-gray-900 dark:text-white'}`}>
+                                                            {b.label}
+                                                        </span>
+                                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${isNeg ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'}`}>
+                                                            {isNeg ? 'Dedução / Ajuste' : 'Considerado'}
+                                                        </span>
+                                                    </div>
+                                                    {b.detail && (
+                                                        <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
+                                                            {b.detail}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <span className={`text-base font-black shrink-0 ${isNeg ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                                    {formatCurrency(b.value)}
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+
+                                    {/* Linha de Total */}
+                                    <div className="p-4 bg-gray-50 dark:bg-gray-900/50 flex justify-between items-center font-black">
+                                        <span className="text-sm text-gray-700 dark:text-gray-300">Total Somado (Mão de Obra)</span>
+                                        <span className="text-lg text-indigo-600 dark:text-indigo-400">{formatCurrency(modalCalculatedTotal)}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="pt-2 flex justify-between items-center">
+                                {modalDetailItem.itemType === 'INSTALACAO' && !isReadOnly ? (
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const it = modalDetailItem;
+                                                setModalDetailItem(null);
+                                                handleOpenExtraServiceModal(it);
+                                            }}
+                                            className="px-4 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl font-bold text-xs transition-colors inline-flex items-center gap-1.5 shadow-2xs"
+                                        >
+                                            <span>✎</span>
+                                            <span>{hasModalExtra ? 'Editar Serviço Extra / Ajuste' : 'Incluir Serviço Extra'}</span>
+                                        </button>
+                                        {hasModalExtra && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    if (window.confirm(`Deseja remover o serviço extra "${modalDetailItem.extraDesc || 'Identificado'}" (${formatCurrency(modalDetailItem.extraValor || 0)})?`)) {
+                                                        handleRemoveExtraService(modalDetailItem);
+                                                    }
+                                                }}
+                                                className="px-3.5 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl font-bold text-xs transition-colors inline-flex items-center gap-1.5 shadow-2xs"
+                                                title="Excluir serviço extra"
+                                            >
+                                                <TrashIcon className="w-3.5 h-3.5" />
+                                                <span>Excluir Extra</span>
+                                            </button>
+                                        )}
+                                    </div>
+                                ) : <div />}
                                 <button
                                     type="button"
-                                    onClick={() => {
-                                        const it = modalDetailItem;
-                                        setModalDetailItem(null);
-                                        handleOpenExtraServiceModal(it);
-                                    }}
-                                    className="px-4 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl font-bold text-xs transition-colors inline-flex items-center gap-1.5"
+                                    onClick={() => setModalDetailItem(null)}
+                                    className="px-6 py-2.5 bg-gray-900 text-white rounded-xl font-bold text-xs hover:bg-black transition-colors"
                                 >
-                                    <span>✎</span>
-                                    <span>{modalDetailItem.extraValor && modalDetailItem.extraValor > 0 ? 'Editar Serviço Extra' : 'Incluir Serviço Extra'}</span>
+                                    Fechar
                                 </button>
-                            ) : <div />}
-                            <button
-                                type="button"
-                                onClick={() => setModalDetailItem(null)}
-                                className="px-6 py-2.5 bg-gray-900 text-white rounded-xl font-bold text-xs hover:bg-black transition-colors"
-                            >
-                                Fechar
-                            </button>
+                            </div>
                         </div>
-                    </div>
-                </Modal>
-            )}
+                    </Modal>
+                );
+            })()}
 
-            {/* Modal de Inclusão de Serviço Extra na Instalação */}
+            {/* Modal de Inclusão / Edição de Serviço Extra ou Ajuste */}
             {extraServiceModalItem && (() => {
                 const baseVal = extraServiceModalItem.baseAmount !== undefined 
                     ? extraServiceModalItem.baseAmount 
-                    : Math.max(0, extraServiceModalItem.amount - (extraServiceModalItem.extraValor || 0));
+                    : (extraServiceModalItem.amount - (extraServiceModalItem.extraValor || 0));
                 const typedExtraVal = parseSafeNumber(extraValorInput);
                 const simulatedTotal = baseVal + typedExtraVal;
-                const hasExistingExtra = Boolean(extraServiceModalItem.extraValor && extraServiceModalItem.extraValor > 0);
+                const hasExistingExtra = Boolean((extraServiceModalItem.extraValor !== undefined && Math.abs(extraServiceModalItem.extraValor) > 0.001) || Boolean(extraServiceModalItem.extraDesc && extraServiceModalItem.extraDesc.trim()));
 
                 return (
                     <Modal
-                        title="Serviço Extra na Instalação"
+                        title={hasExistingExtra ? "Editar Serviço Extra / Ajuste" : "Serviço Extra na Instalação"}
                         onClose={() => setExtraServiceModalItem(null)}
                         maxWidth="max-w-lg"
                     >
@@ -1877,29 +2091,67 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                 </p>
                             </div>
 
-                            {/* Campos Simples: Descrição e Valor */}
+                            {/* Campos: Descrição e Valor com Alternador de Acréscimo / Dedução */}
                             <div className="space-y-4">
                                 <div>
                                     <label className="block text-xs font-black text-gray-700 dark:text-gray-300 mb-1">
-                                        Descrição do Serviço Extra
+                                        Descrição do Serviço Extra ou Ajuste
                                     </label>
                                     <input
                                         type="text"
                                         value={extraDescInput}
                                         onChange={(e) => setExtraDescInput(e.target.value)}
-                                        placeholder="Ex: Passagem de tubulação subterrânea, reforço de suporte..."
+                                        placeholder="Ex: Passagem de tubulação subterrânea, acerto de adiantamento..."
                                         className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs font-bold text-gray-900 dark:text-white placeholder:text-gray-400 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 shadow-sm"
                                         autoFocus
                                     />
                                     <p className="text-[10px] text-gray-400 mt-1">
-                                        Informe a descrição do serviço adicional ou imprevisto identificado durante a instalação.
+                                        Informe a descrição do serviço adicional, imprevisto ou acerto técnico da instalação.
                                     </p>
                                 </div>
 
                                 <div>
-                                    <label className="block text-xs font-black text-gray-700 dark:text-gray-300 mb-1">
-                                        Valor do Serviço Extra (R$)
-                                    </label>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <label className="block text-xs font-black text-gray-700 dark:text-gray-300">
+                                            Valor (R$)
+                                        </label>
+                                        <div className="flex items-center gap-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const cur = parseSafeNumber(extraValorInput);
+                                                    if (cur < 0) {
+                                                        setExtraValorInput(String(Math.abs(cur)).replace('.', ','));
+                                                    }
+                                                }}
+                                                className={`px-2 py-0.5 rounded text-[10px] font-black transition-colors ${
+                                                    typedExtraVal >= 0 
+                                                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                }`}
+                                            >
+                                                + Acréscimo
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const cur = parseSafeNumber(extraValorInput);
+                                                    if (cur > 0) {
+                                                        setExtraValorInput('-' + String(Math.abs(cur)).replace('.', ','));
+                                                    } else if (cur === 0 && !extraValorInput.startsWith('-')) {
+                                                        setExtraValorInput('-');
+                                                    }
+                                                }}
+                                                className={`px-2 py-0.5 rounded text-[10px] font-black transition-colors ${
+                                                    typedExtraVal < 0 
+                                                        ? 'bg-rose-100 text-rose-800 border border-rose-300' 
+                                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                }`}
+                                            >
+                                                - Dedução / Ajuste
+                                            </button>
+                                        </div>
+                                    </div>
                                     <div className="relative">
                                         <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-black text-gray-400">
                                             R$
@@ -1908,10 +2160,13 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                             type="text"
                                             value={extraValorInput}
                                             onChange={(e) => setExtraValorInput(e.target.value)}
-                                            placeholder="0,00"
+                                            placeholder="0,00 ou -1.100,00"
                                             className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm font-black text-gray-900 dark:text-white placeholder:text-gray-400 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 shadow-sm"
                                         />
                                     </div>
+                                    <p className="text-[10px] text-gray-400 mt-1">
+                                        Use valores positivos para acréscimos ou negativos (-) para deduções e acertos de valores já pagos.
+                                    </p>
                                 </div>
                             </div>
 
@@ -1921,8 +2176,8 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                     <span>Mão de Obra Base (Instalação + Adequação):</span>
                                     <span>{formatCurrency(baseVal)}</span>
                                 </div>
-                                <div className="flex justify-between items-center text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                                    <span>+ Serviço Extra Informado:</span>
+                                <div className={`flex justify-between items-center text-xs font-bold ${typedExtraVal < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                    <span>{typedExtraVal < 0 ? 'Dedução / Ajuste Informado:' : '+ Serviço Extra Informado:'}</span>
                                     <span>{formatCurrency(typedExtraVal)}</span>
                                 </div>
                                 <div className="pt-2 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
@@ -1941,11 +2196,11 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                     <button
                                         type="button"
                                         disabled={isSavingExtraService}
-                                        onClick={handleRemoveExtraService}
+                                        onClick={() => handleRemoveExtraService()}
                                         className="px-4 py-2.5 text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors inline-flex items-center gap-1.5"
                                     >
                                         <TrashIcon className="w-4 h-4" />
-                                        <span>Remover Extra</span>
+                                        <span>Excluir Extra</span>
                                     </button>
                                 ) : <div />}
 

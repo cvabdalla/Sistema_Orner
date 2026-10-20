@@ -125,5 +125,9 @@ COMMENT ON COLUMN "purchase_requests"."invoiceFileName" IS 'Nome do arquivo de N
 COMMENT ON COLUMN "purchase_requests"."invoiceKey" IS 'Chave de acesso da Nota Fiscal (44 dígitos)';
 COMMENT ON COLUMN "purchase_requests"."invoiceNumber" IS 'Número de identificação da Nota Fiscal';
 
+-- 10. Colunas para inclusão de serviço extra identificado na instalação
+ALTER TABLE "orcamentos" ADD COLUMN IF NOT EXISTS "instalacao_servico_extra_desc" text;
+ALTER TABLE "orcamentos" ADD COLUMN IF NOT EXISTS "instalacao_servico_extra_valor" numeric DEFAULT 0;
 
-
+COMMENT ON COLUMN "orcamentos"."instalacao_servico_extra_desc" IS 'Descrição do serviço extra identificado na instalação';
+COMMENT ON COLUMN "orcamentos"."instalacao_servico_extra_valor" IS 'Valor do serviço extra identificado na instalação';
