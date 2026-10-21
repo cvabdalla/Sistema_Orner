@@ -168,6 +168,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
     const [isConfirmSubmitModalOpen, setIsConfirmSubmitModalOpen] = useState(false);
     const [modalMessage, setModalMessage] = useState('');
     const [hdPhoto, setHdPhoto] = useState<string | null>(null);
+    const [confirmDeleteExtraItem, setConfirmDeleteExtraItem] = useState<TechnicalItem | null>(null);
 
     // Hover and Modal Breakdown inspection states
     const [hoveredItemInfo, setHoveredItemInfo] = useState<{ item: TechnicalItem; rect: DOMRect } | null>(null);
@@ -561,7 +562,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
         try {
             const currentUserId = currentUser?.id || '1767988420092';
 
-            const [txs, cats, allReports, remoteConfigs, insts, orcs] = await Promise.all([
+            const [txsRes, catsRes, reportsRes, configsRes, instsRes, orcsRes] = await Promise.allSettled([
                 dataService.getAll<FinancialTransaction>('financial_transactions', currentUserId, true),
                 dataService.getAll<FinancialCategory>('financial_categories'),
                 dataService.getAll<ExpenseReport>('expense_reports', undefined, true),
@@ -569,6 +570,27 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                 dataService.getAll<Instalador>('instaladores'),
                 dataService.getPartial<SavedOrcamento>('orcamentos', 'id, status, formState, variants, venda_etapas', undefined, true)
             ]);
+
+            const txs = txsRes.status === 'fulfilled' ? txsRes.value : [];
+            const cats = catsRes.status === 'fulfilled' ? catsRes.value : [];
+            const allReports = reportsRes.status === 'fulfilled' ? reportsRes.value : [];
+            const remoteConfigs = configsRes.status === 'fulfilled' ? configsRes.value : [];
+            const insts = instsRes.status === 'fulfilled' ? instsRes.value : [];
+            let orcs = orcsRes.status === 'fulfilled' ? orcsRes.value : [];
+
+            // Se orçamentos não vieram ou falharam por lentidão da rede, tenta busca direta no Supabase
+            if (!orcs || orcs.length === 0) {
+                try {
+                    const { data: directOrcs } = await supabase
+                        .from('orcamentos')
+                        .select('id, status, formState, variants, venda_etapas');
+                    if (directOrcs && directOrcs.length > 0) {
+                        orcs = directOrcs as any[];
+                    }
+                } catch (fallbackErr) {
+                    console.warn('[FALLBACK] Erro na busca direta de orçamentos:', fallbackErr);
+                }
+            }
 
             setRawOrcamentos(orcs || []);
 
@@ -616,6 +638,19 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                     .flatMap(r => (r.items || []).map(item => item.id))
             );
 
+            // Mapeia relatórios já efetivamente PAGOS para evitar trazer qualquer coisa já quitada
+            const paidReportTxIds = new Set(
+                (allReports || [])
+                    .filter(r => r.status === 'Pago')
+                    .flatMap(r => (r.items || []).map(item => item.id))
+            );
+
+            const paidFinanceTxIds = new Set(
+                (txs || [])
+                    .filter(t => t.status === 'pago')
+                    .map(t => t.id)
+            );
+
             // Categoria de instalação padrão
             const instalacaoCat = (cats || []).find(c => {
                 const n = (c.name || '').toLowerCase();
@@ -630,7 +665,12 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                 const etapas = (o.venda_etapas || {}) as any;
                 const isApproved = statusClean === 'aprovado';
                 const isFinalizada = Boolean(etapas.instalacao_finalizada);
-                const isPaid = Boolean(etapas.pag_instalacao);
+                const txId = `tx-inst-${o.id}`;
+
+                // Verifica se já foi efetivamente pago
+                const isPaid = paidReportTxIds.has(txId) || 
+                               paidFinanceTxIds.has(txId) || 
+                               (Boolean(etapas.pag_instalacao) && statusClean === 'finalizado');
 
                 // Regra estrita: Somente orçamentos classificados como Aprovados na lista de orçamentos,
                 // com a flag de "Instalação Finalizada" assinalada e que ainda não foram pagos
@@ -1100,9 +1140,21 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                         </p>
                     </div>
                 </div>
-                <div className="flex flex-col items-end">
-                    <p className="text-[10px] font-black text-gray-400 mb-1 tracking-tighter">Total Selecionado</p>
-                    <p className="text-3xl font-black text-cyan-600">{formatCurrency(selectedTotal)}</p>
+                <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4">
+                    <button
+                        type="button"
+                        onClick={() => loadData()}
+                        disabled={isLoading}
+                        className="px-3.5 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 hover:bg-gray-100 dark:bg-gray-700 dark:hover:bg-gray-600 text-xs font-bold text-gray-700 dark:text-gray-200 transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95 disabled:opacity-60"
+                        title="Recarregar dados do banco de dados"
+                    >
+                        <span className={`text-sm ${isLoading ? 'animate-spin inline-block' : ''}`}>↻</span>
+                        <span>{isLoading ? 'Atualizando...' : 'Atualizar Dados'}</span>
+                    </button>
+                    <div className="text-right">
+                        <p className="text-[10px] font-black text-gray-400 mb-0.5 tracking-tighter">Total Selecionado</p>
+                        <p className="text-3xl font-black text-cyan-600 leading-tight">{formatCurrency(selectedTotal)}</p>
+                    </div>
                 </div>
             </div>
 
@@ -1233,10 +1285,10 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                 </div>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                <div className="lg:col-span-8 space-y-4">
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+                <div className="xl:col-span-8 2xl:col-span-9 space-y-4 min-w-0">
                     <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-lg border border-gray-100 dark:border-gray-700 overflow-hidden">
-                        <div className="p-6 border-b border-gray-50 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/20 flex flex-col sm:flex-row justify-between items-center gap-4">
+                        <div className="p-5 border-b border-gray-50 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/20 flex flex-col sm:flex-row justify-between items-center gap-4">
                             <h3 className="text-xs font-black text-gray-500 flex items-center gap-2">
                                 <TableIcon className="w-4 h-4" /> 
                                 {isReadOnly ? 'Itens do Faturamento' : `Instalações (${filteredItems.length} registros)`}
@@ -1256,15 +1308,15 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                         </div>
 
                         <div className="overflow-x-auto">
-                            <table className="w-full text-left">
+                            <table className="w-full text-left table-auto">
                                 <thead className="bg-gray-50 dark:bg-gray-900/50 text-[10px] font-black text-gray-400 border-b">
                                     <tr>
-                                        <th className="px-6 py-4 w-12 text-center"></th>
-                                        <th className="px-4 py-4">Instalação / Obra</th>
-                                        <th className="px-4 py-4">Instalador</th>
-                                        <th className="px-4 py-4 text-center">Data Conclusão</th>
-                                        <th className="px-4 py-4 text-center">Status</th>
-                                        <th className="px-6 py-4 text-right">
+                                        <th className="w-10 px-2.5 py-3 text-center"></th>
+                                        <th className="px-3 py-3">Instalação / Obra</th>
+                                        <th className="px-2.5 py-3 text-center whitespace-nowrap">Instalador</th>
+                                        <th className="px-2.5 py-3 text-center whitespace-nowrap">Data Conclusão</th>
+                                        <th className="px-2.5 py-3 text-center whitespace-nowrap">Status</th>
+                                        <th className="px-3 py-3 text-right whitespace-nowrap">
                                             <div className="inline-flex items-center gap-1.5 justify-end">
                                                 <span>Valor Mão de Obra</span>
                                                 <span 
@@ -1346,23 +1398,23 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                                     key={item.id} 
                                                     className="bg-cyan-50/10 dark:bg-cyan-900/5 border-l-4 border-cyan-500 transition-all cursor-default"
                                                 >
-                                                    <td className="px-6 py-5 text-center">
+                                                    <td className="w-10 px-2.5 py-3.5 text-center">
                                                         <div className="w-6 h-6 rounded-lg bg-cyan-600 border-2 border-cyan-600 flex items-center justify-center shadow-md">
                                                             <CheckCircleIcon className="w-4 h-4 text-white" />
                                                         </div>
                                                     </td>
-                                                    <td className="px-4 py-5">
+                                                    <td className="px-3 py-3.5">
                                                         <p className="text-xs font-black text-cyan-700 dark:text-cyan-400">{item.description}</p>
                                                         <p className="text-[9px] text-gray-400 font-bold mt-1 tracking-tighter">
                                                             {categoryName}
                                                         </p>
                                                     </td>
-                                                    <td className="px-4 py-5">
+                                                    <td className="px-2.5 py-3.5 text-center whitespace-nowrap">
                                                         <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300">
                                                             {reportToEdit?.requester || 'Instalador'}
                                                         </span>
                                                     </td>
-                                                    <td className="px-4 py-5 text-center">
+                                                    <td className="px-2.5 py-3.5 text-center whitespace-nowrap">
                                                         <div className="flex flex-col items-center">
                                                             <CalendarIcon className="w-3.5 h-3.5 text-gray-300 mb-1" />
                                                             <span className="text-[11px] font-black text-gray-500">
@@ -1370,13 +1422,13 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                                             </span>
                                                         </div>
                                                     </td>
-                                                    <td className="px-4 py-5 text-center">
+                                                    <td className="px-2.5 py-3.5 text-center whitespace-nowrap">
                                                         <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
                                                             Faturado
                                                         </span>
                                                     </td>
                                                     <td 
-                                                        className="px-6 py-5 text-right relative cursor-pointer"
+                                                        className="px-3 py-3.5 text-right whitespace-nowrap relative cursor-pointer"
                                                         onMouseEnter={(e) => handleMouseEnterItem(matchingTechnicalItem, e)}
                                                         onMouseLeave={handleMouseLeaveItem}
                                                         onClick={() => setModalDetailItem(matchingTechnicalItem)}
@@ -1432,7 +1484,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                                                 : 'hover:bg-gray-50/50 dark:hover:bg-gray-700/30 cursor-pointer'
                                                     }`}
                                                 >
-                                                    <td className="px-6 py-5 text-center">
+                                                    <td className="w-10 px-2.5 py-3.5 text-center">
                                                         <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
                                                             isPaid 
                                                                 ? 'bg-gray-200 border-gray-300 dark:bg-gray-700 dark:border-gray-600'
@@ -1444,7 +1496,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                                             {isPaid && !isSelected && <CheckCircleIcon className="w-4 h-4 text-gray-400" />}
                                                         </div>
                                                     </td>
-                                                    <td className="px-4 py-5">
+                                                    <td className="px-3 py-3.5">
                                                         <p className={`text-xs font-black ${isSelected ? 'text-cyan-700 dark:text-cyan-400' : 'text-gray-800 dark:text-gray-200'}`}>
                                                             {item.description}
                                                         </p>
@@ -1481,7 +1533,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                                                             title="Clique para editar este serviço extra ou ajuste"
                                                                         >
                                                                             <span>✎</span>
-                                                                            <span className="max-w-[260px] truncate">
+                                                                            <span className="max-w-[190px] sm:max-w-[230px] truncate">
                                                                                 {isNegative ? 'Ajuste: ' : 'Extra: '}
                                                                                 {item.extraDesc || 'Identificado'} ({item.extraValor && item.extraValor > 0 ? `+${formatCurrency(item.extraValor)}` : formatCurrency(item.extraValor || 0)})
                                                                             </span>
@@ -1490,12 +1542,10 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                                                             type="button"
                                                                             onClick={(e) => {
                                                                                 e.stopPropagation();
-                                                                                if (window.confirm(`Deseja remover o serviço extra "${item.extraDesc || 'Identificado'}" (${formatCurrency(item.extraValor || 0)})?`)) {
-                                                                                    handleRemoveExtraService(item);
-                                                                                }
+                                                                                setConfirmDeleteExtraItem(item);
                                                                             }}
-                                                                            className="p-1 rounded-md text-red-500 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
-                                                                            title="Excluir este serviço extra"
+                                                                            className="p-1 rounded-md text-red-500 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors cursor-pointer"
+                                                                            title="Excluir este serviço extra ou ajuste"
                                                                         >
                                                                             <TrashIcon className="w-3 h-3" />
                                                                         </button>
@@ -1517,7 +1567,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                                             })()}
                                                         </div>
                                                     </td>
-                                                    <td className="px-4 py-5">
+                                                    <td className="px-2.5 py-3.5 text-center whitespace-nowrap">
                                                         {item.installerName && item.installerName !== 'Não Definido' ? (
                                                             <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300 inline-flex items-center gap-1.5 shadow-sm">
                                                                 <UsersIcon className="w-3 h-3 text-cyan-600" />
@@ -1529,7 +1579,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                                             </span>
                                                         )}
                                                     </td>
-                                                    <td className="px-4 py-5 text-center">
+                                                    <td className="px-2.5 py-3.5 text-center whitespace-nowrap">
                                                         <div className="flex flex-col items-center">
                                                             <CalendarIcon className="w-3.5 h-3.5 text-gray-300 mb-1" />
                                                             <span className="text-[11px] font-black text-gray-500">
@@ -1537,7 +1587,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                                             </span>
                                                         </div>
                                                     </td>
-                                                    <td className="px-4 py-5 text-center">
+                                                    <td className="px-2.5 py-3.5 text-center whitespace-nowrap">
                                                         {isPaid ? (
                                                             <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
                                                                 Pago
@@ -1553,7 +1603,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                                         )}
                                                     </td>
                                                     <td 
-                                                        className="px-6 py-5 text-right relative"
+                                                        className="px-3 py-3.5 text-right whitespace-nowrap relative"
                                                         onMouseEnter={(e) => handleMouseEnterItem(item, e)}
                                                         onMouseLeave={handleMouseLeaveItem}
                                                     >
@@ -1596,24 +1646,49 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                             );
                                         })
                                     )}
-                                    {((isReadOnly && (!activeReport?.items || activeReport.items.length === 0)) || (!isReadOnly && filteredItems.length === 0)) && (
+                                    {isLoading ? (
+                                        <tr>
+                                            <td colSpan={6} className="px-6 py-20 text-center space-y-3">
+                                                <div className="w-10 h-10 border-4 border-cyan-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                                                <p className="text-gray-500 font-bold text-sm animate-pulse">
+                                                    Consultando banco de dados e sincronizando obras finalizadas...
+                                                </p>
+                                                <p className="text-xs text-gray-400">
+                                                    Aguarde um momento enquanto carregamos as instalações em aberto.
+                                                </p>
+                                            </td>
+                                        </tr>
+                                    ) : ((isReadOnly && (!activeReport?.items || activeReport.items.length === 0)) || (!isReadOnly && filteredItems.length === 0)) && (
                                         <tr>
                                             <td colSpan={6} className="px-6 py-20 text-center space-y-4">
                                                 <ExclamationTriangleIcon className="w-12 h-12 text-gray-200 mx-auto" />
                                                 <p className="text-gray-400 font-bold italic text-sm">
-                                                    {statusFilter === 'pendentes'
-                                                        ? 'Não há instalações finalizadas aguardando pagamento para este instalador.'
-                                                        : 'Nenhuma instalação finalizada encontrada para este instalador.'}
+                                                    {selectedInstallerFilter !== 'ALL'
+                                                        ? 'Não há instalações aguardando pagamento para o instalador selecionado.'
+                                                        : statusFilter === 'pendentes'
+                                                            ? 'Não há instalações finalizadas aguardando pagamento no momento.'
+                                                            : 'Nenhuma instalação encontrada.'}
                                                 </p>
-                                                {statusFilter === 'pendentes' && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setStatusFilter('todas')}
-                                                        className="text-xs font-bold text-cyan-600 hover:underline mt-2 inline-block"
-                                                    >
-                                                        Visualizar todas as obras / histórico concluído
-                                                    </button>
-                                                )}
+                                                <div className="flex items-center justify-center gap-4 mt-2">
+                                                    {selectedInstallerFilter !== 'ALL' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setSelectedInstallerFilter('ALL')}
+                                                            className="text-xs font-bold text-cyan-600 hover:underline inline-block"
+                                                        >
+                                                            Ver todos os instaladores
+                                                        </button>
+                                                    )}
+                                                    {statusFilter === 'pendentes' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setStatusFilter('todas')}
+                                                            className="text-xs font-bold text-cyan-600 hover:underline inline-block"
+                                                        >
+                                                            Visualizar todas as obras / histórico concluído
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     )}
@@ -1623,7 +1698,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                     </div>
                 </div>
 
-                <div className="lg:col-span-4 space-y-6">
+                <div className="xl:col-span-4 2xl:col-span-3 space-y-6">
                     <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 sticky top-8">
                         <div className="flex items-center gap-3 mb-6">
                             <DocumentReportIcon className="w-6 h-6 text-cyan-600" />
@@ -2036,11 +2111,11 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                             <button
                                                 type="button"
                                                 onClick={() => {
-                                                    if (window.confirm(`Deseja remover o serviço extra "${modalDetailItem.extraDesc || 'Identificado'}" (${formatCurrency(modalDetailItem.extraValor || 0)})?`)) {
-                                                        handleRemoveExtraService(modalDetailItem);
-                                                    }
+                                                    const it = modalDetailItem;
+                                                    setModalDetailItem(null);
+                                                    setConfirmDeleteExtraItem(it);
                                                 }}
-                                                className="px-3.5 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl font-bold text-xs transition-colors inline-flex items-center gap-1.5 shadow-2xs"
+                                                className="px-3.5 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl font-bold text-xs transition-colors inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
                                                 title="Excluir serviço extra"
                                             >
                                                 <TrashIcon className="w-3.5 h-3.5" />
@@ -2196,8 +2271,12 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                     <button
                                         type="button"
                                         disabled={isSavingExtraService}
-                                        onClick={() => handleRemoveExtraService()}
-                                        className="px-4 py-2.5 text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors inline-flex items-center gap-1.5"
+                                        onClick={() => {
+                                            const it = extraServiceModalItem;
+                                            setExtraServiceModalItem(null);
+                                            setConfirmDeleteExtraItem(it);
+                                        }}
+                                        className="px-4 py-2.5 text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors inline-flex items-center gap-1.5 cursor-pointer"
                                     >
                                         <TrashIcon className="w-4 h-4" />
                                         <span>Excluir Extra</span>
@@ -2229,6 +2308,90 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                         )}
                                     </button>
                                 </div>
+                            </div>
+                        </div>
+                    </Modal>
+                );
+            })()}
+
+            {/* Modal de Confirmação para Excluir Serviço Extra / Ajuste */}
+            {confirmDeleteExtraItem && (() => {
+                const isDeduction = (confirmDeleteExtraItem.extraValor || 0) < 0;
+                const baseVal = confirmDeleteExtraItem.baseAmount !== undefined 
+                    ? confirmDeleteExtraItem.baseAmount 
+                    : (confirmDeleteExtraItem.amount - (confirmDeleteExtraItem.extraValor || 0));
+                const currentVal = confirmDeleteExtraItem.amount;
+
+                return (
+                    <Modal title="Confirmar Remoção do Ajuste" onClose={() => !isSavingExtraService && setConfirmDeleteExtraItem(null)}>
+                        <div className="p-6 space-y-6">
+                            <div className="flex items-start gap-4 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200">
+                                <ExclamationTriangleIcon className="w-7 h-7 text-amber-600 shrink-0 mt-0.5" />
+                                <div className="text-xs space-y-1">
+                                    <p className="font-black text-sm">
+                                        {isDeduction ? 'Atenção: Remoção de Dedução / Desconto' : 'Remoção de Serviço Extra'}
+                                    </p>
+                                    <p className="leading-relaxed">
+                                        {isDeduction
+                                            ? 'Ao excluir esta dedução, o desconto será removido e o valor total a ser pago ao instalador voltará a ser o valor integral da mão de obra.'
+                                            : 'Deseja realmente excluir este serviço extra? O valor total da mão de obra será recalculado sem este acréscimo.'}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3 p-4 rounded-2xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                                <div className="flex justify-between items-center text-xs">
+                                    <span className="text-gray-500 font-bold">Instalação / Obra:</span>
+                                    <span className="font-black text-gray-900 dark:text-white">{confirmDeleteExtraItem.clientName || confirmDeleteExtraItem.description}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-xs">
+                                    <span className="text-gray-500 font-bold">{isDeduction ? 'Ajuste / Dedução:' : 'Serviço Extra:'}</span>
+                                    <span className={`font-black ${isDeduction ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                        {confirmDeleteExtraItem.extraDesc || 'Identificado'} ({formatCurrency(confirmDeleteExtraItem.extraValor || 0)})
+                                    </span>
+                                </div>
+                                <div className="pt-2 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center text-xs">
+                                    <span className="text-gray-600 dark:text-gray-300 font-bold">Valor atual a pagar:</span>
+                                    <span className="font-black text-gray-900 dark:text-white">{formatCurrency(currentVal)}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-xs">
+                                    <span className="text-indigo-600 dark:text-indigo-400 font-black">
+                                        {isDeduction ? 'Novo valor a pagar (integral):' : 'Novo valor a pagar:'}
+                                    </span>
+                                    <span className="font-black text-base text-indigo-600 dark:text-indigo-400">
+                                        {formatCurrency(baseVal)}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <p className="text-center text-xs font-bold text-gray-700 dark:text-gray-200">
+                                {isDeduction
+                                    ? 'Deseja mesmo remover este ajuste e pagar o valor integral de ' + formatCurrency(baseVal) + '?'
+                                    : 'Deseja mesmo excluir este serviço extra e atualizar o valor para ' + formatCurrency(baseVal) + '?'}
+                            </p>
+
+                            <div className="flex gap-3 justify-end pt-2">
+                                <button
+                                    type="button"
+                                    disabled={isSavingExtraService}
+                                    onClick={() => setConfirmDeleteExtraItem(null)}
+                                    className="px-5 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={isSavingExtraService}
+                                    onClick={async () => {
+                                        const it = confirmDeleteExtraItem;
+                                        setConfirmDeleteExtraItem(null);
+                                        await handleRemoveExtraService(it);
+                                    }}
+                                    className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                                >
+                                    <TrashIcon className="w-4 h-4" />
+                                    <span>{isSavingExtraService ? 'Excluindo...' : (isDeduction ? 'Sim, Excluir Ajuste e Pagar Integral' : 'Sim, Excluir Extra')}</span>
+                                </button>
                             </div>
                         </div>
                     </Modal>

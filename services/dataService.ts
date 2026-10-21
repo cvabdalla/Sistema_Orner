@@ -13,6 +13,7 @@ interface IDataService {
 class SupabaseDataService implements IDataService {
     
     private getLocal<T>(collection: string): T[] {
+        if (typeof window === 'undefined' || typeof localStorage === 'undefined') return [];
         try {
             const data = localStorage.getItem(`orner_cache_${collection}`);
             return data ? JSON.parse(data) : [];
@@ -48,6 +49,7 @@ class SupabaseDataService implements IDataService {
     }
 
     private setLocal<T>(collection: string, data: T[]): void {
+        if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
         const cacheKey = `orner_cache_${collection}`;
         try {
             localStorage.setItem(cacheKey, JSON.stringify(data));
@@ -218,7 +220,24 @@ class SupabaseDataService implements IDataService {
 
             const { data, error } = await query;
             if (error) throw error;
-            return ((data as any[]) || []).map(item => this.deserialize<T>(collection, item));
+
+            const deserialized = ((data as any[]) || []).map(item => this.deserialize<T>(collection, item));
+            if (data && data.length > 0) {
+                try {
+                    const existing = this.getLocal<any>(collection);
+                    if (existing.length === 0) {
+                        this.setLocal(collection, deserialized);
+                    } else {
+                        const map = new Map(existing.map((item: any) => [String(item.id), item]));
+                        deserialized.forEach((partItem: any) => {
+                            const cur = map.get(String(partItem.id));
+                            map.set(String(partItem.id), cur ? { ...cur, ...partItem } : partItem);
+                        });
+                        this.setLocal(collection, Array.from(map.values()));
+                    }
+                } catch (cacheErr) {}
+            }
+            return deserialized;
         } catch (e: any) {
             const isNetworkError = e.message?.includes('fetch') || e.message?.includes('Failed to fetch') || e.message?.includes('network');
             const isMissingTable = e.message?.includes('Could not find the table') || e.message?.includes('does not exist') || e.message?.includes('schema cache') || e.code === '42P01';
