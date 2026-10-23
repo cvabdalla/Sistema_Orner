@@ -302,7 +302,7 @@ const App: React.FC = () => {
       case 'RELATORIOS_STATUS': return <RelatoriosPage view="status" onEditReport={handleEditReport} currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
       case 'RELATORIOS_HISTORICO': return <RelatoriosPage view="historico" onEditReport={handleEditReport} currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} />;
       case 'RELATORIOS_CONFIG': return <RelatoriosPage view="config" currentUser={currentUser} userPermissions={userPermissions} hasGlobalView={hasGlobalView} onLogoUpdated={fetchCompanyLogo} />;
-      case 'INSTALACAO_LAVAGEM_SOLIC': return <InstalacaoLavagemPage currentUser={currentUser} reportToEdit={editingReport} onSave={handleSaveReport} hasGlobalView={hasGlobalView} />;
+      case 'INSTALACAO_LAVAGEM_SOLIC': return <InstalacaoLavagemPage currentUser={currentUser} reportToEdit={editingReport} onSave={handleSaveReport} hasGlobalView={hasGlobalView} userPermissions={userPermissions} />;
       case 'INSTALACOES_CALENDARIO': return <InstalacoesPage currentUser={currentUser} hasGlobalView={hasGlobalView} />;
       case 'INSTALACOES_CADASTRO': return <InstalacoesCadastroPage currentUser={currentUser} />;
       case 'INSTALACOES_LAVAGEM': return <LavagemPage currentUser={currentUser} />;

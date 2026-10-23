@@ -6,15 +6,18 @@ import {
   EyeOffIcon, UploadIcon, CheckCircleIcon, TrashIcon, ClockIcon,
   FingerprintIcon, PlusIcon, SparklesIcon
 } from '../assets/icons';
-import type { User, UserProfile, UsuariosPageProps } from '../types';
+import type { User, UserProfile, UsuariosPageProps, Instalador } from '../types';
 import { MENU_ITEMS, MOCK_USERS, MOCK_PROFILES } from '../constants';
 import Modal from '../components/Modal';
 import { dataService } from '../services/dataService';
 import { authService } from '../services/authService';
 
+const cleanText = (s?: string) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
 const UsuariosPage: React.FC<UsuariosPageProps> = ({ view, currentUser }) => {
     const [users, setUsers] = useState<User[]>([]);
     const [profiles, setProfiles] = useState<UserProfile[]>([]);
+    const [installers, setInstallers] = useState<Instalador[]>([]);
     
     const [isUserModalOpen, setUserModalOpen] = useState(false);
     const [isProfileFormOpen, setProfileFormOpen] = useState(false);
@@ -26,7 +29,8 @@ const UsuariosPage: React.FC<UsuariosPageProps> = ({ view, currentUser }) => {
 
     const [userData, setUserData] = useState<Partial<User>>({ 
         name: '', email: '', password: '', profileId: '', 
-        active: true, avatar: '', darkMode: false, biometricsEnabled: false 
+        active: true, avatar: '', darkMode: false, biometricsEnabled: false,
+        instaladorId: ''
     });
     const [profileData, setProfileData] = useState<Partial<UserProfile>>({ name: '', permissions: [], hasGlobalView: false });
     const [showPassword, setShowPassword] = useState(false);
@@ -41,10 +45,36 @@ const UsuariosPage: React.FC<UsuariosPageProps> = ({ view, currentUser }) => {
 
     const loadData = async () => {
         try {
-            const loadedUsers = await dataService.getAll<User>('system_users');
-            setUsers(loadedUsers.length > 0 ? loadedUsers : MOCK_USERS);
-            const loadedProfiles = await dataService.getAll<UserProfile>('system_profiles');
+            const [loadedUsers, loadedProfiles, loadedInstallers] = await Promise.all([
+                dataService.getAll<User>('system_users'),
+                dataService.getAll<UserProfile>('system_profiles'),
+                dataService.getAll<Instalador>('instaladores')
+            ]);
+            const activeInsts = (loadedInstallers || []).filter(i => i.ativo !== false);
+            setInstallers(activeInsts);
             setProfiles(loadedProfiles.length > 0 ? loadedProfiles : MOCK_PROFILES);
+
+            let initialUsers = loadedUsers.length > 0 ? loadedUsers : MOCK_USERS;
+            // Auto-link Davi e Martin se ainda não tiverem instaladorId configurado
+            const updatedUsers = initialUsers.map(u => {
+                if (!u.instaladorId) {
+                    const emailLower = (u.email || '').toLowerCase().trim();
+                    let matched: Instalador | undefined;
+                    if (emailLower === 'comercial1@orner.com.br' || emailLower.includes('davi')) {
+                        matched = activeInsts.find(i => cleanText(i.nome).includes('davi'));
+                    } else if (emailLower === 'martin@orner.com.br' || emailLower.includes('martin')) {
+                        matched = activeInsts.find(i => cleanText(i.nome).includes('martin'));
+                    }
+                    if (matched) {
+                        const withLink = { ...u, instaladorId: matched.id };
+                        dataService.save('system_users', withLink).catch(console.warn);
+                        return withLink;
+                    }
+                }
+                return u;
+            });
+
+            setUsers(updatedUsers);
         } catch (error) {
             console.error("Erro ao carregar dados:", error);
         }
@@ -92,7 +122,8 @@ const UsuariosPage: React.FC<UsuariosPageProps> = ({ view, currentUser }) => {
             active: userData.active ?? true,
             avatar: userData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name!)}&background=random`,
             darkMode: userData.darkMode ?? false,
-            biometricsEnabled: !!userData.biometricsEnabled
+            biometricsEnabled: !!userData.biometricsEnabled,
+            instaladorId: userData.instaladorId || undefined
         };
         await dataService.save('system_users', newUser);
         if (String(newUser.id) === String(currentUser.id)) {
@@ -183,17 +214,19 @@ const UsuariosPage: React.FC<UsuariosPageProps> = ({ view, currentUser }) => {
                         </div>
                     </div>
                     {isAdmin && (
-                        <button onClick={() => { setUserToEdit(null); setUserData({name:'', email:'', password: '', profileId:'', active:true, avatar: '', darkMode: false, biometricsEnabled: false}); setShowPassword(false); setUserModalOpen(true); }} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs hover:bg-indigo-700 transition-all shadow-lg active:scale-95"><AddIcon className="w-5 h-5" /> <span className="hidden sm:inline">Novo usuário</span></button>
+                        <button onClick={() => { setUserToEdit(null); setUserData({name:'', email:'', password: '', profileId:'', active:true, avatar: '', darkMode: false, biometricsEnabled: false, instaladorId: ''}); setShowPassword(false); setUserModalOpen(true); }} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs hover:bg-indigo-700 transition-all shadow-lg active:scale-95"><AddIcon className="w-5 h-5" /> <span className="hidden sm:inline">Novo usuário</span></button>
                     )}
                 </div>
 
                 <div className="hidden md:block bg-white dark:bg-gray-800 rounded-2xl shadow-xl overflow-hidden border border-gray-100 dark:border-gray-700">
                     <table className="min-w-full text-left text-sm">
                         <thead className="bg-gray-50 dark:bg-gray-700/50 text-[10px] text-gray-400 font-black tracking-tight">
-                            <tr><th className="px-6 py-4">Usuário</th><th className="px-6 py-4">E-mail</th><th className="px-6 py-4">Perfil</th><th className="px-6 py-4">Acesso</th><th className="px-6 py-4 text-right">Ações</th></tr>
+                            <tr><th className="px-6 py-4">Usuário</th><th className="px-6 py-4">E-mail</th><th className="px-6 py-4">Perfil</th><th className="px-6 py-4">Instalador Vinculado</th><th className="px-6 py-4">Acesso</th><th className="px-6 py-4 text-right">Ações</th></tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                            {visibleUsers.map(user => (
+                            {visibleUsers.map(user => {
+                                const linkedInst = installers.find(i => String(i.id) === String(user.instaladorId));
+                                return (
                                 <tr key={user.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors">
                                     <td className="px-6 py-4 flex items-center gap-3 font-bold text-gray-900 dark:text-white">
                                         <div className="w-10 h-10 rounded-full border-2 border-white dark:border-gray-600 shadow-sm overflow-hidden bg-gray-100">
@@ -209,10 +242,20 @@ const UsuariosPage: React.FC<UsuariosPageProps> = ({ view, currentUser }) => {
                                     </td>
                                     <td className="px-6 py-4 text-gray-500 dark:text-gray-400 font-medium text-[12px]">{user.email}</td>
                                     <td className="px-6 py-4"><span className="px-2 py-1 bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 rounded-lg text-[10px] font-bold border border-indigo-100 dark:border-indigo-800">{profiles.find(p => String(p.id) === String(user.profileId))?.name || 'N/A'}</span></td>
+                                    <td className="px-6 py-4">
+                                        {linkedInst ? (
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-cyan-50 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300 rounded-lg text-[11px] font-black border border-cyan-200 dark:border-cyan-800">
+                                                🔧 {linkedInst.nome}
+                                            </span>
+                                        ) : (
+                                            <span className="text-[11px] text-gray-400 font-medium italic">Não vinculado</span>
+                                        )}
+                                    </td>
                                     <td className="px-6 py-4">{isAdmin ? (<select value={user.active ? 'liberado' : 'bloqueado'} onChange={(e) => handleStatusToggle(user, e.target.value === 'liberado')} className={`text-[10px] font-bold rounded-lg border-transparent px-3 py-1.5 focus:ring-0 outline-none transition-all cursor-pointer shadow-sm ${user.active ? 'bg-green-100 text-green-700 border-green-200' : 'bg-red-100 text-red-700 border-red-200'}`}><option value="liberado" className="bg-white text-gray-800">Liberado</option><option value="bloqueado" className="bg-white text-gray-800">Bloqueado</option></select>) : (<span className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${user.active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{user.active ? 'Ativo' : 'Suspenso'}</span>)}</td>
-                                    <td className="px-6 py-4 text-right"><button onClick={() => { setUserToEdit(user); setUserData(user); setShowPassword(false); setUserModalOpen(true); }} className="p-2 text-gray-400 hover:text-indigo-600 transition-colors" title="Editar usuário"><EditIcon className="w-5 h-5" /></button></td>
+                                    <td className="px-6 py-4 text-right"><button onClick={() => { setUserToEdit(user); setUserData({ ...user, instaladorId: user.instaladorId || '' }); setShowPassword(false); setUserModalOpen(true); }} className="p-2 text-gray-400 hover:text-indigo-600 transition-colors" title="Editar usuário"><EditIcon className="w-5 h-5" /></button></td>
                                 </tr>
-                            ))}
+                            );
+                            })}
                         </tbody>
                     </table>
                 </div>
@@ -220,6 +263,7 @@ const UsuariosPage: React.FC<UsuariosPageProps> = ({ view, currentUser }) => {
                 <div className="md:hidden space-y-4">
                     {visibleUsers.map(user => {
                         const profileName = profiles.find(p => String(p.id) === String(user.profileId))?.name || 'N/A';
+                        const linkedInst = installers.find(i => String(i.id) === String(user.instaladorId));
                         return (
                             <div key={user.id} className="bg-white dark:bg-gray-800 p-5 rounded-3xl shadow-md border border-gray-100 dark:border-gray-700 space-y-4 relative overflow-hidden">
                                 {user.biometricsEnabled && (
@@ -250,8 +294,14 @@ const UsuariosPage: React.FC<UsuariosPageProps> = ({ view, currentUser }) => {
                                         </div>
                                     </div>
                                 </div>
+                                {linkedInst && (
+                                    <div className="flex items-center gap-2 p-2.5 bg-cyan-50 dark:bg-cyan-900/30 rounded-xl text-cyan-800 dark:text-cyan-200 text-xs font-bold border border-cyan-100 dark:border-cyan-800">
+                                        <span>🔧 Instalador Vinculado:</span>
+                                        <span className="font-black text-cyan-600 dark:text-cyan-400">{linkedInst.nome}</span>
+                                    </div>
+                                )}
                                 <button 
-                                    onClick={() => { setUserToEdit(user); setUserData(user); setShowPassword(false); setUserModalOpen(true); }} 
+                                    onClick={() => { setUserToEdit(user); setUserData({ ...user, instaladorId: user.instaladorId || '' }); setShowPassword(false); setUserModalOpen(true); }} 
                                     className="w-full py-3.5 bg-gray-50 dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 rounded-2xl font-black text-xs tracking-tight flex items-center justify-center gap-2 hover:bg-indigo-50 transition-all border border-gray-100 dark:border-gray-600"
                                 >
                                     <EditIcon className="w-4 h-4" /> Editar usuário
@@ -295,6 +345,29 @@ const UsuariosPage: React.FC<UsuariosPageProps> = ({ view, currentUser }) => {
                                     <label className="block text-xs font-bold text-gray-500 mb-1">Perfil de acesso</label>
                                     <select required disabled={!isAdmin} value={userData.profileId} onChange={e => setUserData({...userData, profileId:e.target.value})} className="w-full rounded-xl border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-3 text-sm font-bold text-gray-900 dark:text-white outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed appearance-none"><option value="">Selecione um perfil...</option>{profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
                                 </div>
+
+                                {isAdmin && (
+                                    <div className="bg-cyan-50/70 dark:bg-cyan-950/20 p-3.5 rounded-2xl border border-cyan-100 dark:border-cyan-800/40">
+                                        <label className="block text-xs font-black text-cyan-900 dark:text-cyan-200 mb-1">
+                                            Instalador Vinculado (Reembolso de Instalação)
+                                        </label>
+                                        <p className="text-[11px] text-cyan-700 dark:text-cyan-300 font-medium mb-2 leading-snug">
+                                            Vincule este usuário ao instalador correspondente. Usuários instaladores (não-administradores) só terão acesso às instalações liberadas deste parceiro.
+                                        </p>
+                                        <select 
+                                            value={userData.instaladorId || ''} 
+                                            onChange={e => setUserData({ ...userData, instaladorId: e.target.value })} 
+                                            className="w-full rounded-xl border border-cyan-200 dark:border-cyan-700 bg-white dark:bg-gray-900 p-2.5 text-xs font-bold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all"
+                                        >
+                                            <option value="">Nenhum / Não vinculado (Acesso padrão conforme perfil)</option>
+                                            {installers.map(inst => (
+                                                <option key={inst.id} value={inst.id}>
+                                                    {inst.nome} {inst.cidade ? `(${inst.cidade} - ${inst.uf})` : ''}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <div className="bg-gray-50 dark:bg-gray-700/30 p-3.5 rounded-2xl border border-gray-100 dark:border-gray-600 flex items-center justify-between">

@@ -5,14 +5,15 @@ import {
     UploadIcon, TrashIcon, ExclamationTriangleIcon,
     TableIcon, SearchIcon, CalendarIcon, SaveIcon,
     ClockIcon, ArrowLeftIcon, DocumentReportIcon,
-    EyeIcon, XCircleIcon, ArrowDownIcon, UsersIcon, AddIcon
+    EyeIcon, XCircleIcon, ArrowDownIcon, UsersIcon, AddIcon,
+    EditIcon, LockClosedIcon
 } from '../assets/icons';
 import { dataService } from '../services/dataService';
 import { supabase } from '../supabaseClient';
 import type { 
     FinancialTransaction, FinancialCategory, ExpenseReport, 
     User, ExpenseAttachment, InstalacaoLavagemPageProps, 
-    Instalador, SavedOrcamento 
+    Instalador, SavedOrcamento, UserProfile 
 } from '../types';
 import Modal from '../components/Modal';
 
@@ -65,7 +66,13 @@ export interface TechnicalItem {
     extraValor?: number;
 }
 
-export const computeCostBreakdown = (fs?: any, rawTx?: any, customExtraDesc?: string, customExtraValor?: number): BreakdownItem[] => {
+export const computeCostBreakdown = (
+    fs?: any, 
+    rawTx?: any, 
+    customExtraDesc?: string, 
+    customExtraValor?: number,
+    customBaseAmount?: number
+): BreakdownItem[] => {
     if (!fs && rawTx) {
         return [
             {
@@ -78,56 +85,66 @@ export const computeCostBreakdown = (fs?: any, rawTx?: any, customExtraDesc?: st
     }
     if (!fs) return [];
 
-    const qtd = parseSafeNumber(fs.terceiroInstalacaoQtd);
-    const custo = parseSafeNumber(fs.terceiroInstalacaoCusto);
-    const instalacaoMaoDeObra = qtd * custo;
-    const adequacaoLocal = parseSafeNumber(fs.adequacaoLocalCusto);
-    const projInst = parseSafeNumber(fs.projetoInstalacaoCusto);
-
     const extraDesc = customExtraDesc !== undefined ? customExtraDesc : (fs.instalacao_servico_extra_desc || fs.instalacaoServicoExtraDesc || '');
     const extraValor = customExtraValor !== undefined ? customExtraValor : parseSafeNumber(fs.instalacao_servico_extra_valor || fs.instalacaoServicoExtraValor || 0);
 
     const breakdown: BreakdownItem[] = [];
 
-    // 1. Mão de Obra de Instalação (INCLUÍDO)
-    if (qtd > 0 && custo > 0) {
+    // Se houver valor base customizado pelo Administrador na página de Reembolso
+    if (customBaseAmount !== undefined && customBaseAmount > 0) {
         breakdown.push({
-            label: 'Mão de Obra de Instalação (Terceirizada)',
-            detail: `${qtd} módulos / placas × ${formatCurrency(custo)}`,
-            value: instalacaoMaoDeObra,
-            isIncluded: true
-        });
-    } else if (projInst > 0) {
-        breakdown.push({
-            label: 'Instalação (Custo Direto do Projeto)',
-            detail: 'Valor direto configurado no orçamento',
-            value: projInst,
-            isIncluded: true
-        });
-    } else if (instalacaoMaoDeObra > 0) {
-        breakdown.push({
-            label: 'Mão de Obra de Instalação',
-            detail: `${qtd} un. × ${formatCurrency(custo)}`,
-            value: instalacaoMaoDeObra,
+            label: 'Mão de Obra de Instalação (Definida no Reembolso)',
+            detail: 'Valor ajustado pelo perfil administrador para reembolso',
+            value: customBaseAmount,
             isIncluded: true
         });
     } else {
-        breakdown.push({
-            label: 'Mão de Obra de Instalação',
-            detail: '0 módulos ou valor zerado',
-            value: 0,
-            isIncluded: true
-        });
-    }
+        const qtd = parseSafeNumber(fs.terceiroInstalacaoQtd);
+        const custo = parseSafeNumber(fs.terceiroInstalacaoCusto);
+        const instalacaoMaoDeObra = qtd * custo;
+        const adequacaoLocal = parseSafeNumber(fs.adequacaoLocalCusto);
+        const projInst = parseSafeNumber(fs.projetoInstalacaoCusto);
 
-    // 2. Adequação de Local / Padrão (INCLUÍDO)
-    if (adequacaoLocal > 0) {
-        breakdown.push({
-            label: 'Adequação do Local / Padrão de Entrada',
-            detail: 'Adequação técnica informada no orçamento',
-            value: adequacaoLocal,
-            isIncluded: true
-        });
+        // 1. Mão de Obra de Instalação (INCLUÍDO)
+        if (qtd > 0 && custo > 0) {
+            breakdown.push({
+                label: 'Mão de Obra de Instalação (Terceirizada)',
+                detail: `${qtd} módulos / placas × ${formatCurrency(custo)}`,
+                value: instalacaoMaoDeObra,
+                isIncluded: true
+            });
+        } else if (projInst > 0) {
+            breakdown.push({
+                label: 'Instalação (Custo Direto do Projeto)',
+                detail: 'Valor direto configurado no orçamento',
+                value: projInst,
+                isIncluded: true
+            });
+        } else if (instalacaoMaoDeObra > 0) {
+            breakdown.push({
+                label: 'Mão de Obra de Instalação',
+                detail: `${qtd} un. × ${formatCurrency(custo)}`,
+                value: instalacaoMaoDeObra,
+                isIncluded: true
+            });
+        } else {
+            breakdown.push({
+                label: 'Mão de Obra de Instalação',
+                detail: '0 módulos ou valor zerado',
+                value: 0,
+                isIncluded: true
+            });
+        }
+
+        // 2. Adequação de Local / Padrão (INCLUÍDO)
+        if (adequacaoLocal > 0) {
+            breakdown.push({
+                label: 'Adequação do Local / Padrão de Entrada',
+                detail: 'Adequação técnica informada no orçamento',
+                value: adequacaoLocal,
+                isIncluded: true
+            });
+        }
     }
 
     // 3. Serviço Extra ou Ajuste Identificado na Instalação (INCLUÍDO)
@@ -149,12 +166,13 @@ export const computeCostBreakdown = (fs?: any, rawTx?: any, customExtraDesc?: st
     return breakdown;
 };
 
-const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUser, reportToEdit, onSave }) => {
+const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUser, reportToEdit, onSave, userPermissions }) => {
     const [allItems, setAllItems] = useState<TechnicalItem[]>([]);
     const [rawOrcamentos, setRawOrcamentos] = useState<SavedOrcamento[]>([]);
     const [allTransactions, setAllTransactions] = useState<FinancialTransaction[]>([]);
     const [categories, setCategories] = useState<FinancialCategory[]>([]);
     const [installers, setInstallers] = useState<Instalador[]>([]);
+    const [profiles, setProfiles] = useState<UserProfile[]>([]);
     const [selectedTxIds, setSelectedTxIds] = useState<string[]>([]);
     const [selectedInstallerFilter, setSelectedInstallerFilter] = useState<string>('ALL');
     const [statusFilter, setStatusFilter] = useState<'pendentes' | 'todas'>('pendentes');
@@ -169,6 +187,223 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
     const [modalMessage, setModalMessage] = useState('');
     const [hdPhoto, setHdPhoto] = useState<string | null>(null);
     const [confirmDeleteExtraItem, setConfirmDeleteExtraItem] = useState<TechnicalItem | null>(null);
+
+    // Validação de Perfil de Usuário Administrador
+    const isAdmin = useMemo(() => {
+        const adminProfileIds = ['001', '00000000-0000-0000-0000-000000000001'];
+        if (adminProfileIds.includes(String(currentUser?.profileId))) return true;
+        if (currentUser?.email?.toLowerCase() === 'cvabdalla@gmail.com') return true;
+        if (userPermissions?.includes('ALL')) return true;
+        const currentProfile = profiles.find(p => String(p.id) === String(currentUser?.profileId));
+        if (currentProfile?.name?.toLowerCase().includes('admin')) return true;
+        return currentProfile?.permissions?.includes('ALL') || false;
+    }, [currentUser, profiles, userPermissions]);
+
+    // Identificação do Instalador vinculado ao usuário logado
+    const userLinkedInstaller = useMemo(() => {
+        if (!currentUser) return null;
+        const uEmail = (currentUser.email || '').toLowerCase().trim();
+        const uName = cleanText(currentUser.name || '');
+
+        // 1. Vínculo direto pelo campo instaladorId configurado no cadastro de usuários
+        if (currentUser.instaladorId) {
+            const found = installers.find(i => String(i.id) === String(currentUser.instaladorId));
+            if (found) return found;
+        }
+
+        // 2. Reconhecimento automático para Davi ("comercial1@orner.com.br") e Martin ("martin@orner.com.br")
+        if (uEmail === 'comercial1@orner.com.br' || uEmail.includes('davi')) {
+            const found = installers.find(i => cleanText(i.nome).includes('davi'));
+            if (found) return found;
+        }
+        if (uEmail === 'martin@orner.com.br' || uEmail.includes('martin')) {
+            const found = installers.find(i => cleanText(i.nome).includes('martin'));
+            if (found) return found;
+        }
+
+        // 3. Fallback por correspondência com o nome do usuário
+        if (uName) {
+            const found = installers.find(i => {
+                const iName = cleanText(i.nome);
+                return iName && (iName.includes(uName) || uName.includes(iName));
+            });
+            if (found) return found;
+        }
+
+        return null;
+    }, [currentUser, installers]);
+
+    // Helper para verificar se um item pertence a um instalador específico
+    const isItemForInstaller = (item: TechnicalItem, inst: Instalador): boolean => {
+        if (item.installerId && String(item.installerId) === String(inst.id)) return true;
+        const itemInstName = cleanText(item.installerName);
+        const targetName = cleanText(inst.nome);
+        if (!itemInstName || itemInstName === 'nao definido') return false;
+        return itemInstName === targetName || itemInstName.includes(targetName) || targetName.includes(itemInstName);
+    };
+
+    // Admin Edit Modal State (Edição de Instalador e Valor)
+    const [adminEditModalItem, setAdminEditModalItem] = useState<TechnicalItem | null>(null);
+    const [adminEditInstallerId, setAdminEditInstallerId] = useState<string>('');
+    const [adminEditInstallerName, setAdminEditInstallerName] = useState<string>('');
+    const [adminEditValueInput, setAdminEditValueInput] = useState<string>('');
+    const [isSavingAdminEdit, setIsSavingAdminEdit] = useState<boolean>(false);
+
+    const handleOpenAdminEditModal = (item: TechnicalItem) => {
+        if (!isAdmin) {
+            alert('Apenas usuários com perfil de Administrador podem editar instalador e valores.');
+            return;
+        }
+        setAdminEditModalItem(item);
+        
+        let matchedId = item.installerId || '';
+        if (!matchedId && item.installerName && item.installerName !== 'Não Definido') {
+            const found = installers.find(i => i.nome.trim().toLowerCase() === item.installerName.trim().toLowerCase());
+            if (found) matchedId = found.id;
+        }
+        setAdminEditInstallerId(matchedId);
+        setAdminEditInstallerName(item.installerName || '');
+
+        const currentBase = item.baseAmount !== undefined ? item.baseAmount : (item.amount - (item.extraValor || 0));
+        setAdminEditValueInput(currentBase > 0 ? String(currentBase).replace('.', ',') : '');
+    };
+
+    const handleSaveAdminEdit = async () => {
+        if (!adminEditModalItem || !isAdmin) return;
+        setIsSavingAdminEdit(true);
+        try {
+            const newValNum = parseSafeNumber(adminEditValueInput);
+            let finalInstallerName = adminEditInstallerName.trim();
+            let finalInstallerId = adminEditInstallerId;
+
+            if (finalInstallerId && finalInstallerId !== '__custom__') {
+                const matched = installers.find(i => String(i.id) === String(finalInstallerId));
+                if (matched) {
+                    finalInstallerName = matched.nome.trim();
+                }
+            } else if (finalInstallerId === '__custom__') {
+                finalInstallerId = '';
+            }
+            if (!finalInstallerName) {
+                finalInstallerName = 'Não Definido';
+            }
+
+            // 1. Se for Instalação originada de orçamento
+            if (adminEditModalItem.isFromOrcamento) {
+                const orcId = adminEditModalItem.id.replace('tx-inst-', '');
+                const foundOrc = rawOrcamentos.find(o => String(o.id) === String(orcId)) || adminEditModalItem.rawOrcamento;
+
+                // Salva no storage local persistente específico de custom edits da página de Reembolso
+                // CRÍTICO: Não altera a tabela 'orcamentos' nem as propostas originais, mantendo o orçamento intacto
+                let localMap: Record<string, any> = {};
+                try {
+                    const localMapStr = localStorage.getItem('orner_instalacao_custom_edits') || '{}';
+                    localMap = JSON.parse(localMapStr);
+                    const overrideData = {
+                        installerId: finalInstallerId,
+                        installerName: finalInstallerName,
+                        baseAmount: newValNum
+                    };
+                    localMap[adminEditModalItem.id] = overrideData;
+                    localMap[String(orcId)] = overrideData;
+                    localStorage.setItem('orner_instalacao_custom_edits', JSON.stringify(localMap));
+                } catch (e) {
+                    console.warn('Erro ao atualizar localStorage orner_instalacao_custom_edits:', e);
+                }
+
+                // Sincroniza em system_configs para persistência na nuvem específica da página de reembolso
+                try {
+                    await dataService.save('system_configs', {
+                        id: 'reembolso_instalacao_custom_edits',
+                        value: JSON.stringify(localMap)
+                    });
+                } catch (scErr) {
+                    console.warn('Erro ao sincronizar custom edits em system_configs:', scErr);
+                }
+
+                const extraVal = adminEditModalItem.extraValor || 0;
+                const extraDesc = adminEditModalItem.extraDesc || '';
+                const newTotalAmount = newValNum + extraVal;
+
+                // Breakdown reflete os dados ajustados para o reembolso sem alterar o objeto orcamento original
+                const newBreakdown = computeCostBreakdown(foundOrc?.formState, undefined, extraDesc, extraVal, newValNum);
+
+                setAllItems(prev => prev.map(it => {
+                    if (it.id === adminEditModalItem.id) {
+                        return {
+                            ...it,
+                            installerId: finalInstallerId || undefined,
+                            installerName: finalInstallerName,
+                            baseAmount: newValNum,
+                            amount: newTotalAmount,
+                            breakdown: newBreakdown
+                        };
+                    }
+                    return it;
+                }));
+
+                if (modalDetailItem && modalDetailItem.id === adminEditModalItem.id) {
+                    setModalDetailItem({
+                        ...modalDetailItem,
+                        installerId: finalInstallerId || undefined,
+                        installerName: finalInstallerName,
+                        baseAmount: newValNum,
+                        amount: newTotalAmount,
+                        breakdown: newBreakdown
+                    });
+                }
+            } else if (adminEditModalItem.rawTx) {
+                // Se for Transação Direta (Lavagem)
+                const tx = adminEditModalItem.rawTx;
+                const updatedTx: FinancialTransaction = {
+                    ...tx,
+                    amount: newValNum,
+                    description: adminEditModalItem.description.includes(' - ') 
+                        ? `${adminEditModalItem.description.split(' - ')[0]} - ${adminEditModalItem.clientName} (${finalInstallerName})`
+                        : adminEditModalItem.description
+                };
+
+                try {
+                    await dataService.save('financial_transactions', updatedTx);
+                } catch (txErr) {
+                    console.warn('dataService.save financial_transactions warning:', txErr);
+                }
+
+                setAllTransactions(prev => prev.map(t => t.id === tx.id ? updatedTx : t));
+
+                setAllItems(prev => prev.map(it => {
+                    if (it.id === adminEditModalItem.id) {
+                        return {
+                            ...it,
+                            installerId: finalInstallerId || undefined,
+                            installerName: finalInstallerName,
+                            amount: newValNum,
+                            rawTx: updatedTx,
+                            breakdown: computeCostBreakdown(undefined, updatedTx)
+                        };
+                    }
+                    return it;
+                }));
+
+                if (modalDetailItem && modalDetailItem.id === adminEditModalItem.id) {
+                    setModalDetailItem({
+                        ...modalDetailItem,
+                        installerId: finalInstallerId || undefined,
+                        installerName: finalInstallerName,
+                        amount: newValNum,
+                        rawTx: updatedTx,
+                        breakdown: computeCostBreakdown(undefined, updatedTx)
+                    });
+                }
+            }
+
+            setAdminEditModalItem(null);
+        } catch (e: any) {
+            alert("Erro ao salvar alterações: " + (e?.message || "Tente novamente"));
+        } finally {
+            setIsSavingAdminEdit(false);
+        }
+    };
 
     // Hover and Modal Breakdown inspection states
     const [hoveredItemInfo, setHoveredItemInfo] = useState<{ item: TechnicalItem; rect: DOMRect } | null>(null);
@@ -562,13 +797,14 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
         try {
             const currentUserId = currentUser?.id || '1767988420092';
 
-            const [txsRes, catsRes, reportsRes, configsRes, instsRes, orcsRes] = await Promise.allSettled([
+            const [txsRes, catsRes, reportsRes, configsRes, instsRes, orcsRes, profsRes] = await Promise.allSettled([
                 dataService.getAll<FinancialTransaction>('financial_transactions', currentUserId, true),
                 dataService.getAll<FinancialCategory>('financial_categories'),
                 dataService.getAll<ExpenseReport>('expense_reports', undefined, true),
                 dataService.getAll<any>('system_configs', undefined, true),
                 dataService.getAll<Instalador>('instaladores'),
-                dataService.getPartial<SavedOrcamento>('orcamentos', 'id, status, formState, variants, venda_etapas', undefined, true)
+                dataService.getPartial<SavedOrcamento>('orcamentos', 'id, status, formState, variants, venda_etapas', undefined, true),
+                dataService.getAll<UserProfile>('system_profiles', undefined, true)
             ]);
 
             const txs = txsRes.status === 'fulfilled' ? txsRes.value : [];
@@ -577,6 +813,8 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
             const remoteConfigs = configsRes.status === 'fulfilled' ? configsRes.value : [];
             const insts = instsRes.status === 'fulfilled' ? instsRes.value : [];
             let orcs = orcsRes.status === 'fulfilled' ? orcsRes.value : [];
+            const profs = profsRes.status === 'fulfilled' ? profsRes.value : [];
+            setProfiles(profs || []);
 
             // Se orçamentos não vieram ou falharam por lentidão da rede, tenta busca direta no Supabase
             if (!orcs || orcs.length === 0) {
@@ -620,6 +858,25 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                     localExtrasMap = JSON.parse(rawLocal);
                 }
             } catch (e) {}
+
+            // Carrega edições do perfil Administrador (instalador e valor) da página de Reembolso
+            let localAdminEditsMap: Record<string, { installerId?: string; installerName?: string; baseAmount?: number }> = {};
+            try {
+                const rawLocalEdits = localStorage.getItem('orner_instalacao_custom_edits');
+                if (rawLocalEdits) {
+                    localAdminEditsMap = JSON.parse(rawLocalEdits);
+                }
+            } catch (e) {}
+
+            const remoteAdminEdits = (remoteConfigs || []).find((c: any) => c.id === 'reembolso_instalacao_custom_edits');
+            if (remoteAdminEdits && remoteAdminEdits.value) {
+                try {
+                    const parsedRemote = typeof remoteAdminEdits.value === 'string'
+                        ? JSON.parse(remoteAdminEdits.value)
+                        : remoteAdminEdits.value;
+                    localAdminEditsMap = { ...parsedRemote, ...localAdminEditsMap };
+                } catch (e) {}
+            }
 
             const remoteKm = (remoteConfigs || []).find((c: any) => c.id === 'km_value');
             if (remoteKm) {
@@ -706,6 +963,16 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                         baseAmount = parseSafeNumber(fs.projetoInstalacaoCusto);
                     }
 
+                    // Aplica customizações salvas pelo Administrador exclusivamente para a página de Reembolso
+                    const adminOverride = localAdminEditsMap[txId] || localAdminEditsMap[String(o.id)];
+                    if (adminOverride) {
+                        if (adminOverride.installerId) installerId = adminOverride.installerId;
+                        if (adminOverride.installerName) installerName = adminOverride.installerName;
+                        if (adminOverride.baseAmount !== undefined && adminOverride.baseAmount > 0) {
+                            baseAmount = adminOverride.baseAmount;
+                        }
+                    }
+
                     // Extra Service
                     const extraCol = extraColsMap[String(o.id)];
                     const localExtra = localExtrasMap[`tx-inst-${o.id}`] || localExtrasMap[String(o.id)];
@@ -731,12 +998,12 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
 
                     const rawEtapas: any = etapas;
                     const date = rawEtapas.instalacao_finalizada_data || rawEtapas.instalacao_data || new Date().toISOString().split('T')[0];
-                    const txId = `tx-inst-${o.id}`;
+                    const txIdItem = `tx-inst-${o.id}`;
 
-                    const isSolicitado = Boolean(etapas.pag_instalacao_solicitado) || usedTxIdsInOtherReports.has(txId);
+                    const isSolicitado = Boolean(etapas.pag_instalacao_solicitado) || usedTxIdsInOtherReports.has(txIdItem);
 
                     items.push({
-                        id: txId,
+                        id: txIdItem,
                         description: `Instalação - ${clientName}`,
                         amount: Number(amount) || 0,
                         baseAmount,
@@ -753,7 +1020,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                         rawOrcamento: o,
                         extraDesc,
                         extraValor,
-                        breakdown: computeCostBreakdown(fs, undefined, extraDesc, extraValor)
+                        breakdown: computeCostBreakdown(fs, undefined, extraDesc, extraValor, adminOverride ? baseAmount : undefined)
                     });
                 }
             });
@@ -820,19 +1087,35 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
         loadData();
     }, [activeReport, currentUser?.id]);
 
+    // Itens acessíveis conforme perfil e vínculo de instalador:
+    // Administrador tem visão total de todas as obras e instaladores.
+    // Instaladores (não-admin) visualizam estritamente as suas próprias instalações.
+    const accessibleItems = useMemo(() => {
+        if (isAdmin) return allItems;
+        if (userLinkedInstaller) {
+            return allItems.filter(item => isItemForInstaller(item, userLinkedInstaller));
+        }
+        const currentProfile = profiles.find(p => String(p.id) === String(currentUser?.profileId));
+        if (currentProfile?.hasGlobalView) return allItems;
+        return [];
+    }, [allItems, isAdmin, userLinkedInstaller, currentUser, profiles]);
+
     // Lista única de nomes de instaladores presentes nos dados
     const distinctInstallers = useMemo(() => {
+        if (!isAdmin && userLinkedInstaller) {
+            return [userLinkedInstaller.nome.trim()];
+        }
         const set = new Set<string>();
         // Adiciona instaladores cadastrados
         installers.forEach(i => set.add(i.nome.trim()));
-        // Adiciona nomes que aparecem nos itens
-        allItems.forEach(i => {
+        // Adiciona nomes que aparecem nos itens acessíveis
+        accessibleItems.forEach(i => {
             if (i.installerName && i.installerName !== 'Não Definido') {
                 set.add(i.installerName.trim());
             }
         });
         return Array.from(set).sort((a, b) => a.localeCompare(b));
-    }, [installers, allItems]);
+    }, [installers, accessibleItems, isAdmin, userLinkedInstaller]);
 
     // Contagem de itens por instalador
     const installerCounts = useMemo(() => {
@@ -845,7 +1128,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
             counts[name] = { pendentes: 0, total: 0 };
         });
 
-        allItems.forEach(item => {
+        accessibleItems.forEach(item => {
             const isPendente = item.statusPagamento === 'pendente';
             const name = item.installerName ? item.installerName.trim() : 'Não Definido';
 
@@ -862,11 +1145,11 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
         });
 
         return counts;
-    }, [allItems, distinctInstallers]);
+    }, [accessibleItems, distinctInstallers]);
 
     // Lista filtrada pelo instalador selecionado, status e busca
     const filteredItems = useMemo(() => {
-        return allItems.filter(item => {
+        return accessibleItems.filter(item => {
             // Filtro por status
             if (statusFilter === 'pendentes' && item.statusPagamento !== 'pendente') {
                 // Em modo edição de rascunho, permite ver os itens já selecionados
@@ -875,8 +1158,8 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                 }
             }
 
-            // Filtro por instalador
-            if (selectedInstallerFilter !== 'ALL') {
+            // Filtro por instalador (apenas para Admin que pode alternar abas de instaladores)
+            if (isAdmin && selectedInstallerFilter !== 'ALL') {
                 const name = item.installerName ? item.installerName.trim() : 'Não Definido';
                 if (selectedInstallerFilter === 'UNASSIGNED') {
                     if (name !== 'Não Definido') return false;
@@ -896,20 +1179,20 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
 
             return true;
         });
-    }, [allItems, selectedInstallerFilter, statusFilter, searchTerm, activeReport, selectedTxIds]);
+    }, [accessibleItems, selectedInstallerFilter, statusFilter, searchTerm, activeReport, selectedTxIds, isAdmin]);
 
     const selectedTotal = useMemo(() => {
         if (isReadOnly && activeReport) {
             return activeReport.totalValue || (activeReport.items || []).reduce((acc, i) => acc + (i.others || 0), 0);
         }
-        return allItems
+        return accessibleItems
             .filter(t => selectedTxIds.includes(t.id))
             .reduce((acc, curr) => acc + curr.amount, 0);
-    }, [selectedTxIds, allItems, isReadOnly, activeReport]);
+    }, [selectedTxIds, accessibleItems, isReadOnly, activeReport]);
 
     const toggleSelection = (id: string) => {
         if (isReadOnly) return;
-        const item = allItems.find(i => i.id === id);
+        const item = accessibleItems.find(i => i.id === id);
         if (item && item.statusPagamento === 'pago') return;
 
         setSelectedTxIds(prev => 
@@ -1012,7 +1295,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
         setIsConfirmDraftModalOpen(false);
 
         try {
-            const selectedItems = allItems.filter(t => selectedTxIds.includes(t.id));
+            const selectedItems = accessibleItems.filter(t => selectedTxIds.includes(t.id));
             const reportId = activeReport ? activeReport.id : `tech-${Date.now()}`;
             const currentUserId = currentUser?.id || '1767988420092';
             
@@ -1055,9 +1338,11 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
 
             // Identifica o instalador principal se houver
             const uniqueInstallerNames = Array.from(new Set(selectedItems.map(i => i.installerName).filter(n => n && n !== 'Não Definido')));
-            const requesterLabel = uniqueInstallerNames.length === 1 
-                ? `Instalador: ${uniqueInstallerNames[0]}` 
-                : (activeReport ? activeReport.requester : (currentUser?.name || 'Administrador'));
+            const requesterLabel = (!isAdmin && userLinkedInstaller)
+                ? `Instalador: ${userLinkedInstaller.nome}`
+                : (uniqueInstallerNames.length === 1 
+                    ? `Instalador: ${uniqueInstallerNames[0]}` 
+                    : (activeReport ? activeReport.requester : (currentUser?.name || 'Administrador')));
 
             const finalReport: ExpenseReport = {
                 id: reportId,
@@ -1136,7 +1421,11 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                             {isReadOnly ? 'Visualizar Faturamento' : activeReport ? 'Alterar Faturamento' : 'Faturamento de Instalações'}
                         </h1>
                         <p className="text-sm text-gray-500 font-bold mt-2">
-                            {activeReport ? `Registro técnico: ${activeReport.id}` : 'Instalações finalizadas agrupadas por instalador parceiro'}
+                            {activeReport 
+                                ? `Registro técnico: ${activeReport.id}` 
+                                : (!isAdmin && userLinkedInstaller)
+                                    ? `Instalações finalizadas de ${userLinkedInstaller.nome} liberadas para pagamento`
+                                    : 'Instalações finalizadas agrupadas por instalador parceiro'}
                         </p>
                     </div>
                 </div>
@@ -1171,7 +1460,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                     statusFilter === 'pendentes'
                                         ? 'bg-white dark:bg-gray-800 text-cyan-600 shadow-sm'
                                         : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
-                                }`}
+                                    }`}
                             >
                                 <ClockIcon className="w-4 h-4" />
                                 <span>Aguardando Pagamento</span>
@@ -1187,7 +1476,7 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                     statusFilter === 'todas'
                                         ? 'bg-white dark:bg-gray-800 text-cyan-600 shadow-sm'
                                         : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
-                                }`}
+                                    }`}
                             >
                                 <TableIcon className="w-4 h-4" />
                                 <span>Todas / Histórico</span>
@@ -1210,78 +1499,106 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                         )}
                     </div>
 
-                    {/* Linha 2: Seletor de Instaladores */}
-                    <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                            <UsersIcon className="w-4 h-4 text-cyan-600" />
-                            <span className="text-xs font-black text-gray-500 dark:text-gray-400">
-                                Filtrar por Instalador:
-                            </span>
+                    {/* Linha 2: Seletor de Instaladores / Indicador de Vínculo Exclusivo */}
+                    {!isAdmin && userLinkedInstaller ? (
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-gradient-to-r from-cyan-500/10 via-cyan-500/5 to-transparent rounded-2xl border border-cyan-200 dark:border-cyan-800/60">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-cyan-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                                    <UsersIcon className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h4 className="text-xs font-black text-gray-900 dark:text-white">
+                                        Instalações vinculadas a: <span className="text-cyan-600 dark:text-cyan-400">{userLinkedInstaller.nome}</span>
+                                    </h4>
+                                    <p className="text-[11px] text-gray-500 font-medium">
+                                        Você tem acesso exclusivo para visualizar e solicitar pagamento das suas próprias instalações.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs font-black text-cyan-700 dark:text-cyan-300 bg-white dark:bg-gray-800 px-3 py-1.5 rounded-xl border border-cyan-100 dark:border-cyan-800 shadow-2xs self-start sm:self-auto">
+                                <span>{filteredItems.length} {filteredItems.length === 1 ? 'obra disponível' : 'obras disponíveis'}</span>
+                            </div>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                            <button
-                                type="button"
-                                onClick={() => setSelectedInstallerFilter('ALL')}
-                                className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
-                                    selectedInstallerFilter === 'ALL'
-                                        ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30 scale-[1.02]'
-                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
-                                }`}
-                            >
-                                <span>Todos os Instaladores</span>
-                                <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${
-                                    selectedInstallerFilter === 'ALL' ? 'bg-cyan-800 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200'
-                                }`}>
-                                    {statusFilter === 'pendentes' ? installerCounts.ALL?.pendentes || 0 : installerCounts.ALL?.total || 0}
+                    ) : !isAdmin && !userLinkedInstaller ? (
+                        <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl flex items-center gap-3">
+                            <ExclamationTriangleIcon className="w-5 h-5 text-amber-600 shrink-0" />
+                            <p className="text-xs font-bold text-amber-800 dark:text-amber-200">
+                                Seu usuário não está vinculado a um instalador cadastrado. Solicite ao administrador o vínculo no Cadastro de Usuários para visualizar suas instalações liberadas.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                                <UsersIcon className="w-4 h-4 text-cyan-600" />
+                                <span className="text-xs font-black text-gray-500 dark:text-gray-400">
+                                    Filtrar por Instalador:
                                 </span>
-                            </button>
-
-                            {distinctInstallers.map(name => {
-                                const count = statusFilter === 'pendentes' ? installerCounts[name]?.pendentes || 0 : installerCounts[name]?.total || 0;
-                                const isSelected = selectedInstallerFilter === name;
-                                return (
-                                    <button
-                                        key={name}
-                                        type="button"
-                                        onClick={() => setSelectedInstallerFilter(name)}
-                                        className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
-                                            isSelected
-                                                ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30 scale-[1.02]'
-                                                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
-                                        }`}
-                                    >
-                                        <span>{name}</span>
-                                        <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${
-                                            isSelected 
-                                                ? 'bg-cyan-800 text-white' 
-                                                : count > 0 
-                                                    ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/50 dark:text-cyan-300' 
-                                                    : 'bg-gray-200 dark:bg-gray-600 text-gray-400'
-                                        }`}>
-                                            {count}
-                                        </span>
-                                    </button>
-                                );
-                            })}
-
-                            {(installerCounts.UNASSIGNED?.total > 0) && (
+                            </div>
+                            <div className="flex flex-wrap gap-2">
                                 <button
                                     type="button"
-                                    onClick={() => setSelectedInstallerFilter('UNASSIGNED')}
+                                    onClick={() => setSelectedInstallerFilter('ALL')}
                                     className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
-                                        selectedInstallerFilter === 'UNASSIGNED'
-                                            ? 'bg-cyan-600 text-white shadow-md'
+                                        selectedInstallerFilter === 'ALL'
+                                            ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30 scale-[1.02]'
                                             : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
                                     }`}
                                 >
-                                    <span>Não atribuído</span>
-                                    <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200">
-                                        {statusFilter === 'pendentes' ? installerCounts.UNASSIGNED?.pendentes || 0 : installerCounts.UNASSIGNED?.total || 0}
+                                    <span>Todos os Instaladores</span>
+                                    <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${
+                                        selectedInstallerFilter === 'ALL' ? 'bg-cyan-800 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200'
+                                    }`}>
+                                        {statusFilter === 'pendentes' ? installerCounts.ALL?.pendentes || 0 : installerCounts.ALL?.total || 0}
                                     </span>
                                 </button>
-                            )}
+
+                                {distinctInstallers.map(name => {
+                                    const count = statusFilter === 'pendentes' ? installerCounts[name]?.pendentes || 0 : installerCounts[name]?.total || 0;
+                                    const isSelected = selectedInstallerFilter === name;
+                                    return (
+                                        <button
+                                            key={name}
+                                            type="button"
+                                            onClick={() => setSelectedInstallerFilter(name)}
+                                            className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+                                                isSelected
+                                                    ? 'bg-cyan-600 text-white shadow-md shadow-cyan-600/30 scale-[1.02]'
+                                                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
+                                            }`}
+                                        >
+                                            <span>{name}</span>
+                                            <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black ${
+                                                isSelected 
+                                                    ? 'bg-cyan-800 text-white' 
+                                                    : count > 0 
+                                                        ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/50 dark:text-cyan-300' 
+                                                        : 'bg-gray-200 dark:bg-gray-600 text-gray-400'
+                                            }`}>
+                                                {count}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+
+                                {(installerCounts.UNASSIGNED?.total > 0) && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedInstallerFilter('UNASSIGNED')}
+                                        className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+                                            selectedInstallerFilter === 'UNASSIGNED'
+                                                ? 'bg-cyan-600 text-white shadow-md'
+                                                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
+                                        }`}
+                                    >
+                                        <span>Não atribuído</span>
+                                        <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200">
+                                            {statusFilter === 'pendentes' ? installerCounts.UNASSIGNED?.pendentes || 0 : installerCounts.UNASSIGNED?.total || 0}
+                                        </span>
+                                    </button>
+                                )}
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
             )}
 
@@ -1568,7 +1885,27 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                                         </div>
                                                     </td>
                                                     <td className="px-2.5 py-3.5 text-center whitespace-nowrap">
-                                                        {item.installerName && item.installerName !== 'Não Definido' ? (
+                                                        {isAdmin && !isPaid ? (
+                                                            <button
+                                                                type="button"
+                                                                onMouseEnter={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                                                                    setHoveredItemInfo(null);
+                                                                }}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setHoveredItemInfo(null);
+                                                                    handleOpenAdminEditModal(item);
+                                                                }}
+                                                                className="group inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black bg-cyan-100 hover:bg-cyan-200 text-cyan-900 dark:bg-cyan-900/40 dark:hover:bg-cyan-800/60 dark:text-cyan-200 border border-cyan-300/60 transition-all shadow-2xs cursor-pointer"
+                                                                title="Editar instalador e valor (Acesso Administrador)"
+                                                            >
+                                                                <UsersIcon className="w-3 h-3 text-cyan-700 dark:text-cyan-400" />
+                                                                <span>{item.installerName && item.installerName !== 'Não Definido' ? item.installerName : 'Definir Instalador'}</span>
+                                                                <span className="text-[9px] text-cyan-700 dark:text-cyan-300 opacity-60 group-hover:opacity-100 transition-opacity">✎</span>
+                                                            </button>
+                                                        ) : item.installerName && item.installerName !== 'Não Definido' ? (
                                                             <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300 inline-flex items-center gap-1.5 shadow-sm">
                                                                 <UsersIcon className="w-3 h-3 text-cyan-600" />
                                                                 {item.installerName}
@@ -1609,13 +1946,32 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                                     >
                                                         <div className="flex flex-col items-end">
                                                             <div className="flex items-center gap-1.5 justify-end">
+                                                                {isAdmin && !isPaid && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onMouseEnter={(e) => {
+                                                                            e.stopPropagation();
+                                                                            if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+                                                                            setHoveredItemInfo(null);
+                                                                        }}
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setHoveredItemInfo(null);
+                                                                            handleOpenAdminEditModal(item);
+                                                                        }}
+                                                                        className="p-1 rounded-lg text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-all cursor-pointer relative z-10"
+                                                                        title="Editar valor e instalador (Acesso Administrador)"
+                                                                    >
+                                                                        <EditIcon className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                )}
                                                                 <button
                                                                     type="button"
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
                                                                         setModalDetailItem(item);
                                                                     }}
-                                                                    className="p-1 rounded-lg text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 dark:hover:bg-cyan-900/30 transition-all"
+                                                                    className="p-1 rounded-lg text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 dark:hover:bg-cyan-900/30 transition-all cursor-pointer"
                                                                     title="Passe o mouse ou clique para ver itens considerados neste total"
                                                                 >
                                                                     <EyeIcon className="w-3.5 h-3.5" />
@@ -1901,110 +2257,124 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
             )}
 
             {/* Popover flutuante ao passar o mouse sobre Valor Mão de Obra */}
-            {hoveredItemInfo && (
-                <div 
-                    style={{
-                        position: 'fixed',
-                        top: Math.max(16, Math.min(window.innerHeight - 380, hoveredItemInfo.rect.bottom + 8 + 360 > window.innerHeight ? hoveredItemInfo.rect.top - 360 : hoveredItemInfo.rect.bottom + 8)),
-                        left: Math.max(16, Math.min(window.innerWidth - 396, hoveredItemInfo.rect.right - 380)),
-                        width: '380px',
-                        zIndex: 9999
-                    }}
-                    className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl border-2 border-cyan-500/50 p-5 text-left animate-fade-in pointer-events-auto backdrop-blur-md"
-                    onMouseEnter={handlePopoverMouseEnter}
-                    onMouseLeave={handlePopoverMouseLeave}
-                >
-                    {/* Header Popover */}
-                    <div className="flex items-start justify-between pb-3 border-b border-gray-100 dark:border-gray-700">
-                        <div>
-                            <span className="text-xs font-black text-cyan-600 dark:text-cyan-400 flex items-center gap-1.5">
-                                <SparklesIcon className="w-3.5 h-3.5" />
-                                Composição da Mão de Obra
-                            </span>
-                            <h4 className="text-sm font-black text-gray-900 dark:text-white mt-0.5 leading-snug">
-                                {hoveredItemInfo.item.clientName}
-                            </h4>
-                            {hoveredItemInfo.item.installerName && (
-                                <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
-                                    Instalador: <strong className="text-gray-700 dark:text-gray-200">{hoveredItemInfo.item.installerName}</strong>
-                                </p>
-                            )}
-                        </div>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                const it = hoveredItemInfo.item;
-                                setHoveredItemInfo(null);
-                                setModalDetailItem(it);
-                            }}
-                            className="px-2 py-1 rounded-lg text-cyan-700 dark:text-cyan-300 bg-cyan-50 dark:bg-cyan-900/30 hover:bg-cyan-100 text-[10px] font-black transition-colors"
-                            title="Abrir tela cheia"
-                        >
-                            ⛶ Abrir tela
-                        </button>
-                    </div>
+            {hoveredItemInfo && (() => {
+                const spaceAbove = hoveredItemInfo.rect.top;
+                const isAbove = spaceAbove >= 260 || (window.innerHeight - hoveredItemInfo.rect.bottom < 340);
+                
+                // Desloca para cima com margem de segurança de 24px para nunca cobrir a linha ou o botão de editar
+                const popoverStyle: React.CSSProperties = {
+                    position: 'fixed',
+                    ...(isAbove ? {
+                        bottom: `${Math.max(16, window.innerHeight - hoveredItemInfo.rect.top + 24)}px`,
+                        maxHeight: `${Math.min(420, Math.max(200, hoveredItemInfo.rect.top - 36))}px`
+                    } : {
+                        top: `${Math.max(16, hoveredItemInfo.rect.bottom + 24)}px`,
+                        maxHeight: `${Math.min(420, Math.max(200, window.innerHeight - hoveredItemInfo.rect.bottom - 36))}px`
+                    }),
+                    left: `${Math.max(16, Math.min(window.innerWidth - 396, hoveredItemInfo.rect.right - 380))}px`,
+                    width: '380px',
+                    zIndex: 9999
+                };
 
-                    {/* Itens Considerados */}
-                    <div className="mt-3 space-y-2">
-                        <div className="flex items-center justify-between">
-                            <span className="text-xs font-black text-gray-500 dark:text-gray-400">
-                                Itens Considerados no Total:
-                            </span>
-                            <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
-                                Soma Considerada
-                            </span>
-                        </div>
-
-                        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                            {hoveredItemInfo.item.breakdown?.filter(b => b.isIncluded).map((b, idx) => {
-                                const isNeg = b.value < 0;
-                                return (
-                                    <div key={idx} className={`flex justify-between items-center p-2.5 rounded-xl border ${isNeg ? 'bg-rose-50/60 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800/40' : 'bg-gray-50 dark:bg-gray-900/50 border-gray-100 dark:border-gray-700/60'}`}>
-                                        <div className="pr-2">
-                                            <p className={`text-xs font-bold leading-tight ${isNeg ? 'text-rose-800 dark:text-rose-300' : 'text-gray-800 dark:text-gray-200'}`}>
-                                                {b.label}
-                                            </p>
-                                            {b.detail && (
-                                                <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium mt-0.5">
-                                                    {b.detail}
-                                                </p>
-                                            )}
-                                        </div>
-                                        <span className={`text-xs font-black shrink-0 ${isNeg ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                                            {formatCurrency(b.value)}
-                                        </span>
-                                    </div>
-                                );
-                            })}
-                        </div>
-
-                        {/* Total Highlight */}
-                        <div className="pt-2.5 border-t border-gray-100 dark:border-gray-700 flex justify-between items-center">
-                            <span className="text-xs font-black text-gray-700 dark:text-gray-300">Total da Mão de Obra</span>
-                            <span className="text-base font-black text-indigo-600 dark:text-indigo-400">
-                                {formatCurrency(
-                                    (hoveredItemInfo.item.breakdown || []).filter(b => b.isIncluded).reduce((acc, b) => acc + (b.value || 0), 0)
+                return (
+                    <div 
+                        style={popoverStyle}
+                        className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl border-2 border-cyan-500/50 p-5 text-left animate-fade-in pointer-events-auto backdrop-blur-md overflow-y-auto"
+                        onMouseEnter={handlePopoverMouseEnter}
+                        onMouseLeave={handlePopoverMouseLeave}
+                    >
+                        {/* Header Popover */}
+                        <div className="flex items-start justify-between pb-3 border-b border-gray-100 dark:border-gray-700">
+                            <div>
+                                <span className="text-xs font-black text-cyan-600 dark:text-cyan-400 flex items-center gap-1.5">
+                                    <SparklesIcon className="w-3.5 h-3.5" />
+                                    Composição da Mão de Obra
+                                </span>
+                                <h4 className="text-sm font-black text-gray-900 dark:text-white mt-0.5 leading-snug">
+                                    {hoveredItemInfo.item.clientName}
+                                </h4>
+                                {hoveredItemInfo.item.installerName && (
+                                    <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
+                                        Instalador: <strong className="text-gray-700 dark:text-gray-200">{hoveredItemInfo.item.installerName}</strong>
+                                    </p>
                                 )}
-                            </span>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const it = hoveredItemInfo.item;
+                                    setHoveredItemInfo(null);
+                                    setModalDetailItem(it);
+                                }}
+                                className="px-2 py-1 rounded-lg text-cyan-700 dark:text-cyan-300 bg-cyan-50 dark:bg-cyan-900/30 hover:bg-cyan-100 text-[10px] font-black transition-colors"
+                                title="Abrir tela cheia"
+                            >
+                                ⛶ Abrir tela
+                            </button>
+                        </div>
+
+                        {/* Itens Considerados */}
+                        <div className="mt-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-black text-gray-500 dark:text-gray-400">
+                                    Itens Considerados no Total:
+                                </span>
+                                <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                    Soma Considerada
+                                </span>
+                            </div>
+
+                            <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                                {hoveredItemInfo.item.breakdown?.filter(b => b.isIncluded).map((b, idx) => {
+                                    const isNeg = b.value < 0;
+                                    return (
+                                        <div key={idx} className={`flex justify-between items-center p-2.5 rounded-xl border ${isNeg ? 'bg-rose-50/60 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800/40' : 'bg-gray-50 dark:bg-gray-900/50 border-gray-100 dark:border-gray-700/60'}`}>
+                                            <div className="pr-2">
+                                                <p className={`text-xs font-bold leading-tight ${isNeg ? 'text-rose-800 dark:text-rose-300' : 'text-gray-800 dark:text-gray-200'}`}>
+                                                    {b.label}
+                                                </p>
+                                                {b.detail && (
+                                                    <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium mt-0.5">
+                                                        {b.detail}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <span className={`text-xs font-black shrink-0 ${isNeg ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                                {formatCurrency(b.value)}
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Total Highlight */}
+                            <div className="pt-2.5 border-t border-gray-100 dark:border-gray-700 flex justify-between items-center">
+                                <span className="text-xs font-black text-gray-700 dark:text-gray-300">Total da Mão de Obra</span>
+                                <span className="text-base font-black text-indigo-600 dark:text-indigo-400">
+                                    {formatCurrency(
+                                        (hoveredItemInfo.item.breakdown || []).filter(b => b.isIncluded).reduce((acc, b) => acc + (b.value || 0), 0)
+                                    )}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="mt-3 pt-2 text-center border-t border-gray-100 dark:border-gray-700">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const it = hoveredItemInfo.item;
+                                    setHoveredItemInfo(null);
+                                    setModalDetailItem(it);
+                                }}
+                                className="text-[10px] font-black text-cyan-600 hover:text-cyan-700 dark:text-cyan-400 hover:underline flex items-center justify-center gap-1 mx-auto"
+                            >
+                                <span>Clique para abrir tela completa com todos os itens</span>
+                                <span>→</span>
+                            </button>
                         </div>
                     </div>
-
-                    <div className="mt-3 pt-2 text-center border-t border-gray-100 dark:border-gray-700">
-                        <button
-                            type="button"
-                            onClick={() => {
-                                const it = hoveredItemInfo.item;
-                                setHoveredItemInfo(null);
-                                setModalDetailItem(it);
-                            }}
-                            className="text-[10px] font-black text-cyan-600 hover:text-cyan-700 dark:text-cyan-400 hover:underline flex items-center justify-center gap-1 mx-auto"
-                        >
-                            <span>Clique para abrir tela completa com todos os itens</span>
-                            <span>→</span>
-                        </button>
-                    </div>
-                </div>
-            )}
+                );
+            })()}
 
             {/* Modal de Detalhamento Completo dos Itens da Mão de Obra */}
             {modalDetailItem && (() => {
@@ -2092,42 +2462,59 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                 </div>
                             </div>
 
-                            <div className="pt-2 flex justify-between items-center">
-                                {modalDetailItem.itemType === 'INSTALACAO' && !isReadOnly ? (
-                                    <div className="flex items-center gap-2">
+                            <div className="pt-2 flex flex-wrap gap-2 justify-between items-center">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    {isAdmin && !isReadOnly && (
                                         <button
                                             type="button"
                                             onClick={() => {
                                                 const it = modalDetailItem;
                                                 setModalDetailItem(null);
-                                                handleOpenExtraServiceModal(it);
+                                                handleOpenAdminEditModal(it);
                                             }}
-                                            className="px-4 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl font-bold text-xs transition-colors inline-flex items-center gap-1.5 shadow-2xs"
+                                            className="px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 rounded-xl font-bold text-xs transition-colors inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                                            title="Editar instalador e valor da mão de obra (Acesso Administrador)"
                                         >
-                                            <span>✎</span>
-                                            <span>{hasModalExtra ? 'Editar Serviço Extra / Ajuste' : 'Incluir Serviço Extra'}</span>
+                                            <EditIcon className="w-3.5 h-3.5" />
+                                            <span>Editar Instalador e Valor</span>
                                         </button>
-                                        {hasModalExtra && (
+                                    )}
+                                    {modalDetailItem.itemType === 'INSTALACAO' && !isReadOnly && (
+                                        <>
                                             <button
                                                 type="button"
                                                 onClick={() => {
                                                     const it = modalDetailItem;
                                                     setModalDetailItem(null);
-                                                    setConfirmDeleteExtraItem(it);
+                                                    handleOpenExtraServiceModal(it);
                                                 }}
-                                                className="px-3.5 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl font-bold text-xs transition-colors inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
-                                                title="Excluir serviço extra"
+                                                className="px-4 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl font-bold text-xs transition-colors inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
                                             >
-                                                <TrashIcon className="w-3.5 h-3.5" />
-                                                <span>Excluir Extra</span>
+                                                <span>✎</span>
+                                                <span>{hasModalExtra ? 'Editar Serviço Extra / Ajuste' : 'Incluir Serviço Extra'}</span>
                                             </button>
-                                        )}
-                                    </div>
-                                ) : <div />}
+                                            {hasModalExtra && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const it = modalDetailItem;
+                                                        setModalDetailItem(null);
+                                                        setConfirmDeleteExtraItem(it);
+                                                    }}
+                                                    className="px-3.5 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl font-bold text-xs transition-colors inline-flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                                                    title="Excluir serviço extra"
+                                                >
+                                                    <TrashIcon className="w-3.5 h-3.5" />
+                                                    <span>Excluir Extra</span>
+                                                </button>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
                                 <button
                                     type="button"
                                     onClick={() => setModalDetailItem(null)}
-                                    className="px-6 py-2.5 bg-gray-900 text-white rounded-xl font-bold text-xs hover:bg-black transition-colors"
+                                    className="px-6 py-2.5 bg-gray-900 text-white rounded-xl font-bold text-xs hover:bg-black transition-colors cursor-pointer"
                                 >
                                     Fechar
                                 </button>
@@ -2391,6 +2778,181 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                                 >
                                     <TrashIcon className="w-4 h-4" />
                                     <span>{isSavingExtraService ? 'Excluindo...' : (isDeduction ? 'Sim, Excluir Ajuste e Pagar Integral' : 'Sim, Excluir Extra')}</span>
+                                </button>
+                            </div>
+                        </div>
+                    </Modal>
+                );
+            })()}
+
+            {/* Modal Exclusivo de Administrador: Edição de Instalador e Valor */}
+            {adminEditModalItem && isAdmin && (() => {
+                const currentBase = adminEditModalItem.baseAmount !== undefined 
+                    ? adminEditModalItem.baseAmount 
+                    : (adminEditModalItem.amount - (adminEditModalItem.extraValor || 0));
+                const typedVal = parseSafeNumber(adminEditValueInput);
+                const extra = adminEditModalItem.extraValor || 0;
+                const finalSimulatedTotal = typedVal + extra;
+
+                const matchedInstaller = installers.find(i => String(i.id) === String(adminEditInstallerId));
+
+                return (
+                    <Modal
+                        title="Editar Instalador e Valor da Mão de Obra"
+                        onClose={() => setAdminEditModalItem(null)}
+                        maxWidth="max-w-lg"
+                    >
+                        <div className="space-y-5 p-2">
+                            {/* Banner de Administrador com Identificação da Obra */}
+                            <div className="bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-950/40 dark:to-blue-950/40 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-900/40 flex items-start justify-between gap-3">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-indigo-600 text-white flex items-center gap-1 shadow-xs">
+                                            <LockClosedIcon className="w-3 h-3" />
+                                            Acesso Administrador
+                                        </span>
+                                        <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300">
+                                            {adminEditModalItem.itemType === 'INSTALACAO' ? 'Instalação de Obra' : 'Lavagem Técnica'}
+                                        </span>
+                                    </div>
+                                    <h4 className="text-sm font-black text-gray-900 dark:text-white">
+                                        {adminEditModalItem.clientName || adminEditModalItem.description}
+                                    </h4>
+                                    <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                                        Data de Conclusão: {adminEditModalItem.dueDate ? new Date(adminEditModalItem.dueDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : 'Não informada'}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Seleção do Instalador Cadastrado */}
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-black text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
+                                        <UsersIcon className="w-3.5 h-3.5 text-indigo-600" />
+                                        Instalador Responsável
+                                    </label>
+                                    <span className="text-[10px] font-bold text-gray-400">
+                                        {installers.length} instaladores cadastrados
+                                    </span>
+                                </div>
+
+                                <select
+                                    value={adminEditInstallerId}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        setAdminEditInstallerId(val);
+                                        if (val === '__custom__') {
+                                            setAdminEditInstallerName('');
+                                        } else if (val) {
+                                            const found = installers.find(i => String(i.id) === String(val));
+                                            if (found) setAdminEditInstallerName(found.nome.trim());
+                                        } else {
+                                            setAdminEditInstallerName('Não Definido');
+                                        }
+                                    }}
+                                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-xs font-bold text-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all shadow-2xs"
+                                >
+                                    <option value="">-- Selecione um instalador cadastrado --</option>
+                                    {installers.map((inst) => (
+                                        <option key={inst.id} value={inst.id}>
+                                            {inst.nome} {inst.cidade ? `(${inst.cidade}/${inst.uf})` : ''} {inst.whatsapp ? `• ${inst.whatsapp}` : ''}
+                                        </option>
+                                    ))}
+                                    <option value="__custom__">Outro / Especificar manualmente...</option>
+                                </select>
+
+                                {/* Campo manual se selecionou custom ou não encontrou no cadastro */}
+                                {(adminEditInstallerId === '__custom__' || (!adminEditInstallerId && adminEditInstallerName && adminEditInstallerName !== 'Não Definido')) && (
+                                    <div className="pt-1.5">
+                                        <input
+                                            type="text"
+                                            placeholder="Digite o nome do instalador..."
+                                            value={adminEditInstallerName === 'Não Definido' ? '' : adminEditInstallerName}
+                                            onChange={(e) => setAdminEditInstallerName(e.target.value)}
+                                            className="w-full px-3.5 py-2 rounded-xl border border-indigo-300 dark:border-indigo-600 bg-white dark:bg-gray-700 text-xs font-bold text-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                        />
+                                    </div>
+                                )}
+
+                                {/* Card de Informações do Instalador Selecionado */}
+                                {matchedInstaller && (
+                                    <div className="p-2.5 bg-cyan-50/60 dark:bg-cyan-950/20 border border-cyan-100 dark:border-cyan-900/40 rounded-xl text-[11px] text-gray-600 dark:text-gray-300 flex items-center justify-between">
+                                        <div>
+                                            <span className="font-bold text-cyan-900 dark:text-cyan-300">{matchedInstaller.nome}</span>
+                                            {matchedInstaller.documento && <span className="ml-2 text-gray-400 font-normal">Doc: {matchedInstaller.documento}</span>}
+                                        </div>
+                                        {matchedInstaller.whatsapp && (
+                                            <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                                                {matchedInstaller.whatsapp}
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Edição do Valor da Mão de Obra */}
+                            <div className="space-y-2">
+                                <label className="text-xs font-black text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
+                                <DollarIcon className="w-3.5 h-3.5 text-indigo-600" />
+                                    Valor da Mão de Obra
+                                </label>
+
+                                <div className="relative">
+                                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-black text-xs">
+                                        R$
+                                    </span>
+                                    <input
+                                        type="text"
+                                        value={adminEditValueInput}
+                                        onChange={(e) => setAdminEditValueInput(e.target.value)}
+                                        placeholder="0,00"
+                                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-black text-indigo-600 dark:text-indigo-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-2xs transition-all"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Simulador de Impacto no Faturamento */}
+                            <div className="bg-gray-50 dark:bg-gray-800/80 p-3.5 rounded-2xl border border-gray-200 dark:border-gray-700 text-xs space-y-2">
+                                <div className="flex justify-between items-center text-gray-600 dark:text-gray-300 font-bold">
+                                    <span>Mão de Obra Base:</span>
+                                    <span className="font-black text-gray-900 dark:text-white">{formatCurrency(typedVal)}</span>
+                                </div>
+
+                                {Math.abs(extra) > 0.001 && (
+                                    <div className={`flex justify-between items-center ${extra < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'} font-bold`}>
+                                        <span>
+                                            {extra < 0 ? 'Dedução / Ajuste na Obra:' : 'Serviço Extra na Obra:'} ({adminEditModalItem.extraDesc || 'Ajuste'})
+                                        </span>
+                                        <span className="font-black">
+                                            {extra > 0 ? `+${formatCurrency(extra)}` : formatCurrency(extra)}
+                                        </span>
+                                    </div>
+                                )}
+
+                                <div className="pt-2 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center text-sm font-black text-gray-900 dark:text-white">
+                                    <span>Total Final a Pagar:</span>
+                                    <span className="text-base text-indigo-600 dark:text-indigo-400">{formatCurrency(finalSimulatedTotal)}</span>
+                                </div>
+                            </div>
+
+                            {/* Rodapé com botões de Ação */}
+                            <div className="flex gap-3 justify-end pt-2">
+                                <button
+                                    type="button"
+                                    disabled={isSavingAdminEdit}
+                                    onClick={() => setAdminEditModalItem(null)}
+                                    className="px-5 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={isSavingAdminEdit}
+                                    onClick={handleSaveAdminEdit}
+                                    className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                                >
+                                    <SaveIcon className="w-4 h-4" />
+                                    <span>{isSavingAdminEdit ? 'Salvando...' : 'Salvar Alterações'}</span>
                                 </button>
                             </div>
                         </div>

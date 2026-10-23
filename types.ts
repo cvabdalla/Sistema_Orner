@@ -59,6 +59,7 @@ export interface User {
     active: boolean;
     darkMode?: boolean;
     biometricsEnabled?: boolean;
+    instaladorId?: string;
 }
 
 export interface AccessLogPageVisit {
@@ -546,6 +547,7 @@ export interface InstalacaoLavagemPageProps {
     reportToEdit?: ExpenseReport | null;
     onSave?: () => void;
     hasGlobalView?: boolean;
+    userPermissions?: string[];
 }
 
 export interface ManutencaoServiceItem {

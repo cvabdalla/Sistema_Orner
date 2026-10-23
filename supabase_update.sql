@@ -131,3 +131,8 @@ ALTER TABLE "orcamentos" ADD COLUMN IF NOT EXISTS "instalacao_servico_extra_valo
 
 COMMENT ON COLUMN "orcamentos"."instalacao_servico_extra_desc" IS 'Descrição do serviço extra identificado na instalação';
 COMMENT ON COLUMN "orcamentos"."instalacao_servico_extra_valor" IS 'Valor do serviço extra identificado na instalação';
+
+-- 11. Vínculo de Usuário do Sistema com Instalador Parceiro
+ALTER TABLE "system_users" ADD COLUMN IF NOT EXISTS "instaladorId" text;
+COMMENT ON COLUMN "system_users"."instaladorId" IS 'ID do instalador parceiro vinculado ao usuário para restrição de visualização em Reembolso/Instalação';
+
