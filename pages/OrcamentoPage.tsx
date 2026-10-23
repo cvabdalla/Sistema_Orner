@@ -614,6 +614,63 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
       setOrcamentos((prev) =>
         prev.map((o) => (o.id === id ? updatedOrcamento : o)),
       );
+
+      // Sincronizar custos reais atualizados diretamente com o resumo de vendas (sales_summary)
+      try {
+        const currentSales = await dataService.getAll<SalesSummaryItem>("sales_summary");
+        const existingSale = currentSales.find((s) => Number(s.orcamentoId) === Number(id));
+        if (existingSale) {
+          const rInst = updatedOrcamento.custos_reais?.instalacao !== undefined
+            ? parseSafeNumber(updatedOrcamento.custos_reais.instalacao)
+            : parseSafeNumber(existingSale.installation);
+          const rHomo = updatedOrcamento.custos_reais?.homologacao !== undefined
+            ? parseSafeNumber(updatedOrcamento.custos_reais.homologacao)
+            : parseSafeNumber(existingSale.homologation);
+          const rDesloc = updatedOrcamento.custos_reais?.deslocamento !== undefined
+            ? parseSafeNumber(updatedOrcamento.custos_reais.deslocamento)
+            : parseSafeNumber(existingSale.deslocamento);
+          const rPed = updatedOrcamento.custos_reais?.pedagio !== undefined
+            ? parseSafeNumber(updatedOrcamento.custos_reais.pedagio)
+            : parseSafeNumber(existingSale.pedagio);
+          const rAdeq = updatedOrcamento.custos_reais?.adequacao !== undefined
+            ? parseSafeNumber(updatedOrcamento.custos_reais.adequacao)
+            : parseSafeNumber(existingSale.adequationCost);
+          const rMat = updatedOrcamento.custos_reais?.materiais !== undefined
+            ? parseSafeNumber(updatedOrcamento.custos_reais.materiais)
+            : parseSafeNumber(existingSale.materialCost);
+          const rTax = updatedOrcamento.custos_reais?.imposto !== undefined
+            ? parseSafeNumber(updatedOrcamento.custos_reais.imposto)
+            : parseSafeNumber(existingSale.invoicedTax);
+
+          const rExtra = 
+            (existingSale.visitaTecnica || 0) +
+            rHomo + rInst + (rDesloc + rPed) +
+            rAdeq + rMat + rTax +
+            (existingSale.commission || 0) +
+            (existingSale.bankFees || 0);
+
+          const updatedSale: SalesSummaryItem = {
+            ...existingSale,
+            homologation: rHomo,
+            installation: rInst,
+            deslocamento: rDesloc,
+            pedagio: rPed,
+            travelCost: rDesloc + rPed,
+            adequationCost: rAdeq,
+            materialCost: rMat,
+            invoicedTax: rTax,
+            totalCost: rExtra,
+            netProfit: (existingSale.closedValue || 0) - (existingSale.systemCost || 0) - rExtra,
+            finalMargin: ((existingSale.closedValue || 0) - (existingSale.commission || 0)) > 0
+              ? (((existingSale.closedValue || 0) - (existingSale.systemCost || 0) - rExtra) / ((existingSale.closedValue || 0) - (existingSale.commission || 0))) * 100
+              : 0
+          };
+          await dataService.save("sales_summary", updatedSale);
+        }
+      } catch (errSync) {
+        console.warn("Erro ao sincronizar custos reais com sales_summary:", errSync);
+      }
+
       setEditingTrackId(null);
       setPendingInstallationEndDate("");
       setPendingTrackingOrcamentoId(null);

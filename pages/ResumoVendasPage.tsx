@@ -130,11 +130,65 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
             let syncCount = 0;
             for (const budget of approvedBudgets) {
                 let variant = budget.variants?.find(v => v.isPrincipal) || budget.variants?.[0];
-                const fs = variant?.formState || budget.formState;
-                const calc = variant?.calculated || budget.calculated;
+                const fs = variant?.formState || budget.formState || {};
+                const calc = variant?.calculated || budget.calculated || {};
 
                 if (fs && calc) {
                     const thirdPartyInstallation = parseSafeNumber(fs.terceiroInstalacaoQtd) * parseSafeNumber(fs.terceiroInstalacaoCusto);
+
+                    const estInst = budget.custos_estimados?.instalacao !== undefined
+                        ? parseSafeNumber(budget.custos_estimados.instalacao)
+                        : thirdPartyInstallation;
+                    const realInst = budget.custos_reais?.instalacao !== undefined
+                        ? parseSafeNumber(budget.custos_reais.instalacao)
+                        : thirdPartyInstallation;
+
+                    const estHomo = budget.custos_estimados?.homologacao !== undefined
+                        ? parseSafeNumber(budget.custos_estimados.homologacao)
+                        : (parseSafeNumber(fs.projetoHomologacaoCusto) || parseSafeNumber(calc.projetoHomologacaoCusto) || 0);
+                    const realHomo = budget.custos_reais?.homologacao !== undefined
+                        ? parseSafeNumber(budget.custos_reais.homologacao)
+                        : estHomo;
+
+                    const estDeslocamento = budget.custos_estimados?.deslocamento !== undefined
+                        ? parseSafeNumber(budget.custos_estimados.deslocamento)
+                        : (fs.deslocamento !== undefined ? parseSafeNumber(fs.deslocamento) : parseSafeNumber(fs.custoViagem) || 0);
+                    const realDeslocamento = budget.custos_reais?.deslocamento !== undefined
+                        ? parseSafeNumber(budget.custos_reais.deslocamento)
+                        : estDeslocamento;
+
+                    const estPedagio = budget.custos_estimados?.pedagio !== undefined
+                        ? parseSafeNumber(budget.custos_estimados.pedagio)
+                        : (parseSafeNumber(fs.pedagio) || 0);
+                    const realPedagio = budget.custos_reais?.pedagio !== undefined
+                        ? parseSafeNumber(budget.custos_reais.pedagio)
+                        : estPedagio;
+
+                    const estAdeq = budget.custos_estimados?.adequacao !== undefined
+                        ? parseSafeNumber(budget.custos_estimados.adequacao)
+                        : (parseSafeNumber(fs.adequacaoLocalCusto) || parseSafeNumber(calc.adequacaoLocalCusto) || 0);
+                    const realAdeq = budget.custos_reais?.adequacao !== undefined
+                        ? parseSafeNumber(budget.custos_reais.adequacao)
+                        : estAdeq;
+
+                    const estMat = budget.custos_estimados?.materiais !== undefined
+                        ? parseSafeNumber(budget.custos_estimados.materiais)
+                        : (parseSafeNumber(calc.totalEstrutura) || 0);
+                    const realMat = budget.custos_reais?.materiais !== undefined
+                        ? parseSafeNumber(budget.custos_reais.materiais)
+                        : estMat;
+
+                    const estTax = budget.custos_estimados?.imposto !== undefined
+                        ? parseSafeNumber(budget.custos_estimados.imposto)
+                        : (parseSafeNumber(calc.nfServicoValor) || parseSafeNumber(calc.impostos) || 0);
+                    const realTax = budget.custos_reais?.imposto !== undefined
+                        ? parseSafeNumber(budget.custos_reais.imposto)
+                        : estTax;
+
+                    const realVT = parseSafeNumber(calc.visitaTecnicaCusto) || parseSafeNumber(fs.visitaTecnicaCusto) || 0;
+                    const realComm = parseSafeNumber(calc.comissaoVendasValor) || 0;
+                    const realClosedValue = parseSafeNumber(calc.precoVendaFinal);
+                    const realSystemCost = parseSafeNumber(calc.valorVendaSistema);
 
                     const saleItem: SalesSummaryItem = {
                         id: budget.id,
@@ -142,19 +196,19 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                         owner_id: budget.owner_id,
                         clientName: fs.nomeCliente || 'Cliente sem nome',
                         date: fs.dataOrcamento || budget.savedAt.split('T')[0],
-                        closedValue: parseSafeNumber(calc.precoVendaFinal),
-                        systemCost: parseSafeNumber(calc.valorVendaSistema),
+                        closedValue: realClosedValue,
+                        systemCost: realSystemCost,
                         supplier: fs.fornecedor || 'N/A',
-                        visitaTecnica: parseSafeNumber(fs.visitaTecnicaCusto),
-                        homologation: parseSafeNumber(fs.projetoHomologacaoCusto),
-                        installation: thirdPartyInstallation,
-                        travelCost: fs.deslocamento !== undefined ? (parseSafeNumber(fs.deslocamento) + parseSafeNumber(fs.pedagio)) : parseSafeNumber(fs.custoViagem),
-                        deslocamento: fs.deslocamento !== undefined ? parseSafeNumber(fs.deslocamento) : parseSafeNumber(fs.custoViagem),
-                        pedagio: fs.pedagio !== undefined ? parseSafeNumber(fs.pedagio) : 0,
-                        adequationCost: parseSafeNumber(fs.adequacaoLocalCusto),
-                        materialCost: parseSafeNumber(calc.totalEstrutura),
-                        invoicedTax: parseSafeNumber(calc.nfServicoValor),
-                        commission: parseSafeNumber(calc.comissaoVendasValor),
+                        visitaTecnica: realVT,
+                        homologation: realHomo,
+                        installation: realInst,
+                        travelCost: realDeslocamento + realPedagio,
+                        deslocamento: realDeslocamento,
+                        pedagio: realPedagio,
+                        adequationCost: realAdeq,
+                        materialCost: realMat,
+                        invoicedTax: realTax,
+                        commission: realComm,
                         bankFees: 0,
                         totalCost: 0,
                         netProfit: 0,
@@ -188,22 +242,222 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     };
 
     const augmentedSalesData = useMemo(() => {
-        return salesData.map(item => {
-            const b = allBudgets.find(bud => bud.id === item.orcamentoId);
+        const existingOrcamentoIds = new Set<number>();
+
+        const augmentedFromSales = salesData.map(item => {
+            if (item.orcamentoId) existingOrcamentoIds.add(Number(item.orcamentoId));
+            const b = allBudgets.find(bud => Number(bud.id) === Number(item.orcamentoId));
             if (b) {
                 const variant = b.variants?.find(v => v.isPrincipal) || b.variants?.[0];
-                const fs = variant?.formState || b.formState;
-                if (fs) {
-                    return {
-                        ...item,
-                        supplier: fs.fornecedor || item.supplier || 'N/A',
-                        clientName: fs.nomeCliente || item.clientName,
-                        status: b.status || item.status
-                    };
-                }
+                const fs = variant?.formState || b.formState || {};
+                const calc = variant?.calculated || b.calculated || {};
+
+                // Estimados (Orçado)
+                const estInst = b.custos_estimados?.instalacao !== undefined
+                    ? parseSafeNumber(b.custos_estimados.instalacao)
+                    : (parseSafeNumber(fs.terceiroInstalacaoQtd) * parseSafeNumber(fs.terceiroInstalacaoCusto) || 0);
+
+                const estHomo = b.custos_estimados?.homologacao !== undefined
+                    ? parseSafeNumber(b.custos_estimados.homologacao)
+                    : (parseSafeNumber(fs.projetoHomologacaoCusto) || parseSafeNumber(calc.projetoHomologacaoCusto) || 0);
+
+                const estDeslocamento = b.custos_estimados?.deslocamento !== undefined
+                    ? parseSafeNumber(b.custos_estimados.deslocamento)
+                    : (fs.deslocamento !== undefined ? parseSafeNumber(fs.deslocamento) : parseSafeNumber(fs.custoViagem) || 0);
+
+                const estPedagio = b.custos_estimados?.pedagio !== undefined
+                    ? parseSafeNumber(b.custos_estimados.pedagio)
+                    : (parseSafeNumber(fs.pedagio) || 0);
+
+                const estAdeq = b.custos_estimados?.adequacao !== undefined
+                    ? parseSafeNumber(b.custos_estimados.adequacao)
+                    : (parseSafeNumber(fs.adequacaoLocalCusto) || parseSafeNumber(calc.adequacaoLocalCusto) || 0);
+
+                const estMat = b.custos_estimados?.materiais !== undefined
+                    ? parseSafeNumber(b.custos_estimados.materiais)
+                    : (parseSafeNumber(calc.totalEstrutura) || 0);
+
+                const estTax = b.custos_estimados?.imposto !== undefined
+                    ? parseSafeNumber(b.custos_estimados.imposto)
+                    : (parseSafeNumber(calc.nfServicoValor) || parseSafeNumber(calc.impostos) || 0);
+
+                const estVT = parseSafeNumber(calc.visitaTecnicaCusto) || parseSafeNumber(fs.visitaTecnicaCusto) || 0;
+                const estComm = parseSafeNumber(calc.comissaoVendasValor) || 0;
+                const estSale = parseSafeNumber(calc.precoVendaFinal) || 0;
+                const estSys = parseSafeNumber(calc.valorVendaSistema) || 0;
+
+                // Reais (prioridade absoluta para b.custos_reais, depois item / fallback)
+                const realInst = b.custos_reais?.instalacao !== undefined
+                    ? parseSafeNumber(b.custos_reais.instalacao)
+                    : (item.installation !== undefined ? parseSafeNumber(item.installation) : estInst);
+
+                const realHomo = b.custos_reais?.homologacao !== undefined
+                    ? parseSafeNumber(b.custos_reais.homologacao)
+                    : (item.homologation !== undefined ? parseSafeNumber(item.homologation) : estHomo);
+
+                const realDeslocamento = b.custos_reais?.deslocamento !== undefined
+                    ? parseSafeNumber(b.custos_reais.deslocamento)
+                    : (item.deslocamento !== undefined ? parseSafeNumber(item.deslocamento) : estDeslocamento);
+
+                const realPedagio = b.custos_reais?.pedagio !== undefined
+                    ? parseSafeNumber(b.custos_reais.pedagio)
+                    : (item.pedagio !== undefined ? parseSafeNumber(item.pedagio) : estPedagio);
+
+                const realTravel = realDeslocamento + realPedagio;
+
+                const realAdeq = b.custos_reais?.adequacao !== undefined
+                    ? parseSafeNumber(b.custos_reais.adequacao)
+                    : (item.adequationCost !== undefined ? parseSafeNumber(item.adequationCost) : estAdeq);
+
+                const realMat = b.custos_reais?.materiais !== undefined
+                    ? parseSafeNumber(b.custos_reais.materiais)
+                    : (item.materialCost !== undefined ? parseSafeNumber(item.materialCost) : estMat);
+
+                const realTax = b.custos_reais?.imposto !== undefined
+                    ? parseSafeNumber(b.custos_reais.imposto)
+                    : (item.invoicedTax !== undefined ? parseSafeNumber(item.invoicedTax) : estTax);
+
+                const realVT = item.visitaTecnica !== undefined ? parseSafeNumber(item.visitaTecnica) : estVT;
+                const realComm = item.commission !== undefined ? parseSafeNumber(item.commission) : estComm;
+                const realBank = item.bankFees !== undefined ? parseSafeNumber(item.bankFees) : 0;
+                const realSale = item.closedValue !== undefined && item.closedValue > 0
+                    ? parseSafeNumber(item.closedValue)
+                    : (estSale || 0);
+                const realSys = item.systemCost !== undefined && item.systemCost > 0
+                    ? parseSafeNumber(item.systemCost)
+                    : (estSys || 0);
+
+                const realExtraCosts = realVT + realHomo + realInst + realTravel + realAdeq + realMat + realTax + realComm + realBank;
+                const realNetProfit = realSale - realSys - realExtraCosts;
+                const baseVal = realSale - realComm;
+                const realFinalMargin = baseVal > 0 ? (realNetProfit / baseVal) * 100 : 0;
+
+                return {
+                    ...item,
+                    closedValue: realSale,
+                    systemCost: realSys,
+                    supplier: fs.fornecedor || item.supplier || 'N/A',
+                    clientName: fs.nomeCliente || item.clientName,
+                    status: b.status || item.status,
+                    visitaTecnica: realVT,
+                    homologation: realHomo,
+                    installation: realInst,
+                    deslocamento: realDeslocamento,
+                    pedagio: realPedagio,
+                    travelCost: realTravel,
+                    adequationCost: realAdeq,
+                    materialCost: realMat,
+                    invoicedTax: realTax,
+                    commission: realComm,
+                    bankFees: realBank,
+                    totalCost: realExtraCosts,
+                    netProfit: realNetProfit,
+                    finalMargin: realFinalMargin,
+                };
             }
             return item;
         });
+
+        // Inclui automaticamente orçamentos aprovados/finalizados que ainda não estavam no sales_summary
+        const missingBudgets = allBudgets.filter(b => {
+            const s = (b.status || '').trim().toLowerCase();
+            return (s === 'aprovado' || s === 'finalizado') && !existingOrcamentoIds.has(Number(b.id));
+        });
+
+        const addedFromBudgets: SalesSummaryItem[] = missingBudgets.map(b => {
+            const variant = b.variants?.find(v => v.isPrincipal) || b.variants?.[0];
+            const fs = variant?.formState || b.formState || {};
+            const calc = variant?.calculated || b.calculated || {};
+
+            const estInst = b.custos_estimados?.instalacao !== undefined
+                ? parseSafeNumber(b.custos_estimados.instalacao)
+                : (parseSafeNumber(fs.terceiroInstalacaoQtd) * parseSafeNumber(fs.terceiroInstalacaoCusto) || 0);
+            const realInst = b.custos_reais?.instalacao !== undefined
+                ? parseSafeNumber(b.custos_reais.instalacao)
+                : estInst;
+
+            const estHomo = b.custos_estimados?.homologacao !== undefined
+                ? parseSafeNumber(b.custos_estimados.homologacao)
+                : (parseSafeNumber(fs.projetoHomologacaoCusto) || parseSafeNumber(calc.projetoHomologacaoCusto) || 0);
+            const realHomo = b.custos_reais?.homologacao !== undefined
+                ? parseSafeNumber(b.custos_reais.homologacao)
+                : estHomo;
+
+            const estDeslocamento = b.custos_estimados?.deslocamento !== undefined
+                ? parseSafeNumber(b.custos_estimados.deslocamento)
+                : (fs.deslocamento !== undefined ? parseSafeNumber(fs.deslocamento) : parseSafeNumber(fs.custoViagem) || 0);
+            const realDeslocamento = b.custos_reais?.deslocamento !== undefined
+                ? parseSafeNumber(b.custos_reais.deslocamento)
+                : estDeslocamento;
+
+            const estPedagio = b.custos_estimados?.pedagio !== undefined
+                ? parseSafeNumber(b.custos_estimados.pedagio)
+                : (parseSafeNumber(fs.pedagio) || 0);
+            const realPedagio = b.custos_reais?.pedagio !== undefined
+                ? parseSafeNumber(b.custos_reais.pedagio)
+                : estPedagio;
+
+            const realTravel = realDeslocamento + realPedagio;
+
+            const estAdeq = b.custos_estimados?.adequacao !== undefined
+                ? parseSafeNumber(b.custos_estimados.adequacao)
+                : (parseSafeNumber(fs.adequacaoLocalCusto) || parseSafeNumber(calc.adequacaoLocalCusto) || 0);
+            const realAdeq = b.custos_reais?.adequacao !== undefined
+                ? parseSafeNumber(b.custos_reais.adequacao)
+                : estAdeq;
+
+            const estMat = b.custos_estimados?.materiais !== undefined
+                ? parseSafeNumber(b.custos_estimados.materiais)
+                : (parseSafeNumber(calc.totalEstrutura) || 0);
+            const realMat = b.custos_reais?.materiais !== undefined
+                ? parseSafeNumber(b.custos_reais.materiais)
+                : estMat;
+
+            const estTax = b.custos_estimados?.imposto !== undefined
+                ? parseSafeNumber(b.custos_estimados.imposto)
+                : (parseSafeNumber(calc.nfServicoValor) || parseSafeNumber(calc.impostos) || 0);
+            const realTax = b.custos_reais?.imposto !== undefined
+                ? parseSafeNumber(b.custos_reais.imposto)
+                : estTax;
+
+            const realVT = parseSafeNumber(calc.visitaTecnicaCusto) || parseSafeNumber(fs.visitaTecnicaCusto) || 0;
+            const realComm = parseSafeNumber(calc.comissaoVendasValor) || 0;
+            const realSale = parseSafeNumber(calc.precoVendaFinal) || 0;
+            const realSys = parseSafeNumber(calc.valorVendaSistema) || 0;
+
+            const realExtraCosts = realVT + realHomo + realInst + realTravel + realAdeq + realMat + realTax + realComm;
+            const realNetProfit = realSale - realSys - realExtraCosts;
+            const baseVal = realSale - realComm;
+            const realFinalMargin = baseVal > 0 ? (realNetProfit / baseVal) * 100 : 0;
+
+            return {
+                id: b.id,
+                orcamentoId: b.id,
+                owner_id: b.owner_id,
+                clientName: fs.nomeCliente || 'Cliente sem nome',
+                date: fs.dataOrcamento || b.savedAt.split('T')[0],
+                closedValue: realSale,
+                systemCost: realSys,
+                supplier: fs.fornecedor || 'N/A',
+                visitaTecnica: realVT,
+                homologation: realHomo,
+                installation: realInst,
+                deslocamento: realDeslocamento,
+                pedagio: realPedagio,
+                travelCost: realTravel,
+                adequationCost: realAdeq,
+                materialCost: realMat,
+                invoicedTax: realTax,
+                commission: realComm,
+                bankFees: 0,
+                totalCost: realExtraCosts,
+                netProfit: realNetProfit,
+                finalMargin: realFinalMargin,
+                status: b.status
+            };
+        });
+
+        return [...augmentedFromSales, ...addedFromBudgets];
     }, [salesData, allBudgets]);
 
     const suppliersList = useMemo(() => {
@@ -252,7 +506,23 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
 
         setSalesData(updatedData);
         const itemToSave = updatedData.find(i => i.id === id);
-        if (itemToSave) await dataService.save('sales_summary', itemToSave);
+        if (itemToSave) {
+            await dataService.save('sales_summary', itemToSave);
+            if (field === 'invoicedTax' && itemToSave.orcamentoId) {
+                const targetOrc = allBudgets.find(b => Number(b.id) === Number(itemToSave.orcamentoId));
+                if (targetOrc) {
+                    const updatedOrc: SavedOrcamento = {
+                        ...targetOrc,
+                        custos_reais: {
+                            ...(targetOrc.custos_reais || {}),
+                            imposto: safeValue
+                        }
+                    };
+                    await dataService.save('orcamentos', updatedOrc);
+                    setAllBudgets(prev => prev.map(b => Number(b.id) === Number(itemToSave.orcamentoId) ? updatedOrc : b));
+                }
+            }
+        }
         
         setEditingCell(null);
         setTempValue('');
@@ -455,15 +725,132 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const thClass = "px-3 py-1.5 border-b border-gray-200 dark:border-gray-700 text-[10px] font-black tracking-wider text-gray-500 dark:text-gray-400 text-center whitespace-nowrap sticky top-0 z-20 bg-gray-100 dark:bg-gray-900";
     const tdClass = "px-3 py-1 border-b border-gray-100 dark:border-gray-800 text-[11px] text-gray-700 dark:text-gray-300 text-right whitespace-nowrap";
 
-    // Editable input component for Imposto and Taxas de Banco inside Orçamentos
+    // Extrai com precisão e consistência todos os custos Orçados vs Realizados de um projeto
+    const getBudgetFinancialAnalysis = (item: SalesSummaryItem) => {
+        const b = allBudgets.find(bud => Number(bud.id) === Number(item.orcamentoId));
+        const variant = b?.variants?.find(v => v.isPrincipal) || b?.variants?.[0];
+        const fs = variant?.formState || b?.formState || {};
+        const calc = variant?.calculated || b?.calculated || {};
+
+        // 1. Preço de Venda Final
+        const estSale = parseSafeNumber(calc.precoVendaFinal) || parseSafeNumber(item.closedValue);
+        const realSale = parseSafeNumber(item.closedValue) || estSale;
+
+        // 2. Custo do Sistema (Equipamento / Kit)
+        const estSys = parseSafeNumber(calc.valorVendaSistema) || parseSafeNumber(item.systemCost);
+        const realSys = parseSafeNumber(item.systemCost) || estSys;
+
+        // 3. Visita Técnica
+        const estVT = parseSafeNumber(calc.visitaTecnicaCusto) || parseSafeNumber(fs.visitaTecnicaCusto) || 0;
+        const realVT = item.visitaTecnica !== undefined ? parseSafeNumber(item.visitaTecnica) : estVT;
+
+        // 4. Homologação / Projeto
+        const estHomo = b?.custos_estimados?.homologacao !== undefined
+            ? parseSafeNumber(b.custos_estimados.homologacao)
+            : (parseSafeNumber(fs.projetoHomologacaoCusto) || parseSafeNumber(calc.projetoHomologacaoCusto) || 0);
+        const realHomo = b?.custos_reais?.homologacao !== undefined
+            ? parseSafeNumber(b.custos_reais.homologacao)
+            : (item.homologation !== undefined ? parseSafeNumber(item.homologation) : estHomo);
+
+        // 5. Instalação (Mão de Obra)
+        const estInst = b?.custos_estimados?.instalacao !== undefined
+            ? parseSafeNumber(b.custos_estimados.instalacao)
+            : (parseSafeNumber(fs.terceiroInstalacaoQtd) * parseSafeNumber(fs.terceiroInstalacaoCusto) || 0);
+        const realInst = b?.custos_reais?.instalacao !== undefined
+            ? parseSafeNumber(b.custos_reais.instalacao)
+            : (item.installation !== undefined ? parseSafeNumber(item.installation) : estInst);
+
+        // 6. Deslocamento
+        const estDeslocamento = b?.custos_estimados?.deslocamento !== undefined
+            ? parseSafeNumber(b.custos_estimados.deslocamento)
+            : (fs.deslocamento !== undefined ? parseSafeNumber(fs.deslocamento) : parseSafeNumber(fs.custoViagem) || 0);
+        const realDeslocamento = b?.custos_reais?.deslocamento !== undefined
+            ? parseSafeNumber(b.custos_reais.deslocamento)
+            : (item.deslocamento !== undefined ? parseSafeNumber(item.deslocamento) : estDeslocamento);
+
+        // 7. Pedágio
+        const estPedagio = b?.custos_estimados?.pedagio !== undefined
+            ? parseSafeNumber(b.custos_estimados.pedagio)
+            : (parseSafeNumber(fs.pedagio) || 0);
+        const realPedagio = b?.custos_reais?.pedagio !== undefined
+            ? parseSafeNumber(b.custos_reais.pedagio)
+            : (item.pedagio !== undefined ? parseSafeNumber(item.pedagio) : estPedagio);
+
+        const estTravel = estDeslocamento + estPedagio;
+        const realTravel = realDeslocamento + realPedagio;
+
+        // 8. Adequação Técnica
+        const estAdeq = b?.custos_estimados?.adequacao !== undefined
+            ? parseSafeNumber(b.custos_estimados.adequacao)
+            : (parseSafeNumber(fs.adequacaoLocalCusto) || parseSafeNumber(calc.adequacaoLocalCusto) || 0);
+        const realAdeq = b?.custos_reais?.adequacao !== undefined
+            ? parseSafeNumber(b.custos_reais.adequacao)
+            : (item.adequationCost !== undefined ? parseSafeNumber(item.adequationCost) : estAdeq);
+
+        // 9. Materiais / Estruturas
+        const estMat = b?.custos_estimados?.materiais !== undefined
+            ? parseSafeNumber(b.custos_estimados.materiais)
+            : (parseSafeNumber(calc.totalEstrutura) || 0);
+        const realMat = b?.custos_reais?.materiais !== undefined
+            ? parseSafeNumber(b.custos_reais.materiais)
+            : (item.materialCost !== undefined ? parseSafeNumber(item.materialCost) : estMat);
+
+        // 10. Imposto
+        const estTax = b?.custos_estimados?.imposto !== undefined
+            ? parseSafeNumber(b.custos_estimados.imposto)
+            : (parseSafeNumber(calc.nfServicoValor) || parseSafeNumber(calc.impostos) || 0);
+        const realTax = b?.custos_reais?.imposto !== undefined
+            ? parseSafeNumber(b.custos_reais.imposto)
+            : (item.invoicedTax !== undefined ? parseSafeNumber(item.invoicedTax) : estTax);
+
+        // 11. Comissão
+        const estComm = parseSafeNumber(calc.comissaoVendasValor) || 0;
+        const realComm = item.commission !== undefined ? parseSafeNumber(item.commission) : estComm;
+
+        // 12. Taxas Bancárias
+        const estBank = 0;
+        const realBank = item.bankFees !== undefined ? parseSafeNumber(item.bankFees) : 0;
+
+        // Totais e Rentabilidade
+        const totalEstCosts = estSys + estVT + estHomo + estInst + estTravel + estAdeq + estMat + estTax + estComm + estBank;
+        const totalRealCosts = realSys + realVT + realHomo + realInst + realTravel + realAdeq + realMat + realTax + realComm + realBank;
+
+        const estProfit = estSale - totalEstCosts;
+        const realProfit = realSale - totalRealCosts;
+
+        const baseEst = estSale - estComm;
+        const estMargin = baseEst > 0 ? (estProfit / baseEst) * 100 : (estSale > 0 ? (estProfit / estSale) * 100 : 0);
+
+        const baseReal = realSale - realComm;
+        const realMargin = baseReal > 0 ? (realProfit / baseReal) * 100 : (realSale > 0 ? (realProfit / realSale) * 100 : 0);
+
+        return {
+            b,
+            estSale, realSale,
+            estSys, realSys,
+            estVT, realVT,
+            estHomo, realHomo,
+            estInst, realInst,
+            estDeslocamento, realDeslocamento,
+            estPedagio, realPedagio,
+            estTravel, realTravel,
+            estAdeq, realAdeq,
+            estMat, realMat,
+            estTax, realTax,
+            estComm, realComm,
+            estBank, realBank,
+            totalEstCosts, totalRealCosts,
+            estProfit, realProfit,
+            estMargin, realMargin,
+        };
+    };
+
+    // Componente editável de Imposto e Taxas de Banco dentro dos Orçamentos
     const EditableCell = ({ item, field }: { item: SalesSummaryItem, field: 'invoicedTax' | 'bankFees' }) => {
         const isEditing = editingCell?.id === item.id && editingCell?.field === field;
         const value = item[field] || 0;
-
-        const b = allBudgets.find(bud => bud.id === item.orcamentoId);
-        const estValue = field === 'invoicedTax' 
-            ? (b ? (parseSafeNumber(b.custos_estimados?.imposto) || parseSafeNumber(b.calculated?.nfServicoValor) || 0) : 0)
-            : 0;
+        const { estTax } = getBudgetFinancialAnalysis(item);
+        const estValue = field === 'invoicedTax' ? estTax : 0;
 
         if (isEditing) {
             return (
@@ -503,57 +890,25 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
 
     // Renders the expandable "Budgeted vs Realized" comparison drawer
     const renderBudgetComparison = (item: SalesSummaryItem) => {
-        const b = allBudgets.find(bud => bud.id === item.orcamentoId);
-        
-        // Estimated sales values extraction
-        const estSale = b ? (parseSafeNumber(b.calculated?.precoVendaFinal) || item.closedValue) : item.closedValue;
-        const realSale = item.closedValue;
-
-        const estSys = b ? (parseSafeNumber(b.calculated?.valorVendaSistema) || item.systemCost) : item.systemCost;
-        const realSys = item.systemCost;
-
-        // Extract and summarize cost estimates from budget database entries
-        const estVT = b ? (parseSafeNumber(b.calculated?.visitaTecnicaCusto) || parseSafeNumber(b.formState?.visitaTecnicaCusto) || 0) : 0;
-        const realVT = item.visitaTecnica || 0;
-
-        const estHomo = b ? (parseSafeNumber(b.custos_estimados?.homologacao) || parseSafeNumber(b.calculated?.projetoHomologacaoCusto) || 0) : 0;
-        const realHomo = item.homologation || 0;
-
-        const estInst = b ? (parseSafeNumber(b.custos_estimados?.instalacao) || (parseSafeNumber(b.formState?.terceiroInstalacaoQtd) * parseSafeNumber(b.formState?.terceiroInstalacaoCusto)) || 0) : 0;
-        const realInst = item.installation || 0;
-
-        const estDeslocamento = b ? (parseSafeNumber(b.custos_estimados?.deslocamento) || parseSafeNumber(b.formState?.deslocamento) || parseSafeNumber(b.formState?.custoViagem) || 0) : 0;
-        const realDeslocamento = item.deslocamento !== undefined ? item.deslocamento : (item.travelCost || 0);
-
-        const estPedagio = b ? (parseSafeNumber(b.custos_estimados?.pedagio) || parseSafeNumber(b.formState?.pedagio) || 0) : 0;
-        const realPedagio = item.pedagio !== undefined ? item.pedagio : 0;
-
-        const estTravel = estDeslocamento + estPedagio;
-        const realTravel = realDeslocamento + realPedagio;
-
-        const estAdeq = b ? (parseSafeNumber(b.custos_estimados?.adequacao) || parseSafeNumber(b.calculated?.adequacaoLocalCusto) || parseSafeNumber(b.formState?.adequacaoLocalCusto) || 0) : 0;
-        const realAdeq = item.adequationCost || 0;
-
-        const estMat = b ? (parseSafeNumber(b.custos_estimados?.materiais) || parseSafeNumber(b.calculated?.totalEstrutura) || 0) : 0;
-        const realMat = item.materialCost || 0;
-
-        const estTax = b ? (parseSafeNumber(b.custos_estimados?.imposto) || parseSafeNumber(b.calculated?.nfServicoValor) || 0) : 0;
-        const realTax = item.invoicedTax || 0;
-
-        const estComm = b ? (parseSafeNumber(b.calculated?.comissaoVendasValor) || 0) : 0;
-        const realComm = item.commission || 0;
-
-        const estBank = 0;
-        const realBank = item.bankFees || 0;
-
-        const totalEstCosts = estSys + estVT + estHomo + estInst + estTravel + estAdeq + estMat + estTax + estComm + estBank;
-        const totalRealCosts = realSys + realVT + realHomo + realInst + realTravel + realAdeq + realMat + realTax + realComm + realBank;
-
-        const estProfit = estSale - totalEstCosts;
-        const realProfit = item.netProfit;
-
-        const estMargin = estSale > 0 ? (estProfit / estSale) * 100 : 0;
-        const realMargin = item.finalMargin;
+        const {
+            b,
+            estSale, realSale,
+            estSys, realSys,
+            estVT, realVT,
+            estHomo, realHomo,
+            estInst, realInst,
+            estDeslocamento, realDeslocamento,
+            estPedagio, realPedagio,
+            estTravel, realTravel,
+            estAdeq, realAdeq,
+            estMat, realMat,
+            estTax, realTax,
+            estComm, realComm,
+            estBank, realBank,
+            totalEstCosts, totalRealCosts,
+            estProfit, realProfit,
+            estMargin, realMargin,
+        } = getBudgetFinancialAnalysis(item);
 
         const costRows = [
             { name: 'Equipamento (Custo do Sistema)', est: estSys, real: realSys },
@@ -1128,53 +1483,25 @@ const ResumoVendasPage: React.FC<{ currentUser: User }> = ({ currentUser }) => {
                                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                                     {filteredSalesData.length > 0 ? filteredSalesData.map((item, index) => {
                                         const isExpanded = expandedBudgetRowId === item.id;
-                                        const b = allBudgets.find(bud => bud.id === item.orcamentoId);
-
-                                        const estSale = b ? (parseSafeNumber(b.calculated?.precoVendaFinal) || item.closedValue) : item.closedValue;
-                                        const realSale = item.closedValue;
-
-                                        const estSys = b ? (parseSafeNumber(b.calculated?.valorVendaSistema) || item.systemCost) : item.systemCost;
-                                        const realSys = item.systemCost;
-
-                                        const estVT = b ? (parseSafeNumber(b.calculated?.visitaTecnicaCusto) || parseSafeNumber(b.formState?.visitaTecnicaCusto) || 0) : 0;
-                                        const realVT = item.visitaTecnica || 0;
-
-                                        const estHomo = b ? (parseSafeNumber(b.custos_estimados?.homologacao) || parseSafeNumber(b.calculated?.projetoHomologacaoCusto) || 0) : 0;
-                                        const realHomo = item.homologation || 0;
-
-                                        const estInst = b ? (parseSafeNumber(b.custos_estimados?.instalacao) || (parseSafeNumber(b.formState?.terceiroInstalacaoQtd) * parseSafeNumber(b.formState?.terceiroInstalacaoCusto)) || 0) : 0;
-                                        const realInst = item.installation || 0;
-
-                                        const estDeslocamento = b ? (parseSafeNumber(b.custos_estimados?.deslocamento) || parseSafeNumber(b.formState?.deslocamento) || parseSafeNumber(b.formState?.custoViagem) || 0) : 0;
-                                        const estPedagio = b ? (parseSafeNumber(b.custos_estimados?.pedagio) || parseSafeNumber(b.formState?.pedagio) || 0) : 0;
-                                        const estTravel = estDeslocamento + estPedagio;
-                                        const realDeslocamento = item.deslocamento !== undefined ? item.deslocamento : (item.travelCost || 0);
-                                        const realPedagio = item.pedagio !== undefined ? item.pedagio : 0;
-                                        const realTravel = realDeslocamento + realPedagio;
-
-                                        const estAdeq = b ? (parseSafeNumber(b.custos_estimados?.adequacao) || parseSafeNumber(b.calculated?.adequacaoLocalCusto) || parseSafeNumber(b.formState?.adequacaoLocalCusto) || 0) : 0;
-                                        const realAdeq = item.adequationCost || 0;
-
-                                        const estMat = b ? (parseSafeNumber(b.custos_estimados?.materiais) || parseSafeNumber(b.calculated?.totalEstrutura) || 0) : 0;
-                                        const realMat = item.materialCost || 0;
-
-                                        const estComm = b ? (parseSafeNumber(b.calculated?.comissaoVendasValor) || 0) : 0;
-                                        const realComm = item.commission || 0;
-
-                                        const estTax = b ? (parseSafeNumber(b.custos_estimados?.imposto) || parseSafeNumber(b.calculated?.nfServicoValor) || 0) : 0;
-                                        const realTax = item.invoicedTax || 0;
-
-                                        const estBank = 0;
-                                        const realBank = item.bankFees || 0;
-
-                                        const totalEstCosts = estSys + estVT + estHomo + estInst + estTravel + estAdeq + estMat + estTax + estComm + estBank;
-                                        const totalRealCosts = item.totalCost;
-
-                                        const estProfit = estSale - totalEstCosts;
-                                        const realProfit = item.netProfit;
-
-                                        const estMargin = estSale > 0 ? (estProfit / estSale) * 100 : 0;
-                                        const realMargin = item.finalMargin;
+                                        const {
+                                            b,
+                                            estSale, realSale,
+                                            estSys, realSys,
+                                            estVT, realVT,
+                                            estHomo, realHomo,
+                                            estInst, realInst,
+                                            estDeslocamento, realDeslocamento,
+                                            estPedagio, realPedagio,
+                                            estTravel, realTravel,
+                                            estAdeq, realAdeq,
+                                            estMat, realMat,
+                                            estTax, realTax,
+                                            estComm, realComm,
+                                            estBank, realBank,
+                                            totalEstCosts, totalRealCosts,
+                                            estProfit, realProfit,
+                                            estMargin, realMargin,
+                                        } = getBudgetFinancialAnalysis(item);
 
                                         return (
                                             <React.Fragment key={item.id}>
