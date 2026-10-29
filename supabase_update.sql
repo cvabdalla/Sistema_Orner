@@ -66,6 +66,15 @@ ALTER TABLE "manutencoes" ADD COLUMN IF NOT EXISTS "categories" jsonb DEFAULT '[
 ALTER TABLE "manutencoes" ADD COLUMN IF NOT EXISTS "materialsSource" text DEFAULT 'manual';
 ALTER TABLE "manutencoes" ADD COLUMN IF NOT EXISTS "selectedChecklists" jsonb DEFAULT '[]'::jsonb;
 ALTER TABLE "manutencoes" ADD COLUMN IF NOT EXISTS "motivoPerdido" text;
+ALTER TABLE "manutencoes" ADD COLUMN IF NOT EXISTS "deslocamento" numeric DEFAULT 0;
+ALTER TABLE "manutencoes" ADD COLUMN IF NOT EXISTS "pedagio" numeric DEFAULT 0;
+ALTER TABLE "manutencoes" ADD COLUMN IF NOT EXISTS "instaladorId" text;
+ALTER TABLE "manutencoes" ADD COLUMN IF NOT EXISTS "distanciaObraKM" text;
+ALTER TABLE "manutencoes" ADD COLUMN IF NOT EXISTS "quantidadeDiasViagem" numeric DEFAULT 1;
+ALTER TABLE "manutencoes" ADD COLUMN IF NOT EXISTS "considerarIdaVolta" boolean DEFAULT true;
+ALTER TABLE "manutencoes" ADD COLUMN IF NOT EXISTS "deslocamentoValorKm" text;
+ALTER TABLE "manutencoes" ADD COLUMN IF NOT EXISTS "deslocamentoHotel" text;
+ALTER TABLE "manutencoes" ADD COLUMN IF NOT EXISTS "deslocamentoMargem" text;
 
 -- Desabilita RLS para garantir gravação simplificada por qualquer usuário logado
 ALTER TABLE "manutencoes" DISABLE ROW LEVEL SECURITY;

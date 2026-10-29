@@ -110,6 +110,31 @@ class SupabaseDataService implements IDataService {
                     : null
             };
         }
+        if (collection === 'manutencoes' && item) {
+            const logisticsMeta = {
+                deslocamento: item.deslocamento !== undefined ? Number(item.deslocamento) : 0,
+                pedagio: item.pedagio !== undefined ? Number(item.pedagio) : 0,
+                instaladorId: item.instaladorId || '',
+                distanciaObraKM: item.distanciaObraKM || '',
+                quantidadeDiasViagem: item.quantidadeDiasViagem !== undefined ? Number(item.quantidadeDiasViagem) : 1,
+                considerarIdaVolta: item.considerarIdaVolta !== false,
+                deslocamentoValorKm: item.deslocamentoValorKm || '',
+                deslocamentoHotel: item.deslocamentoHotel || '',
+                deslocamentoMargem: item.deslocamentoMargem || '',
+            };
+
+            const userNotes = (item.notes || '').replace(/<!--ORNER_LOGISTICS_META:[\s\S]*?-->/g, '').trim();
+            const packedNotes = userNotes 
+                ? `${userNotes}\n<!--ORNER_LOGISTICS_META:${JSON.stringify(logisticsMeta)}-->`
+                : `<!--ORNER_LOGISTICS_META:${JSON.stringify(logisticsMeta)}-->`;
+
+            return {
+                ...item,
+                deslocamento: Number(item.deslocamento || 0),
+                pedagio: Number(item.pedagio || 0),
+                notes: packedNotes,
+            };
+        }
         return item;
     }
 
@@ -159,6 +184,57 @@ class SupabaseDataService implements IDataService {
                     bairro: bairro
                 } as any;
             }
+        }
+        if (collection === 'manutencoes' && item) {
+            let deslocamento = item.deslocamento;
+            let pedagio = item.pedagio;
+            let instaladorId = item.instaladorId;
+            let distanciaObraKM = item.distanciaObraKM;
+            let quantidadeDiasViagem = item.quantidadeDiasViagem;
+            let considerarIdaVolta = item.considerarIdaVolta;
+            let deslocamentoValorKm = item.deslocamentoValorKm;
+            let deslocamentoHotel = item.deslocamentoHotel;
+            let deslocamentoMargem = item.deslocamentoMargem;
+
+            let cleanNotes = item.notes || '';
+            if (typeof cleanNotes === 'string' && cleanNotes.includes('<!--ORNER_LOGISTICS_META:')) {
+                const match = cleanNotes.match(/<!--ORNER_LOGISTICS_META:([\s\S]*?)-->/);
+                if (match && match[1]) {
+                    try {
+                        const meta = JSON.parse(match[1]);
+                        if (deslocamento === undefined || deslocamento === null || Number(deslocamento) === 0) {
+                            if (meta.deslocamento !== undefined) deslocamento = meta.deslocamento;
+                        }
+                        if (pedagio === undefined || pedagio === null || Number(pedagio) === 0) {
+                            if (meta.pedagio !== undefined) pedagio = meta.pedagio;
+                        }
+                        if (!instaladorId && meta.instaladorId) instaladorId = meta.instaladorId;
+                        if (!distanciaObraKM && meta.distanciaObraKM) distanciaObraKM = meta.distanciaObraKM;
+                        if (quantidadeDiasViagem === undefined && meta.quantidadeDiasViagem !== undefined) quantidadeDiasViagem = meta.quantidadeDiasViagem;
+                        if (considerarIdaVolta === undefined && meta.considerarIdaVolta !== undefined) considerarIdaVolta = meta.considerarIdaVolta;
+                        if (!deslocamentoValorKm && meta.deslocamentoValorKm) deslocamentoValorKm = meta.deslocamentoValorKm;
+                        if (!deslocamentoHotel && meta.deslocamentoHotel) deslocamentoHotel = meta.deslocamentoHotel;
+                        if (!deslocamentoMargem && meta.deslocamentoMargem) deslocamentoMargem = meta.deslocamentoMargem;
+                    } catch (e) {
+                        console.error("Erro ao ler metadata de logística em manutencoes:", e);
+                    }
+                }
+                cleanNotes = cleanNotes.replace(/<!--ORNER_LOGISTICS_META:[\s\S]*?-->/g, '').trim();
+            }
+
+            return {
+                ...item,
+                notes: cleanNotes,
+                deslocamento: Number(deslocamento || 0),
+                pedagio: Number(pedagio || 0),
+                instaladorId: instaladorId || '',
+                distanciaObraKM: distanciaObraKM || '',
+                quantidadeDiasViagem: quantidadeDiasViagem !== undefined ? Number(quantidadeDiasViagem) : 1,
+                considerarIdaVolta: considerarIdaVolta !== undefined ? considerarIdaVolta !== false : true,
+                deslocamentoValorKm: deslocamentoValorKm || '',
+                deslocamentoHotel: deslocamentoHotel || '',
+                deslocamentoMargem: deslocamentoMargem || '',
+            } as any;
         }
         return item;
     }
@@ -377,7 +453,22 @@ class SupabaseDataService implements IDataService {
                     .select()
                     .single();
 
-                if (error) throw error;
+                if (error) {
+                    if (collection === 'manutencoes' && (error.message?.includes('column') || error.message?.includes('schema cache') || error.code === '42703' || error.message?.includes('deslocamento') || error.message?.includes('pedagio'))) {
+                        console.warn("[MANUTENCOES] Colunas de deslocamento não encontradas no Supabase. Salvando com compatibilidade retroativa...");
+                        const {
+                            deslocamento, pedagio, instaladorId, distanciaObraKM,
+                            quantidadeDiasViagem, considerarIdaVolta, deslocamentoValorKm,
+                            deslocamentoHotel, deslocamentoMargem, totalToCharge,
+                            ...safeFallbackItem
+                        } = cleanItem;
+                        const retry = await supabase.from(collection).upsert(safeFallbackItem).select().single();
+                        if (!retry.error) {
+                            return this.deserialize<T>(collection, { ...cleanItem, ...retry.data });
+                        }
+                    }
+                    throw error;
+                }
                 resultData = data;
             }
 

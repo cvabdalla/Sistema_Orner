@@ -593,8 +593,18 @@ export interface ManutencaoRecord {
     categories?: string[];
     materialsSource?: 'manual' | 'checklist';
     selectedChecklists?: string[];
+    deslocamento?: number;
+    pedagio?: number;
+    instaladorId?: string;
+    distanciaObraKM?: number | string;
+    quantidadeDiasViagem?: number;
+    considerarIdaVolta?: boolean;
+    deslocamentoValorKm?: number | string;
+    deslocamentoHotel?: number | string;
+    deslocamentoMargem?: number | string;
     totalCost: number;
     totalPrice: number;
+    totalToCharge?: number;
     notes?: string;
     motivoPerdido?: string;
     createdAt: string;
