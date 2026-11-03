@@ -1000,7 +1000,32 @@ const InstalacaoLavagemPage: React.FC<InstalacaoLavagemPageProps> = ({ currentUs
                     const date = rawEtapas.instalacao_finalizada_data || rawEtapas.instalacao_data || new Date().toISOString().split('T')[0];
                     const txIdItem = `tx-inst-${o.id}`;
 
-                    const isSolicitado = Boolean(etapas.pag_instalacao_solicitado) || usedTxIdsInOtherReports.has(txIdItem);
+                    // Verifica se o relatório vinculado está ativo ou foi cancelado
+                    const linkedReport = etapas.pag_instalacao_report_id
+                        ? (allReports || []).find(r => r.id === etapas.pag_instalacao_report_id)
+                        : null;
+                    const isReportCanceled = linkedReport ? linkedReport.status === 'Cancelado' : false;
+                    const hasActiveReport = linkedReport ? (linkedReport.status !== 'Cancelado') : false;
+
+                    // Instalação só é considerada "solicitada" se estiver vinculada a um relatório ativo (NÃO cancelado).
+                    // Se o relatório foi cancelado, a instalação volta automaticamente a estar disponível (pendente).
+                    const isSolicitado = !isReportCanceled && (
+                        usedTxIdsInOtherReports.has(txIdItem) ||
+                        (Boolean(etapas.pag_instalacao_solicitado) && hasActiveReport)
+                    );
+
+                    // Auto-cura: se o orçamento estava marcado como solicitado mas o relatório foi cancelado (ou não há relatório ativo),
+                    // normaliza silenciosamente o orçamento no banco para manter a consistência total.
+                    if (etapas.pag_instalacao_solicitado && (isReportCanceled || (!hasActiveReport && !usedTxIdsInOtherReports.has(txIdItem)))) {
+                        dataService.save('orcamentos', {
+                            ...o,
+                            venda_etapas: {
+                                ...etapas,
+                                pag_instalacao_solicitado: false,
+                                pag_instalacao_report_id: null
+                            }
+                        }).catch(() => {});
+                    }
 
                     items.push({
                         id: txIdItem,

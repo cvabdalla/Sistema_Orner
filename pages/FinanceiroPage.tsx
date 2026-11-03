@@ -287,6 +287,26 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
             try {
                 await dataService.save('financial_transactions', updatedTx);
                 
+                // Se for instalação vinculada a um orçamento, libera o orçamento para novo faturamento
+                if (tx.id.startsWith('tx-inst-')) {
+                    const orcId = tx.id.replace('tx-inst-', '');
+                    try {
+                        const orc = await dataService.getById<any>('orcamentos', orcId);
+                        if (orc) {
+                            await dataService.save('orcamentos', {
+                                ...orc,
+                                venda_etapas: {
+                                    ...(orc.venda_etapas || {}),
+                                    pag_instalacao_solicitado: false,
+                                    pag_instalacao_report_id: null
+                                }
+                            });
+                        }
+                    } catch (e) {
+                        console.error("Erro ao liberar orçamento:", e);
+                    }
+                }
+
                 // Se for um reembolso cancelado no financeiro, reflete no relatório
                 const reportId = tx.relatedReportId || (tx.id.startsWith('tx-reemb-') ? tx.id.replace('tx-reemb-', '') : null);
                 
@@ -296,6 +316,20 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
                     if (report) {
                         await dataService.save('expense_reports', { 
                             ...report, 
+                            status: 'Cancelado',
+                            cancelReason: `Cancelado via Financeiro: ${cancelReason}`
+                        });
+                    }
+                } else if (tx.id.startsWith('tx-inst-')) {
+                    // Busca se há algum relatório técnico ativo contendo esta instalação
+                    const allReports = await dataService.getAll<ExpenseReport>('expense_reports');
+                    const matchingReport = allReports.find(r => 
+                        r.status !== 'Cancelado' && 
+                        (r.items || []).some(item => item.id === tx.id)
+                    );
+                    if (matchingReport) {
+                        await dataService.save('expense_reports', {
+                            ...matchingReport,
                             status: 'Cancelado',
                             cancelReason: `Cancelado via Financeiro: ${cancelReason}`
                         });

@@ -438,15 +438,71 @@ const RelatoriosPage: React.FC<ExtendedRelatoriosPageProps> = ({ view, reportToE
           if (relatedTx) await dataService.save('financial_transactions', { ...relatedTx, status: 'cancelado', cancelReason: `Cancelado via RD: ${cancelReason}` });
           
           if (reportInAction.isInstallmentWash) {
-              const txIds = reportInAction.items.map(i => i.id);
+              const txIds = (reportInAction.items || []).map(i => i.id);
               const { data: targetTxs } = await supabase.from('financial_transactions').select('*').in('id', txIds.length > 0 ? txIds : []);
               if (targetTxs) {
                   for (const tx of targetTxs) {
-                      try { await dataService.save('financial_transactions', { ...tx, invoiceSent: false, relatedReportId: null }); } catch (e) { /* silent */ }
+                      try {
+                          if (tx.id.startsWith('tx-inst-')) {
+                              // Transação financeira de instalação: cancela a transação para sair de Contas a Pagar
+                              await dataService.save('financial_transactions', { 
+                                  ...tx, 
+                                  status: 'cancelado', 
+                                  cancelReason: `Cancelado via RD: ${cancelReason}`, 
+                                  invoiceSent: false, 
+                                  relatedReportId: null 
+                              });
+                              // Reverte o orçamento vinculado para voltar a ficar disponível para solicitação
+                              const orcId = tx.id.replace('tx-inst-', '');
+                              const orc = await dataService.getById<any>('orcamentos', orcId);
+                              if (orc) {
+                                  await dataService.save('orcamentos', {
+                                      ...orc,
+                                      venda_etapas: {
+                                          ...(orc.venda_etapas || {}),
+                                          pag_instalacao_solicitado: false,
+                                          pag_instalacao_report_id: null
+                                      }
+                                  });
+                              }
+                          } else {
+                              // Lavagem ou outros itens avulsos: desvincula e deixa pendente para novo relatório
+                              await dataService.save('financial_transactions', { 
+                                  ...tx, 
+                                  status: 'pendente',
+                                  invoiceSent: false, 
+                                  relatedReportId: null 
+                              });
+                          }
+                      } catch (e) {
+                          console.error("Erro ao cancelar transação técnica vinculada:", e);
+                      }
+                  }
+              }
+
+              // Garante reversão em todos os orçamentos cujos itens estavam no relatório
+              for (const item of (reportInAction.items || [])) {
+                  if (item.id && item.id.startsWith('tx-inst-')) {
+                      const orcId = item.id.replace('tx-inst-', '');
+                      try {
+                          const orc = await dataService.getById<any>('orcamentos', orcId);
+                          if (orc && orc.venda_etapas?.pag_instalacao_solicitado) {
+                              await dataService.save('orcamentos', {
+                                  ...orc,
+                                  venda_etapas: {
+                                      ...(orc.venda_etapas || {}),
+                                      pag_instalacao_solicitado: false,
+                                      pag_instalacao_report_id: null
+                                  }
+                              });
+                          }
+                      } catch (e) {
+                          console.error("Erro ao liberar orçamento:", e);
+                      }
                   }
               }
           }
-          setModalMessage("Reembolso cancelado com sucesso.");
+          setModalMessage("Reembolso cancelado com sucesso. As ordens e instalações foram liberadas para novo lançamento.");
           setSuccessModalOpen(true);
           await loadReports();
       } catch (e) { alert("Erro ao cancelar."); } 
