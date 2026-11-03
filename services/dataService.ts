@@ -7,6 +7,7 @@ interface IDataService {
     getById<T>(collection: string, id: string | number): Promise<T | null>;
     save<T extends { id: string | number }>(collection: string, item: T): Promise<T>;
     saveAll<T extends { id: string | number }>(collection: string, items: T[]): Promise<T[]>;
+    update<T extends { id: string | number }>(collection: string, id: string | number, partial: Partial<T>): Promise<boolean>;
     delete(collection: string, id: string | number): Promise<boolean>;
 }
 
@@ -684,6 +685,41 @@ class SupabaseDataService implements IDataService {
                 console.error(`[BATCH SAVE ERROR] ${collection}:`, e.message);
                 throw e;
             }
+        }
+    }
+
+    async update<T extends { id: string | number }>(collection: string, id: string | number, partial: Partial<T>): Promise<boolean> {
+        // 1. Atualiza cache local imediatamente
+        const localData = this.getLocal<any>(collection);
+        const index = localData.findIndex(i => String(i.id) === String(id));
+        if (index > -1) {
+            localData[index] = { ...localData[index], ...partial };
+            this.setLocal(collection, localData);
+        }
+
+        // 2. Realiza o update pontual no Supabase sem re-enviar dados pesados (ex: arquivos base64)
+        try {
+            const cleanPartial = Object.fromEntries(
+                Object.entries(partial).filter(([_, v]) => v !== undefined)
+            );
+
+            const { error } = await supabase
+                .from(collection)
+                .update(cleanPartial)
+                .eq('id', id);
+
+            if (error) {
+                console.error(`[DB ERROR] Erro no update pontual de ${collection}:${id}:`, error);
+                throw error;
+            }
+            return true;
+        } catch (e: any) {
+            const isFetchError = e.message?.includes('fetch') || e.message?.includes('network') || e.name === 'TypeError' || e.message?.includes('Failed to fetch');
+            if (isFetchError) {
+                console.warn(`[OFFLINE WARNING] Conexão indisponível ao atualizar ${collection}:${id}. Salvo no cache.`);
+                return true;
+            }
+            throw e;
         }
     }
 

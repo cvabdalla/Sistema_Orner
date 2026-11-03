@@ -539,18 +539,34 @@ const HomologacaoPage: React.FC<{ currentUser: User; userPermissions: string[]; 
         if (!entryToFinalize) return;
         setIsSaving(true);
         try {
-            // Buscamos o objeto completo primeiro para não perder os arquivos após o upsert
-            const fullEntry = await dataService.getById<HomologacaoEntry>('homologacao_entries', entryToFinalize.id);
-            if (fullEntry) {
-                await dataService.save('homologacao_entries', { ...fullEntry, status: 'Aprovada' });
+            // Atualiza pontualmente apenas o status para 'Aprovada', evitando re-enviar megabytes de arquivos base64 que causavam timeout (57014)
+            await dataService.update<HomologacaoEntry>('homologacao_entries', entryToFinalize.id, { status: 'Aprovada' });
+
+            // Sincroniza a etapa de homologação no orçamento correspondente se existir
+            if (entryToFinalize.clientName) {
+                const targetName = entryToFinalize.clientName.trim().toLowerCase();
+                const matchingOrc = (orcamentos || []).find(o => 
+                    o.formState?.nomeCliente?.trim().toLowerCase() === targetName
+                );
+                if (matchingOrc && !matchingOrc.venda_etapas?.homologacao) {
+                    await dataService.save('orcamentos', {
+                        ...matchingOrc,
+                        venda_etapas: {
+                            ...(matchingOrc.venda_etapas || {}),
+                            homologacao: true
+                        }
+                    });
+                }
             }
+
             setModalMessage("Processo concluído com sucesso!");
             setSuccessModalOpen(true);
             await loadData();
             setIsConfirmFinalizeModalOpen(false);
             setEntryToFinalize(null);
-        } catch (e) {
-            alert("Erro ao atualizar status.");
+        } catch (e: any) {
+            console.error("Erro ao atualizar status da homologação:", e);
+            alert("Erro ao atualizar status: " + (e?.message || 'Tente novamente.'));
         } finally {
             setIsSaving(false);
         }
