@@ -65,11 +65,18 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         const { name, value } = e.target;
         if (name === 'status') {
             const newStatus = value as FinancialTransactionStatus;
-            const todayStr = new Date().toISOString().split('T')[0];
             setFormState(prev => ({
                 ...prev,
                 status: newStatus,
-                paymentDate: newStatus === 'pago' ? (prev.paymentDate || todayStr) : undefined
+                paymentDate: newStatus === 'pago' ? (prev.paymentDate || prev.dueDate || new Date().toISOString().split('T')[0]) : undefined
+            }));
+            return;
+        }
+        if (name === 'dueDate') {
+            setFormState(prev => ({
+                ...prev,
+                dueDate: value,
+                paymentDate: (prev.status === 'pago' && (!prev.paymentDate || prev.paymentDate === prev.dueDate)) ? value : prev.paymentDate
             }));
             return;
         }
@@ -103,7 +110,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
             bankId: targetBankId,
             categoryId: formState.categoryId || '',
             paymentDate: formState.status === 'pago' 
-                ? (formState.paymentDate || new Date().toISOString().split('T')[0]) 
+                ? (formState.paymentDate || formState.dueDate || new Date().toISOString().split('T')[0]) 
                 : undefined
         };
         
@@ -235,7 +242,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div className={`grid grid-cols-1 ${formState.status === 'pago' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-5`}>
                         <div>
                             <label htmlFor="dueDate" className={labelClasses}>
                                 <CalendarIcon className="w-3.5 h-3.5" /> Data de vencimento
@@ -268,6 +275,22 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                                 {isCancelled && <option value="cancelado">Cancelado</option>}
                             </select>
                         </div>
+                        {formState.status === 'pago' && (
+                            <div>
+                                <label htmlFor="paymentDate" className={labelClasses}>
+                                    <ClockIcon className="w-3.5 h-3.5 text-emerald-600" /> Data da quitação
+                                </label>
+                                <input 
+                                    type="date" 
+                                    name="paymentDate" 
+                                    id="paymentDate" 
+                                    value={formState.paymentDate || formState.dueDate || ''} 
+                                    onChange={handleInputChange} 
+                                    disabled={isCancelled}
+                                    className={`${inputClasses} ${isCancelled ? 'opacity-70 grayscale' : 'border-emerald-300 dark:border-emerald-700'}`} 
+                                />
+                            </div>
+                        )}
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">

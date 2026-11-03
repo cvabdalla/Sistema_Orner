@@ -36,6 +36,8 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
     const [statusFilter, setStatusFilter] = useState<FinancialTransactionStatus | 'all'>('all');
     const [selectedGroup, setSelectedGroup] = useState<FinancialTransaction[] | null>(null);
     const [cards, setCards] = useState<CreditCard[]>([]);
+    const [sortField, setSortField] = useState<'dueDate' | 'description' | 'category' | 'amount' | 'status'>('dueDate');
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
     
     const [confirmingTx, setConfirmingTx] = useState<{id: string, type: 'receita' | 'despesa', isGroup: boolean, originalItems?: any} | null>(null);
 
@@ -45,6 +47,15 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
     useEffect(() => {
         dataService.getAll<CreditCard>('credit_cards').then(setCards);
     }, []);
+
+    const handleSort = (field: 'dueDate' | 'description' | 'category' | 'amount' | 'status') => {
+        if (sortField === field) {
+            setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortField(field);
+            setSortOrder(field === 'amount' ? 'desc' : 'asc');
+        }
+    };
     
     const processedTransactions = useMemo(() => {
         const filtered = transactions.filter(t => statusFilter === 'all' || t.status === statusFilter);
@@ -85,22 +96,50 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
         });
 
         return [...normalTransactions, ...groupedCC].sort((a, b) => {
-            const priorityA = String(a.status).toLowerCase() === 'pendente' ? 0 : 1;
-            const priorityB = String(b.status).toLowerCase() === 'pendente' ? 0 : 1;
-
-            if (priorityA !== priorityB) {
-                return priorityA - priorityB;
+            if (sortField === 'dueDate') {
+                const dateA = String(a.dueDate || '');
+                const dateB = String(b.dueDate || '');
+                const cmp = dateA.localeCompare(dateB);
+                if (cmp !== 0) {
+                    return sortOrder === 'asc' ? cmp : -cmp;
+                }
+                // Desempate: pendentes primeiro, depois por valor maior
+                const pA = a.status === 'pendente' ? 0 : 1;
+                const pB = b.status === 'pendente' ? 0 : 1;
+                if (pA !== pB) return pA - pB;
+                return (b.amount || 0) - (a.amount || 0);
             }
 
-            if (String(a.status).toLowerCase() === 'pendente') {
-                return String(a.dueDate).localeCompare(String(b.dueDate));
-            } else {
-                const dateA = a.paymentDate || a.dueDate;
-                const dateB = b.paymentDate || b.dueDate;
-                return String(dateB).localeCompare(String(dateA));
+            if (sortField === 'amount') {
+                const cmp = (a.amount || 0) - (b.amount || 0);
+                return sortOrder === 'asc' ? cmp : -cmp;
             }
+
+            if (sortField === 'description') {
+                const descA = String(a.displayDescription || a.description || '');
+                const descB = String(b.displayDescription || b.description || '');
+                const cmp = descA.localeCompare(descB);
+                return sortOrder === 'asc' ? cmp : -cmp;
+            }
+
+            if (sortField === 'category') {
+                const catA = a.categoryId === 'cc-group' ? 'Fatura consolidada' : (categories.find(c => c.id === a.categoryId)?.name || '');
+                const catB = b.categoryId === 'cc-group' ? 'Fatura consolidada' : (categories.find(c => c.id === b.categoryId)?.name || '');
+                const cmp = catA.localeCompare(catB);
+                return sortOrder === 'asc' ? cmp : -cmp;
+            }
+
+            if (sortField === 'status') {
+                const stA = String(a.status || '');
+                const stB = String(b.status || '');
+                const cmp = stA.localeCompare(stB);
+                if (cmp !== 0) return sortOrder === 'asc' ? cmp : -cmp;
+                return String(a.dueDate || '').localeCompare(String(b.dueDate || ''));
+            }
+
+            return 0;
         });
-    }, [transactions, statusFilter, cards]);
+    }, [transactions, statusFilter, cards, sortField, sortOrder, categories]);
 
     const stats = useMemo(() => {
         return processedTransactions.reduce((acc, curr) => {
@@ -242,13 +281,70 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
             
             <div className="overflow-x-auto">
                 <table className="min-w-full text-left text-sm border-collapse">
-                    <thead className="bg-gray-50 dark:bg-gray-700/50 text-[10px] text-gray-500 font-black tracking-tight">
+                    <thead className="bg-gray-50 dark:bg-gray-700/50 text-[10px] text-gray-500 font-black tracking-tight select-none">
                         <tr>
-                            <th className="px-6 py-4">Descrição</th>
-                            <th className="px-6 py-4">Categoria</th>
-                            <th className="px-6 py-4 text-center">Vencimento</th>
-                            <th className="px-6 py-4 text-right">Valor</th>
-                            <th className="px-6 py-4 text-center">Status</th>
+                            <th 
+                                onClick={() => handleSort('description')}
+                                className="px-6 py-4 cursor-pointer hover:text-indigo-600 transition-colors"
+                                title="Clique para ordenar por Descrição"
+                            >
+                                <div className="flex items-center gap-1.5">
+                                    <span>Descrição</span>
+                                    {sortField === 'description' && (
+                                        <span className="text-indigo-600 font-bold">{sortOrder === 'asc' ? '▲' : '▼'}</span>
+                                    )}
+                                </div>
+                            </th>
+                            <th 
+                                onClick={() => handleSort('category')}
+                                className="px-6 py-4 cursor-pointer hover:text-indigo-600 transition-colors"
+                                title="Clique para ordenar por Categoria"
+                            >
+                                <div className="flex items-center gap-1.5">
+                                    <span>Categoria</span>
+                                    {sortField === 'category' && (
+                                        <span className="text-indigo-600 font-bold">{sortOrder === 'asc' ? '▲' : '▼'}</span>
+                                    )}
+                                </div>
+                            </th>
+                            <th 
+                                onClick={() => handleSort('dueDate')}
+                                className="px-6 py-4 text-center cursor-pointer hover:text-indigo-600 transition-colors"
+                                title="Clique para alternar ordenação por Vencimento (Crescente / Decrescente)"
+                            >
+                                <div className="flex items-center justify-center gap-1.5">
+                                    <span>Vencimento</span>
+                                    {sortField === 'dueDate' ? (
+                                        <span className="text-indigo-600 font-bold text-xs">{sortOrder === 'asc' ? '▲' : '▼'}</span>
+                                    ) : (
+                                        <span className="text-gray-300 dark:text-gray-600 text-[10px]">⇅</span>
+                                    )}
+                                </div>
+                            </th>
+                            <th 
+                                onClick={() => handleSort('amount')}
+                                className="px-6 py-4 text-right cursor-pointer hover:text-indigo-600 transition-colors"
+                                title="Clique para ordenar por Valor"
+                            >
+                                <div className="flex items-center justify-end gap-1.5">
+                                    <span>Valor</span>
+                                    {sortField === 'amount' && (
+                                        <span className="text-indigo-600 font-bold">{sortOrder === 'asc' ? '▲' : '▼'}</span>
+                                    )}
+                                </div>
+                            </th>
+                            <th 
+                                onClick={() => handleSort('status')}
+                                className="px-6 py-4 text-center cursor-pointer hover:text-indigo-600 transition-colors"
+                                title="Clique para ordenar por Status"
+                            >
+                                <div className="flex items-center justify-center gap-1.5">
+                                    <span>Status</span>
+                                    {sortField === 'status' && (
+                                        <span className="text-indigo-600 font-bold">{sortOrder === 'asc' ? '▲' : '▼'}</span>
+                                    )}
+                                </div>
+                            </th>
                             <th className="px-6 py-4 text-center">Ações</th>
                         </tr>
                     </thead>

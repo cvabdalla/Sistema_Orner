@@ -119,32 +119,36 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
         const today = new Date();
         const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
         return transactions.filter(t => {
-            // Data relevante para a transação: se estiver paga e tiver paymentDate, considera paymentDate
-            const effectiveDate = (t.status === 'pago' && t.paymentDate) 
-                ? t.paymentDate.split('T')[0] 
-                : (t.dueDate ? t.dueDate.split('T')[0] : '');
-            
-            if (!effectiveDate) return false;
-
             // O filtro de conta/banco sempre se aplica
             if (selectedBankFilter !== 'all' && t.bankId !== selectedBankFilter) return false;
 
-            // Se for pendente e estiver vencido/atrasado (antes do dia de hoje),
-            // sempre incluímos (ignorando o filtro de startDate).
-            const isOverdue = t.status === 'pendente' && effectiveDate < todayStr;
+            const dueStr = t.dueDate ? t.dueDate.split('T')[0] : '';
+            const payStr = (t.status === 'pago' && t.paymentDate) ? t.paymentDate.split('T')[0] : '';
 
+            // Se for pendente e estiver vencido/atrasado (antes do dia de hoje),
+            // sempre incluímos (ignorando o filtro de startDate) a menos que ultrapasse o endDate
+            const isOverdue = t.status === 'pendente' && dueStr && dueStr < todayStr;
             if (isOverdue) {
-                // Para os atrasados, nós queremos ver todos que estão pendentes.
-                if (endDate && effectiveDate > endDate) return false;
+                if (endDate && dueStr > endDate) return false;
                 return true;
             }
 
-            // Para transações normais, aplicamos o filtro de data padrão
+            // Nas abas de contas (A Receber, A Pagar, Cancelados), a tabela exibe 'Vencimento'.
+            // Um lançamento deve aparecer se seu VENCIMENTO estiver no período OU se seu PAGAMENTO estiver no período.
+            if (activeTab === 'aReceber' || activeTab === 'aPagar' || activeTab === 'cancelados') {
+                const matchesDue = Boolean(dueStr && (!startDate || dueStr >= startDate) && (!endDate || dueStr <= endDate));
+                const matchesPay = Boolean(payStr && (!startDate || payStr >= startDate) && (!endDate || payStr <= endDate));
+                return matchesDue || matchesPay;
+            }
+
+            // Para Visão Geral e DRE (regime de caixa / movimentação financeira):
+            const effectiveDate = payStr || dueStr;
+            if (!effectiveDate) return false;
             if (startDate && effectiveDate < startDate) return false;
             if (endDate && effectiveDate > endDate) return false;
             return true;
         });
-    }, [transactions, startDate, endDate, selectedBankFilter]);
+    }, [transactions, startDate, endDate, selectedBankFilter, activeTab]);
 
     const handleOpenModal = (transaction?: FinancialTransaction, initialType?: FinancialTransactionType) => {
         setEditingTransaction(transaction || null);
