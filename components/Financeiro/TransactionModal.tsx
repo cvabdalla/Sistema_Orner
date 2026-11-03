@@ -49,7 +49,11 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         };
     };
 
-    const [formState, setFormState] = useState<FinancialTransaction>(getInitialState());
+    type TransactionFormState = Omit<FinancialTransaction, 'amount'> & {
+        amount: number | string;
+    };
+
+    const [formState, setFormState] = useState<TransactionFormState>(getInitialState());
     const [isRecurring, setIsRecurring] = useState(false);
     const [frequency, setFrequency] = useState<'mensal' | 'trimestral' | 'semestral' | 'anual'>('mensal');
     const [occurrences, setOccurrences] = useState(2);
@@ -80,7 +84,11 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
             }));
             return;
         }
-        setFormState(prev => ({...prev, [name]: name === 'amount' ? (value === '' ? '' : parseFloat(value)) : value}));
+        if (name === 'amount') {
+            setFormState(prev => ({ ...prev, amount: value }));
+            return;
+        }
+        setFormState(prev => ({...prev, [name]: value}));
     };
 
     const handleTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -95,8 +103,9 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const numAmount = typeof formState.amount === 'number' ? formState.amount : parseFloat(String(formState.amount));
-        if(!formState.description || isNaN(numAmount) || numAmount < 0) {
+        const rawAmountStr = String(formState.amount ?? '').trim().replace(',', '.');
+        const numAmount = rawAmountStr === '' ? NaN : parseFloat(rawAmountStr);
+        if (!formState.description || isNaN(numAmount) || numAmount === 0) {
             alert('Por favor, preencha a descrição e um valor numérico válido.');
             return;
         }
@@ -211,11 +220,11 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                                     type="number" 
                                     name="amount" 
                                     id="amount" 
-                                    value={formState.amount || ''} 
+                                    value={formState.amount !== undefined && formState.amount !== null ? formState.amount : ''} 
                                     onChange={handleInputChange} 
                                     disabled={isCancelled}
                                     required 
-                                    step="0.01" 
+                                    step="any" 
                                     className={`${inputClasses} pl-10 text-indigo-700 dark:text-indigo-400 ${isCancelled ? 'opacity-70 grayscale' : ''}`} 
                                     placeholder="0,00"
                                 />

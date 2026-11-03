@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import Modal from '../Modal';
 import { TrashIcon, CheckCircleIcon, CreditCardIcon, EditIcon, UsersIcon } from '../../assets/icons';
 import type { FinancialTransaction, FinancialCategory, FinancialTransactionStatus } from '../../types';
@@ -39,6 +39,9 @@ const toSentenceCase = (str: string) => {
 const CreditCardDetailModal: React.FC<CreditCardDetailModalProps> = ({ 
     isOpen, onClose, items, categories, onUpdateStatus, onDeleteItem, onEditItem 
 }) => {
+    const [sortField, setSortField] = useState<'date' | 'description' | 'amount' | 'category'>('date');
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc'); // Padrão: das datas mais antigas para as mais recentes
+
     const getCategoryName = (id: string) => categories.find(c => c.id === id)?.name || 'N/A';
     const totalGeral = items.reduce((sum, i) => sum + i.amount, 0);
 
@@ -73,8 +76,40 @@ const CreditCardDetailModal: React.FC<CreditCardDetailModalProps> = ({
             }
         });
 
+        // Ordenação dos lançamentos de cada cartão (padrão: da data mais antiga para a mais recente)
+        Object.values(clients).forEach(uniqueCards => {
+            Object.values(uniqueCards).forEach(cardList => {
+                cardList.sort((a, b) => {
+                    if (sortField === 'date') {
+                        const dateA = String(a.launchDate || a.dueDate || '');
+                        const dateB = String(b.launchDate || b.dueDate || '');
+                        const cmp = dateA.localeCompare(dateB);
+                        if (cmp !== 0) return sortOrder === 'asc' ? cmp : -cmp;
+                        return String(a.description || '').localeCompare(String(b.description || ''));
+                    }
+                    if (sortField === 'amount') {
+                        const cmp = (a.amount || 0) - (b.amount || 0);
+                        return sortOrder === 'asc' ? cmp : -cmp;
+                    }
+                    if (sortField === 'description') {
+                        const descA = String(toSentenceCase(a.description));
+                        const descB = String(toSentenceCase(b.description));
+                        const cmp = descA.localeCompare(descB);
+                        return sortOrder === 'asc' ? cmp : -cmp;
+                    }
+                    if (sortField === 'category') {
+                        const catA = getCategoryName(a.categoryId);
+                        const catB = getCategoryName(b.categoryId);
+                        const cmp = catA.localeCompare(catB);
+                        return sortOrder === 'asc' ? cmp : -cmp;
+                    }
+                    return 0;
+                });
+            });
+        });
+
         return clients;
-    }, [items]);
+    }, [items, sortField, sortOrder, categories]);
 
     return (
         <Modal title="Detalhamento da Fatura" onClose={onClose} maxWidth="max-w-6xl">
@@ -146,11 +181,65 @@ const CreditCardDetailModal: React.FC<CreditCardDetailModalProps> = ({
                                             {/* Tabela de Lançamentos deste cartão específico */}
                                             <div className="overflow-x-auto">
                                                 <table className="w-full text-left text-sm">
-                                                    <thead className="bg-gray-50/50 dark:bg-gray-900/20 text-[9px] font-black text-gray-400 border-b dark:border-gray-700">
+                                                    <thead className="bg-gray-50/50 dark:bg-gray-900/20 text-[9px] font-black text-gray-400 border-b dark:border-gray-700 select-none">
                                                         <tr>
-                                                            <th className="px-5 py-3">Descrição do Lançamento</th>
-                                                            <th className="px-5 py-3 w-32">Categoria</th>
-                                                            <th className="px-5 py-3 text-right w-28">Valor</th>
+                                                            <th 
+                                                                onClick={() => {
+                                                                    if (sortField === 'date') {
+                                                                        setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                                                                    } else {
+                                                                        setSortField('date');
+                                                                        setSortOrder('asc');
+                                                                    }
+                                                                }}
+                                                                className="px-5 py-3 cursor-pointer hover:text-indigo-600 transition-colors"
+                                                                title="Clique para alternar ordenação por data do gasto"
+                                                            >
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <span>Descrição do Lançamento / Data</span>
+                                                                    {sortField === 'date' && (
+                                                                        <span className="text-indigo-600 font-bold">{sortOrder === 'asc' ? '▲ (Mais antigas)' : '▼ (Mais recentes)'}</span>
+                                                                    )}
+                                                                </div>
+                                                            </th>
+                                                            <th 
+                                                                onClick={() => {
+                                                                    if (sortField === 'category') {
+                                                                        setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                                                                    } else {
+                                                                        setSortField('category');
+                                                                        setSortOrder('asc');
+                                                                    }
+                                                                }}
+                                                                className="px-5 py-3 w-32 cursor-pointer hover:text-indigo-600 transition-colors"
+                                                                title="Clique para ordenar por categoria"
+                                                            >
+                                                                <div className="flex items-center gap-1">
+                                                                    <span>Categoria</span>
+                                                                    {sortField === 'category' && (
+                                                                        <span className="text-indigo-600 font-bold">{sortOrder === 'asc' ? '▲' : '▼'}</span>
+                                                                    )}
+                                                                </div>
+                                                            </th>
+                                                            <th 
+                                                                onClick={() => {
+                                                                    if (sortField === 'amount') {
+                                                                        setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                                                                    } else {
+                                                                        setSortField('amount');
+                                                                        setSortOrder('desc');
+                                                                    }
+                                                                }}
+                                                                className="px-5 py-3 text-right w-28 cursor-pointer hover:text-indigo-600 transition-colors"
+                                                                title="Clique para ordenar por valor"
+                                                            >
+                                                                <div className="flex items-center justify-end gap-1">
+                                                                    <span>Valor</span>
+                                                                    {sortField === 'amount' && (
+                                                                        <span className="text-indigo-600 font-bold">{sortOrder === 'asc' ? '▲' : '▼'}</span>
+                                                                    )}
+                                                                </div>
+                                                            </th>
                                                             <th className="px-5 py-3 text-center w-24">Status</th>
                                                             <th className="px-5 py-3 text-right w-24">Ações</th>
                                                         </tr>
