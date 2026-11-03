@@ -328,11 +328,11 @@ const ContasTable: React.FC<ContasTableProps> = ({ title, transactions, categori
                                         {getCategoryName(tx.categoryId)}
                                     </td>
 
-                                    <td className={`py-4 px-6 font-bold text-center ${isPaid || isCancelled ? 'text-gray-300' : isOverdue ? 'text-rose-600 dark:text-rose-400' : 'text-gray-700 dark:text-gray-200'}`}>
+                                    <td className={`py-4 px-6 font-bold text-center ${isCancelled ? 'text-gray-300 line-through' : isPaid ? 'text-gray-500 dark:text-gray-400' : isOverdue ? 'text-rose-600 dark:text-rose-400' : 'text-gray-700 dark:text-gray-200'}`}>
                                         {formatDate(tx.dueDate)}
                                     </td>
 
-                                    <td className={`py-4 px-6 font-black text-right ${isPaid || isCancelled ? 'text-gray-300 line-through' : tx.type === 'receita' ? 'text-green-600' : 'text-red-600'}`}>
+                                    <td className={`py-4 px-6 font-black text-right ${isCancelled ? 'text-gray-300 line-through' : isPaid ? (tx.type === 'receita' ? 'text-emerald-600 dark:text-emerald-400 font-black' : 'text-gray-700 dark:text-gray-300 font-black') : tx.type === 'receita' ? 'text-green-600' : 'text-red-600'}`}>
                                         {formatCurrency(tx.amount)}
                                     </td>
 

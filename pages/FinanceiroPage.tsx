@@ -63,12 +63,18 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
                 return `${y}-${m}-${day}`;
             };
 
-            const lastDayOfMonth = new Date(year, month + 1, 0);
-
-            // Mantém visão anual completa para Visão Geral, A Receber e A Pagar,
-            // permitindo visualizar e localizar lançamentos de todos os meses com agilidade
-            setStartDate(`${year}-01-01`);
-            setEndDate(formatDate(lastDayOfMonth));
+            if (activeTab === 'visaoGeral') {
+                // Somente na Visão Geral: do início do ano até o fim do mês subsequente
+                const lastDayOfNextMonth = new Date(year, month + 2, 0);
+                setStartDate(`${year}-01-01`);
+                setEndDate(formatDate(lastDayOfNextMonth));
+            } else {
+                // Em Contas a Receber, Contas a Pagar e demais abas: início do mês atual até fim do mês atual
+                const firstDayOfMonth = new Date(year, month, 1);
+                const lastDayOfMonth = new Date(year, month + 1, 0);
+                setStartDate(formatDate(firstDayOfMonth));
+                setEndDate(formatDate(lastDayOfMonth));
+            }
         }
     }, [view, activeTab]);
 
@@ -274,6 +280,13 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
                 status: 'cancelado' as FinancialTransactionStatus, 
                 cancelReason: cancelReason 
             };
+
+            // Atualização otimista imediata na UI
+            setTransactions(prev => prev.map(t => t.id === transactionToCancelId ? updatedTx : t));
+            setIsCancelModalOpen(false);
+            setTransactionToCancelId(null);
+            setCancelReason('');
+
             try {
                 await dataService.save('financial_transactions', updatedTx);
                 
@@ -292,12 +305,10 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
                     }
                 }
                 await loadData();
-                setIsCancelModalOpen(false);
-                setTransactionToCancelId(null);
-                setCancelReason('');
             } catch (e) {
                 console.error(e);
                 alert("Erro ao cancelar transação.");
+                await loadData();
             }
         }
     };
