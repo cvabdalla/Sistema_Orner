@@ -4,7 +4,8 @@ import Modal from '../Modal';
 import { 
     DollarIcon, CalendarIcon, ClipboardListIcon, 
     ArrowUpIcon, ArrowDownIcon, ClockIcon, SaveIcon, 
-    CheckCircleIcon, LockClosedIcon, ExclamationTriangleIcon, TableIcon
+    CheckCircleIcon, LockClosedIcon, ExclamationTriangleIcon, TableIcon,
+    FilterIcon
 } from '../../assets/icons';
 import type { FinancialTransaction, FinancialCategory, FinancialTransactionType, FinancialTransactionStatus, BankAccount } from '../../types';
 
@@ -29,6 +30,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
 
         // Ensure type is narrowed correctly from FinancialTransactionType to match what's expected
         const type = (transaction?.type || initialType || 'despesa') as FinancialTransactionType;
+        const defaultBank = bankAccounts.find(b => b.active)?.id || (bankAccounts.length > 0 ? bankAccounts[0].id : '');
+        const defaultCategory = categories.find(c => c.type === type)?.id || (categories.length > 0 ? categories[0].id : '');
 
         return {
             id: transaction?.id || Date.now().toString(),
@@ -36,12 +39,12 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
             description: transaction?.description || '',
             amount: transaction?.amount || 0,
             type: type,
-            dueDate: transaction?.dueDate || todayStr,
-            launchDate: transaction?.launchDate || todayStr,
-            categoryId: transaction?.categoryId || categories.find(c => c.type === type)?.id || '',
-            bankId: transaction?.bankId || bankAccounts.find(b => b.active)?.id || '',
+            dueDate: transaction?.dueDate ? String(transaction.dueDate).split('T')[0] : todayStr,
+            launchDate: transaction?.launchDate ? String(transaction.launchDate).split('T')[0] : todayStr,
+            categoryId: transaction?.categoryId || defaultCategory,
+            bankId: transaction?.bankId || defaultBank,
             status: transaction?.status || 'pendente' as FinancialTransactionStatus,
-            paymentDate: transaction?.paymentDate || undefined,
+            paymentDate: transaction?.paymentDate ? String(transaction.paymentDate).split('T')[0] : undefined,
             cancelReason: transaction?.cancelReason || undefined
         };
     };
@@ -56,35 +59,56 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         setIsRecurring(false);
         setFrequency('mensal');
         setOccurrences(2);
-    }, [transaction, initialType, isOpen, bankAccounts]);
+    }, [transaction, initialType, isOpen, bankAccounts, categories]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
-        setFormState(prev => ({...prev, [name]: name === 'amount' ? parseFloat(value) : value}));
+        if (name === 'status') {
+            const newStatus = value as FinancialTransactionStatus;
+            const todayStr = new Date().toISOString().split('T')[0];
+            setFormState(prev => ({
+                ...prev,
+                status: newStatus,
+                paymentDate: newStatus === 'pago' ? (prev.paymentDate || todayStr) : undefined
+            }));
+            return;
+        }
+        setFormState(prev => ({...prev, [name]: name === 'amount' ? (value === '' ? '' : parseFloat(value)) : value}));
     };
 
     const handleTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const newType = e.target.value as FinancialTransactionType;
+        const matchingCat = categories.find(c => c.type === newType)?.id || '';
         setFormState(prev => ({
             ...prev,
             type: newType,
-            categoryId: categories.find(c => c.type === newType)?.id || '',
+            categoryId: matchingCat,
         }));
     };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if(!formState.description || formState.amount < 0) {
-            alert('Por favor, preencha a descrição e o valor.');
-            return;
-        }
-        if(!formState.bankId) {
-            alert('Por favor, selecione o banco para a movimentação.');
+        const numAmount = typeof formState.amount === 'number' ? formState.amount : parseFloat(String(formState.amount));
+        if(!formState.description || isNaN(numAmount) || numAmount < 0) {
+            alert('Por favor, preencha a descrição e um valor numérico válido.');
             return;
         }
         
+        const fallbackBank = bankAccounts.find(b => b.active)?.id || (bankAccounts.length > 0 ? bankAccounts[0].id : '');
+        const targetBankId = formState.bankId || fallbackBank;
+
+        const cleanedTx: FinancialTransaction = {
+            ...formState,
+            amount: numAmount,
+            bankId: targetBankId,
+            categoryId: formState.categoryId || '',
+            paymentDate: formState.status === 'pago' 
+                ? (formState.paymentDate || new Date().toISOString().split('T')[0]) 
+                : undefined
+        };
+        
         const recurrenceData = isRecurring && !transaction ? { frequency, occurrences } : undefined;
-        onSave(formState, recurrenceData);
+        onSave(cleanedTx, recurrenceData);
     };
     
     const filteredCategories = categories
@@ -159,7 +183,7 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                             value={formState.bankId} 
                             onChange={handleInputChange} 
                             disabled={isCancelled}
-                            required 
+                            required={bankAccounts.length > 0} 
                             className={`${inputClasses} cursor-pointer ${isCancelled ? 'opacity-70 grayscale' : ''}`}
                         >
                             <option value="">Selecione a conta bancária...</option>
@@ -281,10 +305,10 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
                                 value={formState.categoryId} 
                                 onChange={handleInputChange} 
                                 disabled={isCancelled}
-                                required 
+                                required={filteredCategories.length > 0} 
                                 className={`${inputClasses} cursor-pointer ${isCancelled ? 'opacity-70 grayscale' : ''}`}
                             >
-                                <option value="" disabled>Selecione uma categoria...</option>
+                                <option value="">Selecione uma categoria...</option>
                                 {filteredCategories.map(cat => (
                                     <option key={cat.id} value={cat.id}>{cat.name}</option>
                                 ))}
@@ -367,9 +391,5 @@ const TransactionModal: React.FC<TransactionModalProps> = ({ isOpen, onClose, on
         </Modal>
     );
 };
-
-const FilterIcon = ({ className }: { className?: string }) => (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
-);
 
 export default TransactionModal;

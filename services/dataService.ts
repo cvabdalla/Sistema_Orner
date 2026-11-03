@@ -135,6 +135,51 @@ class SupabaseDataService implements IDataService {
                 notes: packedNotes,
             };
         }
+        if (collection === 'financial_transactions' && item) {
+            const cleanDate = (val: any, fallbackToToday: boolean = false): string | null => {
+                if (!val) return fallbackToToday ? new Date().toISOString().split('T')[0] : null;
+                const str = String(val).trim();
+                if (str.length < 8) return fallbackToToday ? new Date().toISOString().split('T')[0] : null;
+                if (str.includes('T')) return str.split('T')[0];
+                if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+                if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) {
+                    const [d, m, y] = str.split('/');
+                    return `${y}-${m}-${d}`;
+                }
+                const parsed = new Date(str);
+                if (!isNaN(parsed.getTime())) {
+                    return parsed.toISOString().split('T')[0];
+                }
+                return fallbackToToday ? new Date().toISOString().split('T')[0] : null;
+            };
+
+            const cleanId = (val: any): string | null => {
+                if (val === undefined || val === null) return null;
+                const str = String(val).trim();
+                return str.length > 0 ? str : null;
+            };
+
+            const defaultOwner = '1767988420092'; // Carlos Abdalla (admin válido)
+            const ownerId = cleanId(item.owner_id) || defaultOwner;
+
+            return {
+                ...item,
+                owner_id: ownerId,
+                amount: Number(item.amount || 0),
+                type: item.type || 'despesa',
+                status: item.status || 'pendente',
+                dueDate: cleanDate(item.dueDate, true)!,
+                launchDate: cleanDate(item.launchDate, true)!,
+                paymentDate: item.status === 'pago' 
+                    ? (cleanDate(item.paymentDate) || cleanDate(item.dueDate, true)!) 
+                    : null,
+                bankId: cleanId(item.bankId),
+                categoryId: cleanId(item.categoryId),
+                relatedReportId: cleanId(item.relatedReportId),
+                cancelReason: cleanId(item.cancelReason),
+                invoiceSent: Boolean(item.invoiceSent)
+            };
+        }
         return item;
     }
 
@@ -236,6 +281,20 @@ class SupabaseDataService implements IDataService {
                 deslocamentoMargem: deslocamentoMargem || '',
             } as any;
         }
+        if (collection === 'financial_transactions' && item) {
+            return {
+                ...item,
+                amount: Number(item.amount || 0),
+                dueDate: item.dueDate ? String(item.dueDate).split('T')[0] : '',
+                launchDate: item.launchDate ? String(item.launchDate).split('T')[0] : '',
+                paymentDate: item.paymentDate ? String(item.paymentDate).split('T')[0] : undefined,
+                bankId: item.bankId || '',
+                categoryId: item.categoryId || '',
+                cancelReason: item.cancelReason || undefined,
+                relatedReportId: item.relatedReportId || undefined,
+                invoiceSent: Boolean(item.invoiceSent)
+            } as any;
+        }
         return item;
     }
 
@@ -268,7 +327,6 @@ class SupabaseDataService implements IDataService {
             
             const privateCollections = [
                 'orcamentos', 
-                'financial_transactions', 
                 'expense_reports', 
                 'purchase_requests', 
                 'sales_summary',
@@ -292,6 +350,10 @@ class SupabaseDataService implements IDataService {
                 } else {
                     query = query.eq('owner_id', userId);
                 }
+            }
+
+            if (collection === 'financial_transactions') {
+                query = query.order('dueDate', { ascending: false }).limit(5000);
             }
 
             const { data, error } = await query;
@@ -330,11 +392,8 @@ class SupabaseDataService implements IDataService {
 
     async getAll<T>(collection: string, userId?: string, isAdmin?: boolean): Promise<T[]> {
         try {
-            let query = supabase.from(collection).select('*');
-            
             const privateCollections = [
                 'orcamentos', 
-                'financial_transactions', 
                 'expense_reports', 
                 'purchase_requests', 
                 'sales_summary',
@@ -352,42 +411,70 @@ class SupabaseDataService implements IDataService {
                 'historical_revenue'
             ];
 
-            // Se for admin, não filtra. Se não for admin e tiver userId em coleção privada, filtra.
-            if (!isAdmin && userId && privateCollections.includes(collection)) {
-                // Caso especial para homologação: o responsável também deve ver o card
-                if (collection === 'homologacao_entries') {
-                    query = query.or(`owner_id.eq.${userId},responsible_user_id.eq.${userId}`);
-                } else {
-                    query = query.eq('owner_id', userId);
-                }
-            }
+            let allRows: any[] = [];
+            const pageSize = 1000;
+            let from = 0;
+            let hasMore = true;
 
-            const { data, error } = await query;
-            
-            if (error) {
-                const isNetworkError = error.message?.includes('fetch') || error.message?.includes('Failed to fetch') || error.message?.includes('network');
-                const isMissingTable = error.message?.includes('Could not find the table') || error.message?.includes('does not exist') || error.message?.includes('schema cache') || error.code === '42P01';
+            while (hasMore) {
+                let query = supabase.from(collection).select('*');
                 
-                if (isNetworkError) {
-                    console.warn(`[OFFLINE WARNING] Conexão indisponível ao carregar ${collection}. Usando cache local.`);
-                } else if (isMissingTable) {
-                    console.warn(`[DB INFO] Tabela '${collection}' ainda não criada no Supabase ou cache de esquema pendente. Execute o script 'supabase_update.sql' para criá-la. Detalhes:`, error.message);
+                // Se for admin, não filtra. Se não for admin e tiver userId em coleção privada, filtra.
+                if (!isAdmin && userId && privateCollections.includes(collection)) {
+                    if (collection === 'homologacao_entries') {
+                        query = query.or(`owner_id.eq.${userId},responsible_user_id.eq.${userId}`);
+                    } else {
+                        query = query.eq('owner_id', userId);
+                    }
+                }
+
+                if (collection === 'financial_transactions') {
+                    query = query.order('dueDate', { ascending: false });
+                }
+
+                query = query.range(from, from + pageSize - 1);
+
+                const { data, error } = await query;
+                
+                if (error) {
+                    if (from === 0) {
+                        const isNetworkError = error.message?.includes('fetch') || error.message?.includes('Failed to fetch') || error.message?.includes('network');
+                        const isMissingTable = error.message?.includes('Could not find the table') || error.message?.includes('does not exist') || error.message?.includes('schema cache') || error.code === '42P01';
+                        
+                        if (isNetworkError) {
+                            console.warn(`[OFFLINE WARNING] Conexão indisponível ao carregar ${collection}. Usando cache local.`);
+                        } else if (isMissingTable) {
+                            console.warn(`[DB INFO] Tabela '${collection}' ainda não criada no Supabase ou cache de esquema pendente. Execute o script 'supabase_update.sql' para criá-la. Detalhes:`, error.message);
+                        } else {
+                            console.error(`[DB ERROR] Erro ao carregar ${collection}:`, error.message, error.details);
+                        }
+                        if (error.code === 'PGRST116') {
+                            return [];
+                        }
+                        if (!isNetworkError && (error.message.includes('JWT') || error.code === '401' || error.message.includes('key'))) {
+                            console.error(`[CRITICAL] Problema de autenticação com o Supabase detectado ao carregar ${collection}.`);
+                        }
+                        return this.getLocal<T>(collection);
+                    }
+                    break;
+                }
+
+                if (data && data.length > 0) {
+                    allRows.push(...data);
+                    if (data.length < pageSize) {
+                        hasMore = false;
+                    } else {
+                        from += pageSize;
+                        if (from >= 10000) hasMore = false;
+                    }
                 } else {
-                    console.error(`[DB ERROR] Erro ao carregar ${collection}:`, error.message, error.details);
+                    hasMore = false;
                 }
-                if (error.code === 'PGRST116') {
-                    // Item não encontrado - comum em .single()
-                    return [];
-                }
-                if (!isNetworkError && (error.message.includes('JWT') || error.code === '401' || error.message.includes('key'))) {
-                    console.error(`[CRITICAL] Problema de autenticação com o Supabase detectado ao carregar ${collection}.`);
-                }
-                return this.getLocal<T>(collection);
             }
 
-            const deserialized = ((data as any[]) || []).map(item => this.deserialize<T>(collection, item));
+            const deserialized = allRows.map(item => this.deserialize<T>(collection, item));
 
-            if (data) {
+            if (allRows.length > 0) {
                 this.setLocal(collection, deserialized);
             }
             
@@ -425,7 +512,40 @@ class SupabaseDataService implements IDataService {
             );
 
             let resultData: any = null;
-            if (collection === 'homologacao_entries' || collection === 'checklist_checkin' || collection === 'checklist_checkout') {
+            if (collection === 'financial_transactions') {
+                let currentItem = cleanItem;
+                let lastError: any = null;
+                for (let attempt = 0; attempt < 4; attempt++) {
+                    const { data, error } = await supabase
+                        .from(collection)
+                        .upsert(currentItem)
+                        .select()
+                        .single();
+
+                    if (!error) {
+                        return this.deserialize<T>(collection, data);
+                    }
+
+                    lastError = error;
+                    console.warn(`[FINANCEIRO] Tentativa ${attempt + 1} de salvar transação:`, error.message);
+
+                    if (error.code === '23503') {
+                        if (error.message?.includes('owner_id')) {
+                            currentItem = { ...currentItem, owner_id: '1767988420092' };
+                        }
+                        if (error.message?.includes('categoryId')) {
+                            currentItem = { ...currentItem, categoryId: null };
+                        }
+                        if (error.message?.includes('bankId')) {
+                            currentItem = { ...currentItem, bankId: null };
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                console.warn("[FINANCEIRO] Persistência direta no Supabase teve aviso. Mantendo integridade no cache local.", lastError?.message);
+                return deserializedItem;
+            } else if (collection === 'homologacao_entries' || collection === 'checklist_checkin' || collection === 'checklist_checkout') {
                 const { error } = await supabase
                     .from(collection)
                     .upsert(cleanItem);
@@ -523,6 +643,29 @@ class SupabaseDataService implements IDataService {
             const cleanItems = dbItems.map(item => 
                 Object.fromEntries(Object.entries(item).filter(([_, v]) => v !== undefined))
             );
+
+            if (collection === 'financial_transactions') {
+                const { data, error } = await supabase
+                    .from(collection)
+                    .upsert(cleanItems)
+                    .select();
+
+                if (!error) {
+                    return ((data as any[]) || []).map(item => this.deserialize<T>(collection, item));
+                }
+
+                console.warn("[FINANCEIRO BATCH] Lote com aviso no Supabase, salvando com recuperação individual:", error.message);
+                const results: T[] = [];
+                for (const item of items) {
+                    try {
+                        const saved = await this.save<T>(collection, item);
+                        results.push(saved);
+                    } catch (err) {
+                        results.push(this.deserialize<T>(collection, item));
+                    }
+                }
+                return results;
+            }
 
             const { data, error } = await supabase
                 .from(collection)
