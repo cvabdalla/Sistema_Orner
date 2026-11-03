@@ -133,22 +133,15 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
                 return true;
             }
 
-            // Nas abas de contas (A Receber, A Pagar, Cancelados), a tabela exibe 'Vencimento'.
-            // Um lançamento deve aparecer se seu VENCIMENTO estiver no período OU se seu PAGAMENTO estiver no período.
-            if (activeTab === 'aReceber' || activeTab === 'aPagar' || activeTab === 'cancelados') {
-                const matchesDue = Boolean(dueStr && (!startDate || dueStr >= startDate) && (!endDate || dueStr <= endDate));
-                const matchesPay = Boolean(payStr && (!startDate || payStr >= startDate) && (!endDate || payStr <= endDate));
-                return matchesDue || matchesPay;
-            }
-
-            // Para Visão Geral e DRE (regime de caixa / movimentação financeira):
-            const effectiveDate = payStr || dueStr;
+            // Data de referência do lançamento (data de efetivação para quitados, ou vencimento para pendentes)
+            const effectiveDate = (t.status === 'pago' && payStr) ? payStr : dueStr;
             if (!effectiveDate) return false;
+
             if (startDate && effectiveDate < startDate) return false;
             if (endDate && effectiveDate > endDate) return false;
             return true;
         });
-    }, [transactions, startDate, endDate, selectedBankFilter, activeTab]);
+    }, [transactions, startDate, endDate, selectedBankFilter]);
 
     const handleOpenModal = (transaction?: FinancialTransaction, initialType?: FinancialTransactionType) => {
         setEditingTransaction(transaction || null);
