@@ -296,6 +296,15 @@ class SupabaseDataService implements IDataService {
                 invoiceSent: Boolean(item.invoiceSent)
             } as any;
         }
+        if (collection === 'orcamentos' && item) {
+            const fs = item.formState || {};
+            return {
+                ...item,
+                pular_lavagem: item.pular_lavagem !== undefined ? item.pular_lavagem : Boolean(fs.pular_lavagem || fs.naoCadastrarLavagem),
+                clienteExistenteId: item.clienteExistenteId || fs.clienteExistenteId || undefined,
+                tipo_aprovacao: item.tipo_aprovacao || fs.tipo_aprovacao || (fs.naoCadastrarLavagem ? 'sem_cliente' : undefined),
+            } as any;
+        }
         return item;
     }
 
@@ -581,6 +590,17 @@ class SupabaseDataService implements IDataService {
                             deslocamento, pedagio, instaladorId, distanciaObraKM,
                             quantidadeDiasViagem, considerarIdaVolta, deslocamentoValorKm,
                             deslocamentoHotel, deslocamentoMargem, totalToCharge,
+                            ...safeFallbackItem
+                        } = cleanItem;
+                        const retry = await supabase.from(collection).upsert(safeFallbackItem).select().single();
+                        if (!retry.error) {
+                            return this.deserialize<T>(collection, { ...cleanItem, ...retry.data });
+                        }
+                    }
+                    if (collection === 'orcamentos' && (error.message?.includes('column') || error.message?.includes('schema cache') || error.code === '42703' || error.message?.includes('pular_lavagem') || error.message?.includes('clienteExistenteId') || error.message?.includes('tipo_aprovacao'))) {
+                        console.warn("[ORCAMENTOS] Colunas adicionais não encontradas no Supabase. Salvando no formState (JSON) com compatibilidade retroativa...");
+                        const {
+                            pular_lavagem, clienteExistenteId, tipo_aprovacao,
                             ...safeFallbackItem
                         } = cleanItem;
                         const retry = await supabase.from(collection).upsert(safeFallbackItem).select().single();

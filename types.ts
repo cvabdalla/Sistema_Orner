@@ -164,6 +164,9 @@ export interface SavedOrcamento {
     motivo_perda?: string;
     instalacao_servico_extra_desc?: string;
     instalacao_servico_extra_valor?: number;
+    pular_lavagem?: boolean;
+    clienteExistenteId?: string;
+    tipo_aprovacao?: 'novo_cliente' | 'cliente_existente' | 'sem_cliente';
 }
 
 export interface SalesSummaryItem {

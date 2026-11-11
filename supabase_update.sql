@@ -145,3 +145,12 @@ COMMENT ON COLUMN "orcamentos"."instalacao_servico_extra_valor" IS 'Valor do ser
 ALTER TABLE "system_users" ADD COLUMN IF NOT EXISTS "instaladorId" text;
 COMMENT ON COLUMN "system_users"."instaladorId" IS 'ID do instalador parceiro vinculado ao usuário para restrição de visualização em Reembolso/Instalação';
 
+-- 12. Colunas para controle de aprovação flexível (componentes extras / pular pós-venda / cliente vinculado)
+ALTER TABLE "orcamentos" ADD COLUMN IF NOT EXISTS "pular_lavagem" boolean DEFAULT false;
+ALTER TABLE "orcamentos" ADD COLUMN IF NOT EXISTS "clienteExistenteId" text;
+ALTER TABLE "orcamentos" ADD COLUMN IF NOT EXISTS "tipo_aprovacao" text;
+
+COMMENT ON COLUMN "orcamentos"."pular_lavagem" IS 'Indica se o orçamento é de componentes extras/avulso e deve pular o cadastro de pós-venda e agendamento de lavagem';
+COMMENT ON COLUMN "orcamentos"."clienteExistenteId" IS 'ID do cliente solar pré-existente vinculado a este orçamento';
+COMMENT ON COLUMN "orcamentos"."tipo_aprovacao" IS 'Tipo de aprovação selecionada: novo_cliente, cliente_existente ou sem_cliente';
+

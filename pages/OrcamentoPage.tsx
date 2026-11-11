@@ -189,6 +189,14 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
   const [isSavingClient, setIsSavingClient] = useState(false);
   const [selectedOrcamentoToApprove, setSelectedOrcamentoToApprove] =
     useState<SavedOrcamento | null>(null);
+  const [approvalMode, setApprovalMode] = useState<
+    "novo" | "existente" | "sem_cliente"
+  >("novo");
+  const [selectedExistingClientId, setSelectedExistingClientId] =
+    useState<string>("");
+  const [searchExistingClient, setSearchExistingClient] = useState<string>("");
+  const [shouldAddPlatesToExisting, setShouldAddPlatesToExisting] =
+    useState<boolean>(false);
   const [clientForm, setClientForm] = useState<Partial<LavagemClient>>({
     name: "",
     phone: "",
@@ -529,7 +537,13 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
       await dataService.save("orcamentos", updatedOrcamento);
 
       // Update/Create matching lavagem_client and schedule lavagem_records if installation is finalized
-      if (trackVendaEtapas.instalacao_finalizada) {
+      const shouldSkipLavagem =
+        updatedOrcamento.pular_lavagem === true ||
+        updatedOrcamento.tipo_aprovacao === "sem_cliente" ||
+        (updatedOrcamento.formState && updatedOrcamento.formState.naoCadastrarLavagem === true) ||
+        (updatedOrcamento.formState && updatedOrcamento.formState.pular_lavagem === true);
+
+      if (trackVendaEtapas.instalacao_finalizada && !shouldSkipLavagem) {
         const v = updatedOrcamento.variants?.find((x) => x.isPrincipal) ||
           updatedOrcamento.variants?.[0] || {
             formState: updatedOrcamento.formState,
@@ -543,7 +557,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
           new Date().toISOString().split("T")[0];
 
         if (clientName) {
-          const clientId = `wash-auto-${updatedOrcamento.id}`;
+          const clientId = updatedOrcamento.clienteExistenteId || `wash-auto-${updatedOrcamento.id}`;
           let existingClient =
             lavagemClients.find((lc) => lc.id === clientId) ||
             lavagemClients.find(
@@ -1264,15 +1278,167 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
     }
   }, [clientForm.cep, isClientModalOpen]);
 
+  const saveApprovalToOrcamentoAndSales = async ({
+    orcamento,
+    updatedFormState,
+    pular_lavagem,
+    clienteExistenteId,
+    tipo_aprovacao,
+    clientNameForSales,
+    dateForSales,
+  }: {
+    orcamento: SavedOrcamento;
+    updatedFormState: any;
+    pular_lavagem: boolean;
+    clienteExistenteId?: string;
+    tipo_aprovacao: "novo_cliente" | "cliente_existente" | "sem_cliente";
+    clientNameForSales: string;
+    dateForSales: string;
+  }) => {
+    let variant =
+      orcamento.variants?.find((v) => v.isPrincipal) ||
+      orcamento.variants?.[0] || {
+        id: "default",
+        name: "Principal",
+        isPrincipal: true,
+        formState: orcamento.formState || {},
+        calculated: orcamento.calculated || {},
+      };
+
+    let updatedVariants = orcamento.variants;
+    if (updatedVariants && updatedVariants.length > 0) {
+      updatedVariants = updatedVariants.map((v) => {
+        if (v.id === variant.id || (v.isPrincipal && variant.isPrincipal)) {
+          return {
+            ...v,
+            formState: updatedFormState,
+          };
+        }
+        return v;
+      });
+    }
+
+    const fs = updatedFormState;
+    const calc = variant.calculated || {};
+    const thirdPartyInstallation =
+      parseSafeNumber(fs.terceiroInstalacaoQtd) *
+      parseSafeNumber(fs.terceiroInstalacaoCusto);
+
+    let updatedOrcamento: SavedOrcamento = {
+      ...orcamento,
+      status: "Aprovado" as OrcamentoStatus,
+      formState: updatedFormState,
+      variants: updatedVariants,
+      pular_lavagem,
+      clienteExistenteId: clienteExistenteId || undefined,
+      tipo_aprovacao,
+    };
+
+    if (!updatedOrcamento.venda_etapas) {
+      updatedOrcamento.venda_etapas = {
+        compra_equipamento: false,
+        contrato_procuracao: false,
+        homologacao: false,
+        agendamento_instalacao: false,
+        pag_instalacao: false,
+        pag_reembolso: false,
+        instalacao_finalizada: false,
+        faturado: false,
+        imposto_pago: false,
+      };
+    }
+
+    if (!updatedOrcamento.custos_estimados) {
+      updatedOrcamento.custos_estimados = {
+        homologacao: parseSafeNumber(fs.projetoHomologacaoCusto),
+        deslocamento:
+          fs.deslocamento !== undefined
+            ? parseSafeNumber(fs.deslocamento)
+            : parseSafeNumber(fs.custoViagem),
+        pedagio: parseSafeNumber(fs.pedagio),
+        adequacao: parseSafeNumber(fs.adequacaoLocalCusto),
+        instalacao: thirdPartyInstallation,
+        materiais: parseSafeNumber(calc.totalEstrutura),
+        imposto: parseSafeNumber(calc.impostos || calc.nfServicoValor || 0),
+      };
+    }
+
+    await dataService.save("orcamentos", updatedOrcamento);
+
+    // Save to sales_summary
+    try {
+      const currentSales =
+        await dataService.getAll<SalesSummaryItem>("sales_summary");
+      const existing = currentSales.find((s) => s.orcamentoId === orcamento.id);
+
+      const saleItem: SalesSummaryItem = {
+        id: orcamento.id,
+        orcamentoId: orcamento.id,
+        owner_id: orcamento.owner_id,
+        clientName: clientNameForSales || fs.nomeCliente || "Cliente Solar",
+        date:
+          dateForSales ||
+          fs.dataOrcamento ||
+          orcamento.savedAt.split("T")[0],
+        closedValue: parseSafeNumber(calc.precoVendaFinal),
+        systemCost: parseSafeNumber(calc.valorVendaSistema),
+        supplier: fs.fornecedor || "N/A",
+        visitaTecnica: parseSafeNumber(fs.visitaTecnicaCusto),
+        homologation: parseSafeNumber(fs.projetoHomologacaoCusto),
+        installation: thirdPartyInstallation,
+        travelCost:
+          fs.deslocamento !== undefined
+            ? parseSafeNumber(fs.deslocamento) + parseSafeNumber(fs.pedagio)
+            : parseSafeNumber(fs.custoViagem),
+        adequationCost: parseSafeNumber(fs.adequacaoLocalCusto),
+        materialCost: parseSafeNumber(calc.totalEstrutura),
+        invoicedTax: existing
+          ? parseSafeNumber(existing.invoicedTax)
+          : parseSafeNumber(calc.nfServicoValor),
+        commission: parseSafeNumber(calc.comissaoVendasValor),
+        bankFees: existing ? parseSafeNumber(existing.bankFees) : 0,
+        totalCost: 0,
+        netProfit: 0,
+        finalMargin: 0,
+        status: "Aprovado",
+      };
+
+      const extraCosts =
+        (saleItem.visitaTecnica ?? 0) +
+        (saleItem.homologation ?? 0) +
+        (saleItem.installation ?? 0) +
+        (saleItem.travelCost ?? 0) +
+        (saleItem.adequationCost ?? 0) +
+        (saleItem.materialCost ?? 0) +
+        (saleItem.invoicedTax ?? 0) +
+        (saleItem.commission ?? 0) +
+        (saleItem.bankFees ?? 0);
+
+      saleItem.totalCost = extraCosts;
+      saleItem.netProfit =
+        saleItem.closedValue - saleItem.systemCost - extraCosts;
+      const baseValue = saleItem.closedValue - (saleItem.commission ?? 0);
+      saleItem.finalMargin =
+        baseValue > 0 ? (saleItem.netProfit / baseValue) * 100 : 0;
+
+      await dataService.save("sales_summary", saleItem);
+    } catch (err) {
+      console.warn("Automação Resumo de Vendas falhou:", err);
+    }
+
+    setIsClientModalOpen(false);
+    setSelectedOrcamentoToApprove(null);
+    await loadData();
+  };
+
   const handleSaveApproveClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedOrcamentoToApprove) return;
     setIsSavingClient(true);
 
     try {
-      let variant = selectedOrcamentoToApprove.variants?.find(
-        (v) => v.isPrincipal,
-      ) ||
+      let variant =
+        selectedOrcamentoToApprove.variants?.find((v) => v.isPrincipal) ||
         selectedOrcamentoToApprove.variants?.[0] || {
           id: "default",
           name: "Principal",
@@ -1293,142 +1459,188 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
         complemento: clientForm.complement,
         terceiroInstalacaoQtd: clientForm.plates_count,
         observacoesCliente: clientForm.observations,
-        installation_end_date: clientForm.installation_end_date, // track expected end date in formState
-        dataOrcamento: new Date().toISOString().split("T")[0], // assume today's date upon approval
+        installation_end_date: clientForm.installation_end_date,
+        dataOrcamento: new Date().toISOString().split("T")[0],
+        naoCadastrarLavagem: false,
+        pular_lavagem: false,
       };
 
-      let updatedVariants = selectedOrcamentoToApprove.variants;
-      if (updatedVariants && updatedVariants.length > 0) {
-        updatedVariants = updatedVariants.map((v) => {
-          if (v.id === variant.id || (v.isPrincipal && variant.isPrincipal)) {
-            return {
-              ...v,
-              formState: updatedFormState,
-            };
-          }
-          return v;
-        });
-      }
-
-      // Now proceed with saving the Orçamento to 'Aprovado'
-      let updatedOrcamento = {
-        ...selectedOrcamentoToApprove,
-        status: "Aprovado" as OrcamentoStatus,
-        formState: updatedFormState,
-        variants: updatedVariants,
+      // Salva ou atualiza em lavagem_clients
+      const clientId = `wash-auto-${selectedOrcamentoToApprove.id}`;
+      const newWashClient: LavagemClient = {
+        id: clientId,
+        owner_id: selectedOrcamentoToApprove.owner_id,
+        name: clientForm.name || "Cliente Solar",
+        cep: clientForm.cep || "",
+        address: clientForm.address || "",
+        address_number: clientForm.address_number || "",
+        complement: clientForm.complement || "",
+        city: clientForm.city || "",
+        plates_count: Number(clientForm.plates_count) || 0,
+        phone: clientForm.phone || "",
+        observations:
+          clientForm.observations ||
+          `Importado via orçamento em ${new Date().toLocaleDateString("pt-BR")}.`,
+        installation_end_date:
+          clientForm.installation_end_date ||
+          new Date().toISOString().split("T")[0],
       };
+      await dataService.save("lavagem_clients", newWashClient);
+      setLavagemClients((prev) => [
+        ...prev.filter((c) => c.id !== clientId),
+        newWashClient,
+      ]);
 
-      const fs = updatedFormState;
-      const calc = variant.calculated || {};
-      const thirdPartyInstallation =
-        parseSafeNumber(fs.terceiroInstalacaoQtd) *
-        parseSafeNumber(fs.terceiroInstalacaoCusto);
+      await saveApprovalToOrcamentoAndSales({
+        orcamento: selectedOrcamentoToApprove,
+        updatedFormState,
+        pular_lavagem: false,
+        tipo_aprovacao: "novo_cliente",
+        clientNameForSales: clientForm.name || "",
+        dateForSales:
+          clientForm.installation_end_date ||
+          new Date().toISOString().split("T")[0],
+      });
 
-      if (!updatedOrcamento.venda_etapas) {
-        updatedOrcamento.venda_etapas = {
-          compra_equipamento: false,
-          contrato_procuracao: false,
-          homologacao: false,
-          agendamento_instalacao: false,
-          pag_instalacao: false,
-          pag_reembolso: false,
-          instalacao_finalizada: false,
-          faturado: false,
-          imposto_pago: false,
-        };
-      }
-
-      if (!updatedOrcamento.custos_estimados) {
-        updatedOrcamento.custos_estimados = {
-          homologacao: parseSafeNumber(fs.projetoHomologacaoCusto),
-          deslocamento:
-            fs.deslocamento !== undefined
-              ? parseSafeNumber(fs.deslocamento)
-              : parseSafeNumber(fs.custoViagem),
-          pedagio: parseSafeNumber(fs.pedagio),
-          adequacao: parseSafeNumber(fs.adequacaoLocalCusto),
-          instalacao: thirdPartyInstallation,
-          materiais: parseSafeNumber(calc.totalEstrutura),
-          imposto: parseSafeNumber(calc.impostos || calc.nfServicoValor || 0),
-        };
-      }
-
-      await dataService.save("orcamentos", updatedOrcamento);
-
-      // Save to sales_summary as well (exactly like the existing handleStatusChange does)
-      try {
-        const currentSales =
-          await dataService.getAll<SalesSummaryItem>("sales_summary");
-        const existing = currentSales.find(
-          (s) => s.orcamentoId === selectedOrcamentoToApprove.id,
-        );
-
-        const saleItem: SalesSummaryItem = {
-          id: selectedOrcamentoToApprove.id,
-          orcamentoId: selectedOrcamentoToApprove.id,
-          owner_id: selectedOrcamentoToApprove.owner_id,
-          clientName: clientForm.name || "", // Use the updated name from form
-          date:
-            clientForm.installation_end_date ||
-            fs.dataOrcamento ||
-            selectedOrcamentoToApprove.savedAt.split("T")[0],
-          closedValue: parseSafeNumber(calc.precoVendaFinal),
-          systemCost: parseSafeNumber(calc.valorVendaSistema),
-          supplier: fs.fornecedor || "N/A",
-          visitaTecnica: parseSafeNumber(fs.visitaTecnicaCusto),
-          homologation: parseSafeNumber(fs.projetoHomologacaoCusto),
-          installation: thirdPartyInstallation,
-          travelCost:
-            fs.deslocamento !== undefined
-              ? parseSafeNumber(fs.deslocamento) + parseSafeNumber(fs.pedagio)
-              : parseSafeNumber(fs.custoViagem),
-          adequationCost: parseSafeNumber(fs.adequacaoLocalCusto),
-          materialCost: parseSafeNumber(calc.totalEstrutura),
-          invoicedTax: existing
-            ? parseSafeNumber(existing.invoicedTax)
-            : parseSafeNumber(calc.nfServicoValor),
-          commission: parseSafeNumber(calc.comissaoVendasValor),
-          bankFees: existing ? parseSafeNumber(existing.bankFees) : 0,
-          totalCost: 0,
-          netProfit: 0,
-          finalMargin: 0,
-          status: "Aprovado",
-        };
-
-        const extraCosts =
-          (saleItem.visitaTecnica ?? 0) +
-          (saleItem.homologation ?? 0) +
-          (saleItem.installation ?? 0) +
-          (saleItem.travelCost ?? 0) +
-          (saleItem.adequationCost ?? 0) +
-          (saleItem.materialCost ?? 0) +
-          (saleItem.invoicedTax ?? 0) +
-          (saleItem.commission ?? 0) +
-          (saleItem.bankFees ?? 0);
-
-        saleItem.totalCost = extraCosts;
-        saleItem.netProfit =
-          saleItem.closedValue - saleItem.systemCost - extraCosts;
-        const baseValue = saleItem.closedValue - (saleItem.commission ?? 0);
-        saleItem.finalMargin =
-          baseValue > 0
-            ? (saleItem.netProfit / baseValue) * 100
-            : 0;
-
-        await dataService.save("sales_summary", saleItem);
-      } catch (err) {
-        console.warn("Automação Resumo de Vendas falhou:", err);
-      }
-
-      setIsClientModalOpen(false);
-      setSelectedOrcamentoToApprove(null);
-      await loadData();
-      alert(
-        "Cadastro de cliente solar salvo e orçamento APROVADO com sucesso!",
-      );
+      alert("Novo cliente solar cadastrado e orçamento APROVADO com sucesso!");
     } catch (err) {
       console.error("Erro ao aprovar orçamento e salvar cliente:", err);
       alert("Ocorreu um erro ao salvar o cadastro.");
+    } finally {
+      setIsSavingClient(false);
+    }
+  };
+
+  const handleLinkExistingClient = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!selectedOrcamentoToApprove) return;
+    if (!selectedExistingClientId) {
+      alert("Por favor, selecione um cliente existente na lista.");
+      return;
+    }
+    const existingClient = lavagemClients.find(
+      (c) => c.id === selectedExistingClientId,
+    );
+    if (!existingClient) {
+      alert("Cliente selecionado não encontrado.");
+      return;
+    }
+
+    setIsSavingClient(true);
+    try {
+      let variant =
+        selectedOrcamentoToApprove.variants?.find((v) => v.isPrincipal) ||
+        selectedOrcamentoToApprove.variants?.[0] || {
+          id: "default",
+          name: "Principal",
+          isPrincipal: true,
+          formState: selectedOrcamentoToApprove.formState || {},
+          calculated: selectedOrcamentoToApprove.calculated || {},
+        };
+
+      const platesFromBudget =
+        Number(clientForm.plates_count) ||
+        Number(variant.calculated?.placasQtd) ||
+        Number(variant.formState?.terceiroInstalacaoQtd) ||
+        0;
+
+      // Se solicitado, soma as placas deste orçamento ao cadastro existente
+      if (shouldAddPlatesToExisting && platesFromBudget > 0) {
+        const updatedClient: LavagemClient = {
+          ...existingClient,
+          plates_count:
+            (Number(existingClient.plates_count) || 0) + platesFromBudget,
+        };
+        await dataService.save("lavagem_clients", updatedClient);
+        setLavagemClients((prev) =>
+          prev.map((c) => (c.id === existingClient.id ? updatedClient : c)),
+        );
+      }
+
+      const updatedFormState = {
+        ...(variant.formState || {}),
+        nomeCliente: existingClient.name,
+        telefoneTitular:
+          existingClient.phone || variant.formState?.telefoneTitular || "",
+        cep: existingClient.cep || variant.formState?.cep || "",
+        enderecoCompleto:
+          existingClient.address || variant.formState?.enderecoCompleto || "",
+        cidade: existingClient.city || variant.formState?.cidade || "",
+        numero:
+          existingClient.address_number || variant.formState?.numero || "",
+        complemento:
+          existingClient.complement || variant.formState?.complemento || "",
+        clienteExistenteId: existingClient.id,
+        dataOrcamento: new Date().toISOString().split("T")[0],
+        naoCadastrarLavagem: false,
+        pular_lavagem: false,
+      };
+
+      await saveApprovalToOrcamentoAndSales({
+        orcamento: selectedOrcamentoToApprove,
+        updatedFormState,
+        pular_lavagem: false,
+        clienteExistenteId: existingClient.id,
+        tipo_aprovacao: "cliente_existente",
+        clientNameForSales: existingClient.name,
+        dateForSales:
+          existingClient.installation_end_date ||
+          new Date().toISOString().split("T")[0],
+      });
+
+      alert(
+        `Orçamento APROVADO com sucesso e vinculado ao cliente "${existingClient.name}"!`,
+      );
+    } catch (err) {
+      console.error("Erro ao vincular cliente existente:", err);
+      alert("Ocorreu um erro ao vincular o cliente.");
+    } finally {
+      setIsSavingClient(false);
+    }
+  };
+
+  const handleApproveWithoutClient = async () => {
+    if (!selectedOrcamentoToApprove) return;
+    setIsSavingClient(true);
+
+    try {
+      let variant =
+        selectedOrcamentoToApprove.variants?.find((v) => v.isPrincipal) ||
+        selectedOrcamentoToApprove.variants?.[0] || {
+          id: "default",
+          name: "Principal",
+          isPrincipal: true,
+          formState: selectedOrcamentoToApprove.formState || {},
+          calculated: selectedOrcamentoToApprove.calculated || {},
+        };
+
+      const updatedFormState = {
+        ...(variant.formState || {}),
+        naoCadastrarLavagem: true,
+        pular_lavagem: true,
+        dataOrcamento:
+          variant.formState?.dataOrcamento ||
+          new Date().toISOString().split("T")[0],
+      };
+
+      await saveApprovalToOrcamentoAndSales({
+        orcamento: selectedOrcamentoToApprove,
+        updatedFormState,
+        pular_lavagem: true,
+        tipo_aprovacao: "sem_cliente",
+        clientNameForSales:
+          variant.formState?.nomeCliente || "Componentes Extras",
+        dateForSales:
+          variant.formState?.dataOrcamento ||
+          new Date().toISOString().split("T")[0],
+      });
+
+      alert(
+        "Orçamento APROVADO com sucesso sem cadastro de cliente solar (ideal para componentes extras)!",
+      );
+    } catch (err) {
+      console.error("Erro ao aprovar orçamento sem cliente:", err);
+      alert("Ocorreu um erro ao aprovar o orçamento.");
     } finally {
       setIsSavingClient(false);
     }
@@ -1482,8 +1694,29 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
 
       // Verificamos se já existe um cadastro de cliente para este orçamento
       const existingClient = lavagemClients.find(
-        (c) => c.id === `wash-auto-${orcamento.id}`,
+        (c) =>
+          c.id === `wash-auto-${orcamento.id}` ||
+          (orcamento.clienteExistenteId &&
+            c.id === orcamento.clienteExistenteId),
       );
+
+      const clientNameQuery = (fs.nomeCliente || "").toLowerCase().trim();
+      // Match inteligente com cliente solar existente por nome
+      const matchedClient =
+        existingClient ||
+        lavagemClients.find((c) => {
+          if (!c.name || !clientNameQuery) return false;
+          const cName = c.name.toLowerCase().trim();
+          return (
+            cName === clientNameQuery ||
+            clientNameQuery.startsWith(cName) ||
+            cName.startsWith(clientNameQuery) ||
+            (clientNameQuery.includes(" - ") &&
+              cName.includes(clientNameQuery.split(" - ")[0].trim())) ||
+            (clientNameQuery.includes("-") &&
+              cName.includes(clientNameQuery.split("-")[0].trim()))
+          );
+        });
 
       setSelectedOrcamentoToApprove(orcamento);
       setClientForm({
@@ -1506,6 +1739,19 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
           existingClient?.observations ||
           `Importado via orçamento em ${new Date().toLocaleDateString("pt-BR")}.`,
       });
+
+      if (orcamento.tipo_aprovacao === "sem_cliente" || orcamento.pular_lavagem) {
+        setApprovalMode("sem_cliente");
+        setSelectedExistingClientId("");
+      } else if (matchedClient) {
+        setApprovalMode("existente");
+        setSelectedExistingClientId(matchedClient.id);
+      } else {
+        setApprovalMode("novo");
+        setSelectedExistingClientId("");
+      }
+      setSearchExistingClient("");
+      setShouldAddPlatesToExisting(false);
       setIsClientModalOpen(true);
       return;
     }
@@ -1655,7 +1901,13 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
           console.warn("Automação Resumo de Vendas falhou:", err);
         }
 
-        if (newStatus === "Finalizado" && !orcamento.lavagem_cadastrada) {
+        const shouldSkipLavagem =
+          orcamento.pular_lavagem === true ||
+          orcamento.tipo_aprovacao === "sem_cliente" ||
+          (orcamento.formState && orcamento.formState.naoCadastrarLavagem === true) ||
+          (orcamento.formState && orcamento.formState.pular_lavagem === true);
+
+        if (newStatus === "Finalizado" && !orcamento.lavagem_cadastrada && !shouldSkipLavagem) {
           try {
             let variant = orcamento.variants?.find((v) => v.isPrincipal) ||
               orcamento.variants?.[0] || {
@@ -1664,7 +1916,7 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
               };
             const fs = variant.formState || {};
 
-            const clientId = `wash-auto-${orcamento.id}`;
+            const clientId = orcamento.clienteExistenteId || `wash-auto-${orcamento.id}`;
             let existingClient =
               lavagemClients.find((c) => c.id === clientId) ||
               lavagemClients.find((c) => c.name === fs.nomeCliente);
@@ -1941,6 +2193,17 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
         ...groups[key],
       }));
   }, [filtered.filteredOrcamentos]);
+
+  const filteredExistingClients = useMemo(() => {
+    if (!searchExistingClient.trim()) return lavagemClients;
+    const q = searchExistingClient.toLowerCase().trim();
+    return lavagemClients.filter(
+      (c) =>
+        c.name?.toLowerCase().includes(q) ||
+        c.city?.toLowerCase().includes(q) ||
+        c.phone?.toLowerCase().includes(q),
+    );
+  }, [lavagemClients, searchExistingClient]);
 
   if (isLoading)
     return (
@@ -3391,238 +3654,600 @@ const OrcamentoPage: React.FC<OrcamentoPageProps> = ({
         </Modal>
       )}
 
-      {isClientModalOpen && (
+      {isClientModalOpen && selectedOrcamentoToApprove && (
         <Modal
-          title="Novo cliente solar"
+          title="Aprovação do Orçamento"
           onClose={() => {
             setIsClientModalOpen(false);
             setSelectedOrcamentoToApprove(null);
           }}
           maxWidth="max-w-2xl"
         >
-          <form
-            onSubmit={handleSaveApproveClient}
-            className="space-y-6 pt-2 animate-fade-in"
-          >
-            <div className="space-y-4">
-              <SectionHeader
-                icon={<UsersIcon />}
-                title="Identificação do Cliente"
-                color="bg-indigo-600"
-              />
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                <div className="md:col-span-8">
-                  <FormLabel>Nome completo do titular</FormLabel>
-                  <div className="relative">
-                    <UsersIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      required
-                      value={clientForm.name || ""}
-                      onChange={(e) =>
-                        setClientForm((prev) => ({
-                          ...prev,
-                          name: e.target.value,
-                        }))
-                      }
-                      className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm pl-10"
-                      placeholder="Ex: João da Silva"
-                    />
+          <div className="space-y-5 pt-1 animate-fade-in">
+            {/* Resumo informativo do Orçamento sendo aprovado */}
+            {(() => {
+              const d = getDisplayData(selectedOrcamentoToApprove);
+              return (
+                <div className="p-3.5 bg-gradient-to-r from-indigo-50/80 to-slate-50 dark:from-indigo-950/30 dark:to-slate-800/40 rounded-2xl border border-indigo-100 dark:border-indigo-900/40 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
+                      Orçamento em aprovação:
+                    </p>
+                    <h4 className="text-sm font-black text-gray-800 dark:text-white">
+                      {d.clientName && d.clientName !== "Sem nome"
+                        ? d.clientName
+                        : "Orçamento sem nome"}
+                    </h4>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-medium text-gray-500 dark:text-gray-400">
+                      Valor comercial
+                    </p>
+                    <p className="text-sm font-black text-emerald-600 dark:text-emerald-400">
+                      {formatCurrency(d.displayPrice || 0)}
+                    </p>
                   </div>
                 </div>
-                <div className="md:col-span-4">
-                  <FormLabel>Telefone de contato</FormLabel>
-                  <div className="relative">
-                    <PhoneIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      value={clientForm.phone || ""}
-                      onChange={(e) =>
-                        setClientForm((prev) => ({
-                          ...prev,
-                          phone: e.target.value,
-                        }))
-                      }
-                      className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm pl-10"
-                      placeholder="(00) 00000-0000"
-                    />
+              );
+            })()}
+
+            {/* Seletor de Modo de Aprovação (3 Opções) */}
+            <div>
+              <FormLabel>Como deseja registrar este orçamento?</FormLabel>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mt-1">
+                <button
+                  type="button"
+                  onClick={() => setApprovalMode("novo")}
+                  className={`p-3 rounded-2xl border text-left transition-all ${
+                    approvalMode === "novo"
+                      ? "border-indigo-500 bg-indigo-50/60 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200 ring-2 ring-indigo-500/20 shadow-sm"
+                      : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/60 text-gray-600 dark:text-gray-300 hover:border-gray-300"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-bold">
+                      👤
+                    </span>
+                    <span className="text-xs font-black">Novo Cliente</span>
                   </div>
-                </div>
+                  <p className="text-[10px] leading-tight text-gray-500 dark:text-gray-400">
+                    Cadastrar cliente e registrar placas para pós-venda.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setApprovalMode("existente")}
+                  className={`p-3 rounded-2xl border text-left transition-all ${
+                    approvalMode === "existente"
+                      ? "border-blue-500 bg-blue-50/60 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 ring-2 ring-blue-500/20 shadow-sm"
+                      : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/60 text-gray-600 dark:text-gray-300 hover:border-gray-300"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs font-bold">
+                      🔗
+                    </span>
+                    <span className="text-xs font-black">Cliente Existente</span>
+                  </div>
+                  <p className="text-[10px] leading-tight text-gray-500 dark:text-gray-400">
+                    Vincular a cliente solar já cadastrado (ex: expansão).
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setApprovalMode("sem_cliente")}
+                  className={`p-3 rounded-2xl border text-left transition-all ${
+                    approvalMode === "sem_cliente"
+                      ? "border-amber-500 bg-amber-50/60 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 ring-2 ring-amber-500/20 shadow-sm"
+                      : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/60 text-gray-600 dark:text-gray-300 hover:border-gray-300"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="w-6 h-6 rounded-lg bg-amber-600 text-white flex items-center justify-center text-xs font-bold">
+                      ⚡
+                    </span>
+                    <span className="text-xs font-black">Componentes Extras</span>
+                  </div>
+                  <p className="text-[10px] leading-tight text-gray-500 dark:text-gray-400">
+                    Não cadastrar cliente (baterias, peças ou avulso).
+                  </p>
+                </button>
               </div>
             </div>
 
-            <div className="space-y-4">
-              <SectionHeader
-                icon={<MapPinIcon />}
-                title="Endereço de Instalação"
-                color="bg-teal-600"
-              />
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                <div className="md:col-span-3">
-                  <FormLabel>CEP</FormLabel>
-                  <div className="relative">
-                    <input
-                      placeholder="00000-000"
-                      maxLength={9}
-                      value={clientForm.cep || ""}
-                      onChange={(e) =>
-                        setClientForm((prev) => ({
-                          ...prev,
-                          cep: e.target.value,
-                        }))
-                      }
-                      className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
-                    />
-                    {isLoadingCep && (
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
-                    )}
-                  </div>
-                </div>
-                <div className="md:col-span-6">
-                  <FormLabel>Logradouro / Endereço</FormLabel>
-                  <input
-                    required
-                    value={clientForm.address || ""}
-                    onChange={(e) =>
-                      setClientForm((prev) => ({
-                        ...prev,
-                        address: e.target.value,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
-                    placeholder="Rua, Avenida..."
-                  />
-                </div>
-                <div className="md:col-span-3">
-                  <FormLabel>Cidade</FormLabel>
-                  <input
-                    required
-                    value={clientForm.city || ""}
-                    onChange={(e) =>
-                      setClientForm((prev) => ({
-                        ...prev,
-                        city: e.target.value,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
-                    placeholder="Cidade"
-                  />
-                </div>
-                <div className="md:col-span-3">
-                  <FormLabel>Nº</FormLabel>
-                  <input
-                    required
-                    value={clientForm.address_number || ""}
-                    onChange={(e) =>
-                      setClientForm((prev) => ({
-                        ...prev,
-                        address_number: e.target.value,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
-                    placeholder="S/N"
-                  />
-                </div>
-                <div className="md:col-span-9">
-                  <FormLabel>Complemento (Referência)</FormLabel>
-                  <input
-                    value={clientForm.complement || ""}
-                    onChange={(e) =>
-                      setClientForm((prev) => ({
-                        ...prev,
-                        complement: e.target.value,
-                      }))
-                    }
-                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
-                    placeholder="Apto, Bloco, Travessa..."
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <SectionHeader
-                icon={<BoltIcon />}
-                title="Configurações do Projeto"
-                color="bg-amber-600"
-              />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <FormLabel>Potência (Qtd. de Placas)</FormLabel>
-                  <div className="relative">
-                    <BoltIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500" />
-                    <input
-                      type="number"
-                      required
-                      value={clientForm.plates_count || 0}
-                      onChange={(e) =>
-                        setClientForm((prev) => ({
-                          ...prev,
-                          plates_count: parseInt(e.target.value) || 0,
-                        }))
-                      }
-                      className="w-full rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-900/10 p-2.5 text-xs font-black text-amber-700 dark:text-amber-400 outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all shadow-sm pl-10"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <FormLabel>Término da instalação original</FormLabel>
-                  <div className="relative">
-                    <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      type="date"
-                      value={clientForm.installation_end_date || ""}
-                      onChange={(e) =>
-                        setClientForm((prev) => ({
-                          ...prev,
-                          installation_end_date: e.target.value,
-                        }))
-                      }
-                      className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm pl-10"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <SectionHeader
-                icon={<ClipboardListIcon />}
-                title="Notas e Observações"
-                color="bg-gray-400"
-              />
-              <textarea
-                rows={3}
-                value={clientForm.observations || ""}
-                onChange={(e) =>
-                  setClientForm((prev) => ({
-                    ...prev,
-                    observations: e.target.value,
-                  }))
-                }
-                className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs font-medium text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm resize-none min-h-[80px]"
-                placeholder="Notas técnicas ou comerciais..."
-              />
-            </div>
-
-            <div className="flex gap-3 pt-6 border-t dark:border-gray-700">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsClientModalOpen(false);
-                  setSelectedOrcamentoToApprove(null);
-                }}
-                className="flex-1 py-4 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-300 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 transition-all"
+            {/* CONTEÚDO DO MODO: NOVO CLIENTE */}
+            {approvalMode === "novo" && (
+              <form
+                onSubmit={handleSaveApproveClient}
+                className="space-y-5 animate-fade-in"
               >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={isSavingClient}
-                className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-95"
-              >
-                {isSavingClient ? "Gravando..." : "Salvar Cadastro"}
-              </button>
-            </div>
-          </form>
+                <div className="space-y-4">
+                  <SectionHeader
+                    icon={<UsersIcon />}
+                    title="Identificação do Cliente"
+                    color="bg-indigo-600"
+                  />
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                    <div className="md:col-span-8">
+                      <FormLabel>Nome completo do titular</FormLabel>
+                      <div className="relative">
+                        <UsersIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          required
+                          value={clientForm.name || ""}
+                          onChange={(e) =>
+                            setClientForm((prev) => ({
+                              ...prev,
+                              name: e.target.value,
+                            }))
+                          }
+                          className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm pl-10"
+                          placeholder="Ex: João da Silva"
+                        />
+                      </div>
+                    </div>
+                    <div className="md:col-span-4">
+                      <FormLabel>Telefone de contato</FormLabel>
+                      <div className="relative">
+                        <PhoneIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          value={clientForm.phone || ""}
+                          onChange={(e) =>
+                            setClientForm((prev) => ({
+                              ...prev,
+                              phone: e.target.value,
+                            }))
+                          }
+                          className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm pl-10"
+                          placeholder="(00) 00000-0000"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <SectionHeader
+                    icon={<MapPinIcon />}
+                    title="Endereço de Instalação"
+                    color="bg-teal-600"
+                  />
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                    <div className="md:col-span-3">
+                      <FormLabel>CEP</FormLabel>
+                      <div className="relative">
+                        <input
+                          placeholder="00000-000"
+                          maxLength={9}
+                          value={clientForm.cep || ""}
+                          onChange={(e) =>
+                            setClientForm((prev) => ({
+                              ...prev,
+                              cep: e.target.value,
+                            }))
+                          }
+                          className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
+                        />
+                        {isLoadingCep && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="md:col-span-6">
+                      <FormLabel>Logradouro / Endereço</FormLabel>
+                      <input
+                        required
+                        value={clientForm.address || ""}
+                        onChange={(e) =>
+                          setClientForm((prev) => ({
+                            ...prev,
+                            address: e.target.value,
+                          }))
+                        }
+                        className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
+                        placeholder="Rua, Avenida..."
+                      />
+                    </div>
+                    <div className="md:col-span-3">
+                      <FormLabel>Cidade</FormLabel>
+                      <input
+                        required
+                        value={clientForm.city || ""}
+                        onChange={(e) =>
+                          setClientForm((prev) => ({
+                            ...prev,
+                            city: e.target.value,
+                          }))
+                        }
+                        className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
+                        placeholder="Cidade"
+                      />
+                    </div>
+                    <div className="md:col-span-3">
+                      <FormLabel>Nº</FormLabel>
+                      <input
+                        required
+                        value={clientForm.address_number || ""}
+                        onChange={(e) =>
+                          setClientForm((prev) => ({
+                            ...prev,
+                            address_number: e.target.value,
+                          }))
+                        }
+                        className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
+                        placeholder="S/N"
+                      />
+                    </div>
+                    <div className="md:col-span-9">
+                      <FormLabel>Complemento (Referência)</FormLabel>
+                      <input
+                        value={clientForm.complement || ""}
+                        onChange={(e) =>
+                          setClientForm((prev) => ({
+                            ...prev,
+                            complement: e.target.value,
+                          }))
+                        }
+                        className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
+                        placeholder="Apto, Bloco, Travessa..."
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <SectionHeader
+                    icon={<BoltIcon />}
+                    title="Configurações do Projeto"
+                    color="bg-amber-600"
+                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <FormLabel>Potência (Qtd. de Placas)</FormLabel>
+                      <div className="relative">
+                        <BoltIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-500" />
+                        <input
+                          type="number"
+                          required
+                          value={clientForm.plates_count || 0}
+                          onChange={(e) =>
+                            setClientForm((prev) => ({
+                              ...prev,
+                              plates_count: parseInt(e.target.value) || 0,
+                            }))
+                          }
+                          className="w-full rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-900/10 p-2.5 text-xs font-black text-amber-700 dark:text-amber-400 outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all shadow-sm pl-10"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <FormLabel>Término da instalação original</FormLabel>
+                      <div className="relative">
+                        <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="date"
+                          value={clientForm.installation_end_date || ""}
+                          onChange={(e) =>
+                            setClientForm((prev) => ({
+                              ...prev,
+                              installation_end_date: e.target.value,
+                            }))
+                          }
+                          className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm pl-10"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <SectionHeader
+                    icon={<ClipboardListIcon />}
+                    title="Notas e Observações"
+                    color="bg-gray-400"
+                  />
+                  <textarea
+                    rows={3}
+                    value={clientForm.observations || ""}
+                    onChange={(e) =>
+                      setClientForm((prev) => ({
+                        ...prev,
+                        observations: e.target.value,
+                      }))
+                    }
+                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 text-xs font-medium text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm resize-none min-h-[80px]"
+                    placeholder="Notas técnicas ou comerciais..."
+                  />
+                </div>
+
+                <div className="flex flex-wrap sm:flex-nowrap gap-3 pt-6 border-t dark:border-gray-700">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsClientModalOpen(false);
+                      setSelectedOrcamentoToApprove(null);
+                    }}
+                    className="w-full sm:w-auto px-5 py-3.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-xl font-bold text-xs hover:bg-gray-200 transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleApproveWithoutClient}
+                    disabled={isSavingClient}
+                    className="w-full sm:w-auto px-5 py-3.5 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 rounded-xl font-bold text-xs hover:bg-amber-100 transition-all"
+                  >
+                    ⚡ Aprovar sem cliente (extras)
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingClient}
+                    className="w-full sm:flex-1 py-3.5 bg-indigo-600 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-95"
+                  >
+                    {isSavingClient ? "Gravando..." : "Aprovar e cadastrar cliente"}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* CONTEÚDO DO MODO: VINCULAR A CLIENTE EXISTENTE */}
+            {approvalMode === "existente" && (
+              <div className="space-y-5 animate-fade-in">
+                <div className="space-y-3">
+                  <SectionHeader
+                    icon={<UsersIcon />}
+                    title="Selecionar Cliente Solar Já Cadastrado"
+                    color="bg-blue-600"
+                  />
+
+                  {/* Campo de Busca de Clientes */}
+                  <div className="relative">
+                    <SearchIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={searchExistingClient}
+                      onChange={(e) => setSearchExistingClient(e.target.value)}
+                      placeholder="Pesquisar cliente por nome, telefone ou cidade..."
+                      className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-2.5 pl-10 text-xs font-bold text-gray-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    />
+                  </div>
+
+                  {/* Dropdown / Lista de Clientes */}
+                  <div>
+                    <FormLabel>
+                      Clientes Solares Encontrados ({filteredExistingClients.length})
+                    </FormLabel>
+                    <div className="max-h-56 overflow-y-auto space-y-1.5 p-1 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+                      {filteredExistingClients.length === 0 ? (
+                        <p className="p-4 text-center text-xs text-gray-400">
+                          Nenhum cliente solar encontrado com o termo pesquisado.
+                        </p>
+                      ) : (
+                        filteredExistingClients.map((client) => {
+                          const isSelected = selectedExistingClientId === client.id;
+                          return (
+                            <button
+                              key={client.id}
+                              type="button"
+                              onClick={() => setSelectedExistingClientId(client.id)}
+                              className={`w-full p-2.5 rounded-lg text-left transition-all flex items-center justify-between ${
+                                isSelected
+                                  ? "bg-blue-600 text-white font-bold shadow-md shadow-blue-600/20"
+                                  : "bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/60"
+                              }`}
+                            >
+                              <div className="truncate pr-2">
+                                <p className="text-xs font-bold truncate">
+                                  {client.name}
+                                </p>
+                                <p
+                                  className={`text-[10px] truncate ${
+                                    isSelected
+                                      ? "text-blue-100"
+                                      : "text-gray-500 dark:text-gray-400"
+                                  }`}
+                                >
+                                  {client.city ? `📍 ${client.city}` : "Sem cidade"}
+                                  {client.phone ? ` • 📞 ${client.phone}` : ""}
+                                </p>
+                              </div>
+                              <div className="text-right flex-shrink-0">
+                                <span
+                                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    isSelected
+                                      ? "bg-white/20 text-white"
+                                      : "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300"
+                                  }`}
+                                >
+                                  ⚡ {client.plates_count || 0} placas
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Detalhes do Cliente Selecionado */}
+                  {selectedExistingClientId && (
+                    <div className="p-4 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-blue-700 dark:text-blue-300">
+                          Cliente Vinculado Selecionado
+                        </span>
+                        <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 text-[10px] font-black">
+                          ✓ Pronto para vincular
+                        </span>
+                      </div>
+                      {(() => {
+                        const client = lavagemClients.find(
+                          (c) => c.id === selectedExistingClientId,
+                        );
+                        if (!client) return null;
+                        const budgetPlates =
+                          Number(
+                            selectedOrcamentoToApprove.variants?.[0]?.calculated
+                              ?.placasQtd,
+                          ) ||
+                          Number(
+                            selectedOrcamentoToApprove.formState
+                              ?.terceiroInstalacaoQtd,
+                          ) ||
+                          0;
+
+                        return (
+                          <div className="space-y-2">
+                            <p className="text-sm font-black text-gray-900 dark:text-white">
+                              {client.name}
+                            </p>
+                            <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 dark:text-gray-300">
+                              <p>
+                                <strong className="text-gray-700 dark:text-gray-200">
+                                  Cidade:
+                                </strong>{" "}
+                                {client.city || "Não informada"}
+                              </p>
+                              <p>
+                                <strong className="text-gray-700 dark:text-gray-200">
+                                  Telefone:
+                                </strong>{" "}
+                                {client.phone || "Não informado"}
+                              </p>
+                              <p>
+                                <strong className="text-gray-700 dark:text-gray-200">
+                                  Endereço:
+                                </strong>{" "}
+                                {client.address || "Não informado"}
+                              </p>
+                              <p>
+                                <strong className="text-gray-700 dark:text-gray-200">
+                                  Placas atuais:
+                                </strong>{" "}
+                                {client.plates_count || 0} placas
+                              </p>
+                            </div>
+
+                            {budgetPlates > 0 && (
+                              <label className="flex items-center gap-2 pt-2 border-t border-blue-200 dark:border-blue-900/50 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={shouldAddPlatesToExisting}
+                                  onChange={(e) =>
+                                    setShouldAddPlatesToExisting(e.target.checked)
+                                  }
+                                  className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
+                                />
+                                <span className="text-xs font-bold text-gray-800 dark:text-gray-200">
+                                  Somar as placas deste orçamento (+{budgetPlates}{" "}
+                                  placas) ao cadastro do cliente
+                                </span>
+                              </label>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap sm:flex-nowrap gap-3 pt-6 border-t dark:border-gray-700">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsClientModalOpen(false);
+                      setSelectedOrcamentoToApprove(null);
+                    }}
+                    className="w-full sm:w-auto px-5 py-3.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-xl font-bold text-xs hover:bg-gray-200 transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleApproveWithoutClient}
+                    disabled={isSavingClient}
+                    className="w-full sm:w-auto px-5 py-3.5 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 rounded-xl font-bold text-xs hover:bg-amber-100 transition-all"
+                  >
+                    ⚡ Aprovar sem cliente (extras)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleLinkExistingClient()}
+                    disabled={isSavingClient || !selectedExistingClientId}
+                    className="w-full sm:flex-1 py-3.5 bg-blue-600 disabled:opacity-50 text-white rounded-xl font-bold text-xs shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-all active:scale-95"
+                  >
+                    {isSavingClient ? "Gravando..." : "Aprovar e vincular ao cliente"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* CONTEÚDO DO MODO: NÃO CADASTRAR CLIENTE (COMPONENTES EXTRAS) */}
+            {approvalMode === "sem_cliente" && (
+              <div className="space-y-5 animate-fade-in">
+                <div className="p-5 rounded-2xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center text-lg font-black shadow-md shadow-amber-500/30">
+                      ⚡
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-amber-900 dark:text-amber-200">
+                        Aprovar sem Cadastro de Cliente Solar
+                      </h4>
+                      <p className="text-xs text-amber-700 dark:text-amber-400">
+                        Ideal para vendas de componentes extras, baterias e serviços
+                        avulsos.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-white/80 dark:bg-gray-800/80 rounded-xl border border-amber-100 dark:border-amber-900/30 space-y-2 text-xs text-gray-700 dark:text-gray-300">
+                    <p className="flex items-start gap-2">
+                      <span className="text-emerald-500 font-black">✓</span>
+                      <span>
+                        <strong>Lançamento Comercial e Financeiro:</strong> O
+                        orçamento será aprovado e contabilizado no Resumo de Vendas e
+                        nas métricas comerciais.
+                      </span>
+                    </p>
+                    <p className="flex items-start gap-2">
+                      <span className="text-indigo-500 font-black">✓</span>
+                      <span>
+                        <strong>Sem duplicidade no pós-venda:</strong> Nenhum novo
+                        cliente solar será criado no módulo de clientes e nenhuma
+                        rotina automática de lavagem de placas será gerada.
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-6 border-t dark:border-gray-700">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsClientModalOpen(false);
+                      setSelectedOrcamentoToApprove(null);
+                    }}
+                    className="flex-1 py-3.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-xl font-bold text-xs hover:bg-gray-200 transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleApproveWithoutClient}
+                    disabled={isSavingClient}
+                    className="flex-[2] py-3.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-amber-600/20 transition-all active:scale-95"
+                  >
+                    {isSavingClient
+                      ? "Aprovando..."
+                      : "Confirmar aprovação sem cliente solar"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </Modal>
       )}
 
