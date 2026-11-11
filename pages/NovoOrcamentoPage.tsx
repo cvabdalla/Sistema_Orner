@@ -72,8 +72,9 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
     const [tollsModalData, setTollsModalData] = useState<any>(null);
 
     const getSimulatedTollsList = (originCity: string, destCity: string, distanceKm: number) => {
-        const list = [];
-        const numPlazas = distanceKm > 25 ? Math.max(1, Math.round(distanceKm / 60)) : 0;
+        const list: Array<{ name: string; value: number; location: string }> = [];
+        // Em rodovias concedidas de SP (AutoBAn, CCR, etc.), as praças ocorrem em média a cada 30 a 35 km
+        const numPlazas = distanceKm > 20 ? Math.max(1, Math.round(distanceKm / 32)) : 0;
         
         const normalizeStr = (str: string) => {
             return (str || '')
@@ -86,18 +87,50 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         const cleanOrig = normalizeStr(originCity);
         const cleanDest = normalizeStr(destCity);
         
+        const grandeSpCities = [
+            'sao paulo', 'barueri', 'osasco', 'santana de parnaiba', 
+            'carapicuiba', 'alphaville', 'cotia', 'itapevi', 'jandira', 
+            'guarulhos', 'santo andre', 'sao bernardo', 'sao caetano'
+        ];
+        const campinasRegion = [
+            'campinas', 'valinhos', 'vinhedo', 'paulinia', 
+            'sumare', 'hortolandia', 'indaiatuba'
+        ];
+
+        const isOrigGrandeSp = grandeSpCities.some(c => cleanOrig.includes(c));
+        const isDestGrandeSp = grandeSpCities.some(c => cleanDest.includes(c));
+        const isOrigCampinas = campinasRegion.some(c => cleanOrig.includes(c));
+        const isDestCampinas = campinasRegion.some(c => cleanDest.includes(c));
+
         const hasCampinasAmericana = (cleanOrig.includes('campinas') && cleanDest.includes('americana')) || 
                                      (cleanOrig.includes('americana') && cleanDest.includes('campinas'));
-                                     
-        const hasCampinasSaoPaulo = (cleanOrig.includes('campinas') && cleanDest.includes('sao paulo')) || 
-                                    (cleanOrig.includes('sao paulo') && cleanDest.includes('campinas'));
 
         const hasCampinasJundiai = (cleanOrig.includes('campinas') && cleanDest.includes('jundia')) || 
                                    (cleanOrig.includes('jundia') && cleanDest.includes('campinas'));
 
+        const hasCampinasGrandeSp = (isOrigGrandeSp && isDestCampinas) || (isOrigCampinas && isDestGrandeSp);
+
         const averageTollPrice = 12.20;
 
-        if (hasCampinasAmericana) {
+        if (hasCampinasGrandeSp) {
+            // Corredor Barueri / Grande SP ⇄ Campinas (via Castello Branco / Rodoanel Oeste / Bandeirantes / Anhanguera)
+            // Rota percorrida pelos técnicos com 3 praças por trecho totalizando R$ 36,44 (R$ 72,88 ida e volta)
+            list.push({
+                name: "Pedágio Rodoanel Oeste / Castello Branco (SP-021 / SP-280)",
+                value: 10.44,
+                location: "Rodoanel Oeste / Interligação Bandeirantes - Km 13"
+            });
+            list.push({
+                name: "Pedágio Caieiras / Perus (SP-348 Rod. dos Bandeirantes)",
+                value: 13.00,
+                location: "Caieiras - Km 36"
+            });
+            list.push({
+                name: "Pedágio Itupeva / Valinhos (SP-348 Rod. dos Bandeirantes)",
+                value: 13.00,
+                location: "Itupeva - Km 77"
+            });
+        } else if (hasCampinasAmericana) {
             list.push({
                 name: "Pedágio Nova Odessa / Sumaré (SP-330 Rod. Anhanguera)",
                 value: 12.20,
@@ -105,24 +138,13 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
             });
         } else if (hasCampinasJundiai) {
             list.push({
-                name: "Pedágio Louveira (SP-330 Rod. Anhanguera)",
-                value: 11.80,
-                location: "Louveira - Km 82"
-            });
-        } else if (hasCampinasSaoPaulo) {
-            list.push({
-                name: "Pedágio Valinhos (SP-330 Rod. Anhanguera)",
-                value: 11.80,
-                location: "Valinhos - Km 82"
-            });
-            list.push({
-                name: "Pedágio Itupeva (SP-348 Rod. dos Bandeirantes)",
+                name: "Pedágio Louveira / Itupeva (SP-330 Rod. Anhanguera)",
                 value: 12.60,
-                location: "Itupeva - Km 77"
+                location: "Louveira - Km 82"
             });
         }
 
-        // Se a lista estiver vazia ou menor que numPlazas, preenche com pedágios genéricos realistas
+        // Se a rota não for mapeada especificamente, calcula com base nas praças estimadas pela distância
         if (list.length === 0) {
             for (let i = 1; i <= numPlazas; i++) {
                 list.push({
@@ -784,7 +806,8 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
         const originCity = selectedInst ? selectedInst.cidade : 'Cidade Origem';
         const destCity = matchingClient?.city || calcCidade || 'Cidade Destino';
 
-        const numTollPlazas = kms > 25 ? Math.max(1, Math.round(kms / 60)) : 0;
+        const list = getSimulatedTollsList(originCity, destCity, kms);
+        const numTollPlazas = list.length;
         const isRoundTrip = formState.considerarIdaVolta !== undefined 
             ? formState.considerarIdaVolta !== false 
             : (calcIdaVolta !== undefined ? calcIdaVolta : true);
@@ -795,8 +818,6 @@ const NovoOrcamentoPage = ({ setCurrentPage, orcamentoToEdit, clearEditingOrcame
 
         const averageTollPrice = 12.20;
         const totalTollTrips = numTollPlazas * (isRoundTrip ? 2 : 1) * days;
-        
-        const list = getSimulatedTollsList(originCity, destCity, kms);
         const sumSingleWay = list.reduce((acc, p) => acc + p.value, 0);
         const estimatedTollsCost = sumSingleWay * (isRoundTrip ? 2 : 1) * days;
 
