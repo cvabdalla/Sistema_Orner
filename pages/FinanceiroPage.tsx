@@ -497,14 +497,26 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
         return <BancosView currentUser={currentUser} />;
     }
 
+    const shiftMonthRange = (delta: number) => {
+        const baseStr = startDate || new Date().toISOString().split('T')[0];
+        const [y, m] = baseStr.split('-').map(Number);
+        const target = new Date(y, (m - 1) + delta, 1);
+        const firstDay = new Date(target.getFullYear(), target.getMonth(), 1);
+        const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0);
+        const fmt = (d: Date) =>
+            `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        setStartDate(fmt(firstDay));
+        setEndDate(fmt(lastDay));
+    };
+
     return (
-        <div className="space-y-6 animate-fade-in">
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 w-full">
+        <div className="space-y-5 animate-fade-in">
+            <div className="flex flex-col 2xl:flex-row justify-between items-start 2xl:items-center gap-3 w-full">
                 {view === 'dashboard' ? (
-                    <div className="bg-white dark:bg-gray-800 p-1 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-nowrap items-center gap-1 sm:gap-2 shrink-0 overflow-x-auto">
-                        <TabButton tabId="visaoGeral" label="Visão Geral" />
-                        <TabButton tabId="aReceber" label="A Receber" />
-                        <TabButton tabId="aPagar" label="A Pagar" />
+                    <div className="bg-white dark:bg-gray-800 p-1 rounded-xl border border-slate-200 dark:border-gray-700 flex flex-wrap items-center gap-1 shrink-0">
+                        <TabButton tabId="visaoGeral" label="Visão geral" />
+                        <TabButton tabId="aReceber" label="A receber" />
+                        <TabButton tabId="aPagar" label="A pagar" />
                         <TabButton tabId="instalacao" label="Instalação" />
                         <TabButton tabId="cancelados" label="Cancelados" />
                     </div>
@@ -515,7 +527,7 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
                     </div>
                 )}
                 
-                <div className="flex flex-nowrap items-center gap-3 w-full lg:w-auto overflow-x-auto scrollbar-none py-1">
+                <div className="flex flex-wrap items-center gap-2 w-full 2xl:w-auto 2xl:justify-end">
                     {view === 'dre' && (
                         <div className="flex flex-wrap items-center gap-3 ml-auto">
                              <div className="flex items-center gap-2 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl px-4 h-11 shadow-sm">
@@ -572,39 +584,56 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
                     )}
 
                     {view !== 'dre' && (
-                        <div className="flex flex-nowrap items-center gap-2 shrink-0">
-                             <div className="flex items-center gap-2 bg-white dark:bg-gray-800 p-1 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 shrink-0 h-[34px]">
-                                <TableIcon className="w-4 h-4 ml-2 text-gray-400 shrink-0" />
+                        <div className="flex flex-wrap items-center gap-2">
+                             <div className="flex items-center gap-1.5 bg-white dark:bg-gray-800 px-2.5 rounded-xl border border-slate-200 dark:border-gray-700 shrink-0 h-9">
+                                <TableIcon className="w-4 h-4 text-slate-400 shrink-0" />
                                 <select 
                                     value={selectedBankFilter} 
                                     onChange={(e) => setSelectedBankFilter(e.target.value)} 
-                                    className="bg-transparent border-none text-[11px] font-bold text-gray-650 dark:text-gray-200 focus:ring-0 p-0 pr-8 cursor-pointer h-full"
+                                    className="bg-transparent border-none text-xs font-semibold text-slate-700 dark:text-slate-200 focus:ring-0 p-0 pr-6 cursor-pointer h-full outline-none"
                                 >
                                     <option value="all">Todos os bancos</option>
                                     {bankAccounts.map(b => <option key={b.id} value={b.id}>{b.accountName}</option>)}
                                 </select>
                              </div>
 
+                             <div className="flex items-center gap-1 bg-white dark:bg-gray-800 px-1.5 rounded-xl border border-slate-200 dark:border-gray-700 shrink-0 h-9">
+                                <button
+                                    type="button"
+                                    onClick={() => shiftMonthRange(-1)}
+                                    className="px-1.5 py-1 text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 rounded-md hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors text-xs font-bold"
+                                    title="Mês anterior"
+                                >
+                                    ‹
+                                </button>
+                                <CalendarIcon className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-0.5" />
+                                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-transparent border-none text-xs font-semibold text-slate-700 dark:text-slate-200 focus:ring-0 p-0 cursor-pointer w-[108px] text-center tabular-nums" />
+                                <span className="text-slate-400 text-xs">–</span>
+                                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-transparent border-none text-xs font-semibold text-slate-700 dark:text-slate-200 focus:ring-0 p-0 cursor-pointer w-[108px] text-center tabular-nums" />
+                                <button
+                                    type="button"
+                                    onClick={() => shiftMonthRange(1)}
+                                    className="px-1.5 py-1 text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 rounded-md hover:bg-slate-100 dark:hover:bg-gray-700 transition-colors text-xs font-bold"
+                                    title="Próximo mês"
+                                >
+                                    ›
+                                </button>
+                            </div>
+
                              <button 
                                 onClick={() => setImportModalOpen(true)}
-                                className="flex items-center gap-2 px-3 bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700/60 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm text-gray-650 dark:text-gray-300 font-bold text-[11px] transition-all active:scale-95 h-[34px] cursor-pointer shrink-0"
+                                className="flex items-center gap-1.5 px-3 bg-white hover:bg-slate-50 dark:bg-gray-800 dark:hover:bg-gray-700/60 border border-slate-200 dark:border-gray-700 rounded-xl text-slate-700 dark:text-slate-200 font-semibold text-xs transition-colors h-9 cursor-pointer shrink-0 whitespace-nowrap"
                              >
-                                <UploadIcon className="w-3.5 h-3.5 text-gray-500 shrink-0" />
-                                <span className="hidden sm:inline">Importar extrato</span>
+                                <UploadIcon className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                                <span>Importar extrato</span>
                              </button>
 
-                             <div className="flex items-center gap-1.5 bg-white dark:bg-gray-800 p-1 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 shrink-0 h-[34px]">
-                                <CalendarIcon className="w-4 h-4 ml-2 text-gray-400 shrink-0" />
-                                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="bg-transparent border-none text-[11px] font-bold text-gray-700 dark:text-gray-200 focus:ring-0 p-0 cursor-pointer w-24 text-center" />
-                                <span className="text-gray-400 text-xs">-</span>
-                                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-transparent border-none text-[11px] font-bold text-gray-700 dark:text-gray-200 focus:ring-0 p-0 cursor-pointer w-24 text-center" />
-                            </div>
                             <button 
                                 onClick={() => handleOpenModal(undefined, activeTab === 'aReceber' ? 'receita' : activeTab === 'aPagar' ? 'despesa' : undefined)} 
-                                className="flex items-center gap-1.5 px-4 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-md shadow-indigo-600/20 font-bold text-[11px] transition-all active:scale-95 h-[34px] cursor-pointer shrink-0"
+                                className="flex items-center gap-1.5 px-3.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 shadow-sm font-semibold text-xs transition-colors h-9 cursor-pointer shrink-0 whitespace-nowrap"
                             >
                                 <AddIcon className="w-4 h-4 shrink-0" />
-                                <span className="hidden sm:inline">Nova transação</span>
+                                <span>Nova transação</span>
                             </button>
                         </div>
                     )}
@@ -649,7 +678,8 @@ const FinanceiroPage: React.FC<FinanceiroPageProps> = ({ view, currentUser }) =>
                             />
                         ) : (
                             <ContasTable
-                                title={activeTab === 'aReceber' ? "Contas a Receber" : activeTab === 'aPagar' ? "Contas a Pagar" : "Lançamentos Cancelados"}
+                                mode={activeTab === 'aReceber' ? 'receber' : activeTab === 'aPagar' ? 'pagar' : 'cancelados'}
+                                title={activeTab === 'aReceber' ? "Contas a receber" : activeTab === 'aPagar' ? "Contas a pagar" : "Lançamentos cancelados"}
                                 transactions={
                                     activeTab === 'aReceber' 
                                     ? filteredTransactions.filter(t => t.type === 'receita' && t.status !== 'cancelado') 
